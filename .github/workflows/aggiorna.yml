@@ -1,0 +1,64 @@
+# Aggiorna il sito di Serie A Live sui computer di GitHub, anche con il Mac spento.
+# Ogni 15 minuti: scarica le novità (ESPN, Understat, Fantacalcio.it, Wikipedia), ricalcola statistiche e
+# pronostici, pubblica il sito nel ramo "sito" se è cambiato qualcosa e salva i dati nel ramo "dati".
+# Durante le partite resta acceso e aggiorna di continuo (al massimo 5 ore e mezza per volta).
+# Il file originale sta nella cartella dell'app sul Mac (cloud/aggiorna.yml): lo carica "python sito.py codice".
+name: Aggiorna Serie A Live
+
+on:
+  schedule:
+    - cron: "4,19,34,49 * * * *"
+  workflow_dispatch:
+  push:
+    branches: [main]
+
+permissions:
+  contents: write
+  actions: write
+
+concurrency:
+  group: aggiorna
+  cancel-in-progress: false
+
+jobs:
+  aggiorna:
+    runs-on: ubuntu-latest
+    timeout-minutes: 350
+    env:
+      TZ: Europe/Rome
+      SERIEA_DATA_DIR: ${{ github.workspace }}/dati
+      SERIEA_SITE_DIR: ${{ github.workspace }}/sito
+    steps:
+      - name: Codice dell'app
+        uses: actions/checkout@v7
+        with:
+          path: app
+      - name: Dati salvati
+        uses: actions/checkout@v7
+        with:
+          ref: dati
+          path: dati
+      - name: Sito
+        uses: actions/checkout@v7
+        with:
+          ref: sito
+          path: sito
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: app/requirements.txt
+      - run: pip install -r app/requirements.txt
+      - name: Aggiorna dati e sito
+        run: |
+          git config --global user.name "Serie A Live"
+          git config --global user.email "serie-a-live@users.noreply.github.com"
+          python -u app/server.py --cloud
+      - name: Tieni attiva la programmazione
+        # GitHub sospende le programmazioni dei repository fermi da 60 giorni: una volta al giorno la riattiva
+        if: always()
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if [ "$(date +%H)" = "03" ]; then gh api -X PUT "repos/${{ github.repository }}/actions/workflows/aggiorna.yml/enable"; fi
