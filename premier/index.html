@@ -1,0 +1,975 @@
+<!doctype html>
+<html lang="it"><head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="robots" content="noindex,nofollow">
+<meta name="theme-color" content="#0F1B2D">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Premier">
+<link rel="apple-touch-icon" href="icona-180.png">
+<link rel="icon" type="image/png" href="icona-192.png">
+<link rel="manifest" href="manifest.webmanifest">
+<style>:root{padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}body{margin:0}img{max-width:100%}[hidden]{display:none!important}</style>
+</head><body>
+<title>Premier League Tascabile</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700&family=Barlow:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+:root{
+  /* palette «Notte di stadio», scelta dall'utente il 09/10/2026: blu notte e verde lime */
+  --ground:#F3F5F9;--surface:#FFFFFF;--surface2:#E8ECF3;--ink:#0F1B2D;--ink2:#3B4659;--muted:#5B6678;--line:#DCE2EC;
+  --accent:#4D7C0F;--on-accent:#FFFFFF;--home:#2F5BEA;--draw:#A9B2C3;--away:#E8590C;--good:#15803D;--warn:#B45309;--bad:#C0392B;
+  --display:"Barlow Condensed","Arial Narrow",system-ui,sans-serif;--body:"Barlow",system-ui,-apple-system,"Segoe UI",sans-serif;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  color-scheme:dark;--ground:#0A1120;--surface:#121B2E;--surface2:#1A2540;--ink:#EEF2F8;--ink2:#C3CCDA;--muted:#93A0B8;--line:#24314D;
+  --accent:#A3E635;--on-accent:#0A1120;--home:#6B8CFF;--draw:#4A566E;--away:#FF8A4C;--good:#34C26B;--warn:#E0A63A;--bad:#F07167;}}
+:root[data-theme="dark"]{
+  color-scheme:dark;--ground:#0A1120;--surface:#121B2E;--surface2:#1A2540;--ink:#EEF2F8;--ink2:#C3CCDA;--muted:#93A0B8;--line:#24314D;
+  --accent:#A3E635;--on-accent:#0A1120;--home:#6B8CFF;--draw:#4A566E;--away:#FF8A4C;--good:#34C26B;--warn:#E0A63A;--bad:#F07167;}
+*{box-sizing:border-box}
+body{background:var(--ground);color:var(--ink);font-family:var(--body);font-size:15px;line-height:1.45}
+.wrap{max-width:720px;margin:0 auto;padding-inline:16px;padding-block:0 40px}
+.num{font-variant-numeric:tabular-nums}
+header{position:sticky;top:env(safe-area-inset-top,0px);z-index:5;background:color-mix(in srgb,var(--ground) 90%,transparent);backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);border-bottom:1px solid var(--line)}
+.bar1{display:flex;align-items:baseline;gap:10px;padding-block:12px 6px}
+.logo.long{font-size:24px}.logo.long span{display:none}
+.leghe{display:flex;gap:6px;padding-block:0 4px}.leghe:empty{display:none}
+.leghe a{font-size:12px;font-weight:600;text-decoration:none;color:var(--ink2);border:1px solid var(--line);border-radius:999px;padding:2px 10px}
+.leghe a[aria-current="page"]{background:var(--accent);border-color:var(--accent);color:var(--on-accent)}
+.logo{font-family:var(--display);font-weight:700;font-size:28px;letter-spacing:.01em;line-height:1}
+.logo span{color:var(--accent)}
+.stamp{margin-left:auto;font-size:12px;color:var(--muted);text-align:right;line-height:1.3}
+.stamp .warn{color:var(--warn);font-weight:600}
+nav{display:flex;gap:4px;overflow-x:auto;scrollbar-width:none;padding-block:4px 10px}
+nav::-webkit-scrollbar{display:none}
+nav a{flex:none;text-decoration:none;color:var(--ink2);font-family:var(--display);font-weight:600;font-size:17px;letter-spacing:.02em;padding:4px 12px;border-radius:999px;text-transform:uppercase}
+nav a[aria-current="page"]{background:var(--ink);color:var(--ground)}
+nav a:focus-visible,button:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+h2{font-family:var(--display);font-weight:700;font-size:22px;letter-spacing:.02em;text-transform:uppercase;margin:22px 0 10px;text-wrap:balance}
+h2 small{font-family:var(--body);font-weight:500;font-size:13px;color:var(--muted);text-transform:none;letter-spacing:0;margin-left:6px}
+.lead{color:var(--ink2);margin:0 0 12px;max-width:62ch}
+.crest{--c:#777;display:inline-grid;place-items:center;flex:none;width:30px;height:30px;border-radius:50%;background:var(--c);color:var(--cf,#fff);font-family:var(--display);font-weight:700;font-size:11px;letter-spacing:.02em;box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--ink) 14%,transparent)}
+.crest.s{width:22px;height:22px;font-size:9px}
+.tlogo{width:30px;height:30px;flex:none;border-radius:50%;background:#fff;padding:3px;object-fit:contain;box-shadow:inset 0 0 0 1px rgba(0,0,0,.08)}
+.tlogo.s{width:22px;height:22px;padding:2px}
+.team{display:flex;align-items:center;gap:8px;min-width:0}
+.team b{font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.dots{display:inline-flex;gap:3px}
+.dots i{width:7px;height:7px;border-radius:50%;background:var(--draw)}
+.dots i.V{background:var(--good)}.dots i.P{background:var(--bad)}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:14px}
+.list{display:grid;gap:10px}
+.fx-top{display:flex;justify-content:space-between;gap:8px;font-size:12px;color:var(--muted)}
+.fx-teams{display:grid;grid-template-columns:1fr auto 1fr;align-items:center;gap:10px;margin-top:10px}
+.fx-teams .r{justify-content:flex-end;text-align:right}
+.fx-teams .side{display:grid;gap:4px;min-width:0}
+.fx-teams .r .team{flex-direction:row-reverse}
+.fx-teams .r .dots{justify-self:end}
+.pick{text-align:center}
+.pick .sc{font-family:var(--display);font-weight:700;font-size:34px;line-height:1;letter-spacing:.02em}
+.pick small{display:block;font-size:12px;color:var(--ink2)}
+.bars{display:flex;gap:2px;height:8px;margin-top:12px}
+.bars i{display:block;height:100%}
+.bars i:first-child{border-radius:4px 0 0 4px}.bars i:last-child{border-radius:0 4px 4px 0}
+.bars .h{background:var(--home)}.bars .x{background:var(--draw)}.bars .a{background:var(--away)}
+.bl{display:flex;justify-content:space-between;font-size:12px;color:var(--ink2);margin-top:4px}
+.chips{display:flex;flex-wrap:wrap;gap:6px;margin-top:10px}
+.chip{font-size:12px;padding:2px 9px;border-radius:999px;background:var(--surface2);color:var(--ink2);white-space:nowrap}
+.chip b{color:var(--ink);font-weight:600}
+.clash{margin:10px 0 0;font-size:13px;color:var(--ink2);border-left:3px solid var(--accent);padding-left:10px}
+.clash b{color:var(--ink);font-weight:600}
+.scorers{margin-top:8px;font-size:12px;color:var(--muted)}
+table{width:100%;border-collapse:collapse;font-variant-numeric:tabular-nums}
+th{font-size:11px;font-weight:600;color:var(--muted);text-align:right;padding:6px 4px;border-bottom:1px solid var(--line);text-transform:uppercase;letter-spacing:.04em}
+td{padding:7px 4px;border-bottom:1px solid var(--line);text-align:right}
+th.l,td.l{text-align:left}
+tr:last-child td{border-bottom:0}
+.pos{display:inline-block;width:22px;text-align:center;font-weight:600;border-left:3px solid transparent;padding-left:2px}
+.z-cl{border-color:var(--home)}.z-el{border-color:var(--away)}.z-co{border-color:var(--accent)}.z-rel{border-color:var(--bad)}
+.legend{display:flex;flex-wrap:wrap;gap:12px;margin-top:8px;font-size:12px;color:var(--ink2)}
+.legend i{display:inline-block;width:10px;height:3px;margin-right:5px;vertical-align:middle}
+.seg{display:flex;flex-wrap:wrap;gap:6px}
+.seg button{font:inherit;font-size:13px;border:1px solid var(--line);background:var(--surface);color:var(--ink2);border-radius:999px;padding:5px 12px;cursor:pointer}
+.seg button[aria-pressed="true"]{background:var(--ink);color:var(--ground);border-color:var(--ink)}
+.evl{gap:6px;margin-top:10px}
+.seg.evg{margin:0 0 12px}.seg.evg button{font-weight:600}
+.seg.evm{margin-top:10px}.seg.evm button{font-size:12px;padding:3px 10px}
+.search{width:100%;font:inherit;font-size:16px;padding:10px 14px;border:1px solid var(--line);border-radius:12px;background:var(--surface);color:var(--ink)}
+.search:focus{outline:2px solid var(--accent);outline-offset:1px}
+.cmp{font-size:13px}.cmp td{white-space:nowrap;padding-inline:3px}.cmp th{padding-inline:3px}
+.cmp td small{color:var(--muted);font-size:11px}
+.pos-luck{font-weight:600}.pos-luck.up{color:var(--good)}.pos-luck.dn{color:var(--bad)}
+.cal{display:grid;grid-template-columns:auto 1fr auto;gap:6px 10px;align-items:center;font-size:13px}
+.cal .tr{height:8px;border-radius:4px;background:var(--surface2);position:relative;overflow:hidden}
+.cal .tr i{position:absolute;inset:0 auto 0 0;background:var(--accent);border-radius:4px}
+.cal .tr u{position:absolute;top:-2px;bottom:-2px;width:2px;background:var(--ink)}
+a.plain{color:inherit;text-decoration:none}
+.cardlink.ev{display:flex;align-items:center;gap:10px;padding:10px 14px}
+.ev .rk{width:1.5em;text-align:right;color:var(--muted);font-weight:600;flex:none}
+.ev .evn{flex:1;min-width:0;display:grid}
+.ev .evn b{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ev .evn small{color:var(--muted);font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ev .evv{font-family:var(--display);font-weight:700;font-size:20px;flex:none}
+.ev .uff{color:var(--good);font-weight:600}
+.dims{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:6px 10px;margin-top:10px}
+.dim{font-size:11px;color:var(--muted)}
+.dim span{display:block;height:5px;border-radius:3px;background:var(--surface2);margin-top:3px;position:relative;overflow:hidden}
+.dim span i{position:absolute;inset:0 auto 0 0;background:var(--accent);border-radius:3px}
+.arch{font-family:var(--display);font-weight:600;font-size:18px;letter-spacing:.02em}
+.tiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:8px}
+.tile{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:10px 12px}
+.tile small{display:block;font-size:12px;color:var(--muted)}
+.tile b{font-family:var(--display);font-size:26px;font-weight:700}
+.ok{color:var(--good)}.ko{color:var(--bad)}
+.tw{overflow-x:auto}
+.muted{color:var(--muted)}
+.live{border-color:color-mix(in srgb,var(--bad) 45%,var(--line))}
+footer{font-size:12px;color:var(--muted);margin-top:28px;max-width:62ch}
+.cardlink{display:block;color:inherit;text-decoration:none;-webkit-tap-highlight-color:transparent}
+.cardlink:active{background:var(--surface2)}
+.more{margin-top:10px;font-size:13px;font-weight:600;color:var(--accent);text-align:right}
+a.plain{color:inherit;text-decoration:none}
+.back{display:inline-block;margin-top:16px;font-family:var(--display);font-weight:600;font-size:17px;letter-spacing:.02em;text-transform:uppercase;color:var(--ink2);text-decoration:none}
+.stack{display:grid;grid-template-columns:minmax(0,1fr);gap:10px;margin-top:10px}
+.stack>*{min-width:0}
+#dettaglio .fx-teams{grid-template-columns:minmax(0,1fr) auto minmax(0,1fr)}
+#dettaglio .pick{max-width:118px}
+#dettaglio .pick small{white-space:normal}
+#dettaglio article .fx-teams .team{flex-direction:column;align-items:flex-start;gap:4px}
+#dettaglio article .fx-teams .r .team{flex-direction:column;align-items:flex-end}
+#dettaglio article .fx-teams .team b{white-space:normal;overflow:visible}
+.card h3{font-family:var(--display);font-weight:700;font-size:18px;letter-spacing:.02em;text-transform:uppercase;margin:0 0 8px;text-wrap:balance}
+.card h3 small{font-family:var(--body);font-weight:500;font-size:12px;text-transform:none;letter-spacing:0}
+.card h4{font-size:13px;font-weight:600;color:var(--ink2);margin:14px 0 6px}
+.small{font-size:13px;margin:8px 0 0}
+.side{text-decoration:none;color:inherit}
+.facts{display:grid;grid-template-columns:repeat(auto-fit,minmax(118px,1fr));gap:8px;margin-top:12px}
+.fact{background:var(--surface2);border-radius:10px;padding:8px 10px}
+.fact small{display:block;font-size:11px;color:var(--muted)}
+.fact b{font-family:var(--display);font-size:21px;font-weight:700;line-height:1.15}
+.two{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:14px}
+.narr p{margin:0 0 8px;color:var(--ink2);max-width:62ch}
+.narr b{color:var(--ink)}
+.pbr{display:grid;grid-template-columns:minmax(0,1fr) minmax(64px,96px) 52px 30px;gap:8px;align-items:center;font-size:13px;padding:3px 0}
+.pbr .lb{color:var(--ink2);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.pbr .tr{height:6px;border-radius:3px;background:var(--surface2);position:relative}
+.pbr .tr i{position:absolute;inset:0 auto 0 0;border-radius:3px;background:var(--accent)}
+.pbr .tr i.nt{background:var(--draw)}
+.pbr .tr .pv{position:absolute;top:-3px;bottom:-3px;width:2px;background:var(--ink);opacity:.6}
+.pbr .v{text-align:right;font-variant-numeric:tabular-nums;font-weight:600}
+.pbr .rk{text-align:right;font-size:12px;color:var(--muted);font-variant-numeric:tabular-nums}
+.pbr .rk.top{color:var(--good);font-weight:600}.pbr .rk.bot{color:var(--bad);font-weight:600}
+.mir{display:grid;grid-template-columns:44px minmax(0,1fr) minmax(92px,auto) minmax(0,1fr) 44px;gap:6px;align-items:center;font-size:12px;padding:3px 0;font-variant-numeric:tabular-nums}
+.mir .bl,.mir .br{height:6px;background:var(--surface2);border-radius:3px;position:relative;overflow:hidden}
+.mir .bl i{position:absolute;top:0;bottom:0;right:0;background:var(--home)}
+.mir .br i{position:absolute;top:0;bottom:0;left:0;background:var(--away)}
+.mir .lb{text-align:center;color:var(--ink2)}
+.mir .vl{text-align:right;color:var(--ink2)}.mir .vr{text-align:left;color:var(--ink2)}
+.mir .w{font-weight:700;color:var(--ink)}
+.vsrow{display:flex;align-items:center;justify-content:space-between;gap:10px}
+.vsrow .r{text-align:right}
+.sw{list-style:none;margin:0;padding:0;display:grid;gap:8px}
+.sw li{display:flex;gap:8px;align-items:flex-start;font-size:14px}
+.sw .ic{flex:none;width:20px;height:20px;border-radius:6px;display:grid;place-items:center;font-size:10px;color:#fff;margin-top:1px}
+.sw .ic.up{background:var(--good)}.sw .ic.dn{background:var(--bad)}.sw .ic.nt{background:var(--accent)}
+.sw small{display:block;color:var(--muted);font-size:12px}
+.keys{list-style:none;margin:0;padding:0;display:grid;gap:12px}
+.keys li{border-left:3px solid var(--line);padding-left:10px;font-size:14px}
+.keys small{display:block;color:var(--ink2);font-size:12px;margin-top:3px}
+.tag{display:inline-flex;align-items:center;gap:5px;font-size:11px;padding:1px 8px;border-radius:999px;background:var(--surface2);color:var(--ink2);white-space:nowrap}
+.sq{display:inline-block;width:8px;height:8px;border-radius:2px}
+.adjl{list-style:none;margin:6px 0 4px;padding:0;display:grid;gap:4px;font-size:13px}
+.adjl .up{color:var(--good);font-weight:600}.adjl .dn{color:var(--bad);font-weight:600}
+.heat{display:grid;gap:2px;font-size:11px;font-variant-numeric:tabular-nums}
+.heat div{text-align:center;padding:7px 0;border-radius:3px}
+.heat .hd{color:var(--muted)}
+.scr{display:grid;grid-template-columns:minmax(0,1fr) 90px 40px;gap:8px;align-items:center;font-size:13px;padding:3px 0}
+.scr .tr{height:6px;border-radius:3px;background:var(--surface2);position:relative;overflow:hidden}
+.scr .tr i{position:absolute;inset:0 auto 0 0;border-radius:3px}
+.scr b{text-align:right}
+.rel{display:grid;gap:12px}
+.relrow .k{font-size:12px;color:var(--muted);margin-bottom:2px}
+.relrow .v{display:grid;gap:3px;font-size:14px}
+.relrow small{color:var(--muted)}
+.lu td,.lu th{padding:6px 5px;white-space:nowrap}
+.lu .rl{display:block;font-size:11px;color:var(--muted);font-weight:400}
+.nextlink,.rowlink{display:flex;justify-content:space-between;align-items:center;gap:8px;margin-top:10px;font-size:13px;color:var(--accent);font-weight:600;text-decoration:none}
+.rowlink{color:inherit;font-weight:400;padding:8px 0;border-bottom:1px solid var(--line)}
+.rowlink:last-child{border-bottom:0}
+.icona{display:flex;align-items:center;gap:12px;margin-top:16px;font-size:12px;color:var(--muted);max-width:62ch}
+.icona img{width:56px;height:56px;border-radius:13px;flex:none;box-shadow:0 1px 3px rgba(0,0,0,.18)}
+@media (max-width:420px){.pick .sc{font-size:28px}.dims{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media (prefers-reduced-motion:no-preference){section:not([hidden]){animation:in .2s ease-out}}
+@keyframes in{from{opacity:.4;transform:translateY(3px)}to{opacity:1;transform:none}}
+</style>
+
+<header><div class="wrap">
+  <div class="bar1"><div class="logo">Serie A <span>tascabile</span></div><div class="stamp" id="stamp"></div></div>
+  <div class="leghe" id="leghe"></div>
+  <nav id="nav" aria-label="Sezioni">
+    <a href="#giornata" data-s="giornata">Giornata</a><a href="#evidenza" data-s="evidenza">In evidenza</a><a href="#classifica" data-s="classifica">Classifica</a>
+    <a href="#squadre" data-s="squadre">Squadre</a><a href="#storico" data-s="storico">Storico</a><a href="#cerca" data-s="cerca">Cerca</a>
+  </nav>
+</div></header>
+
+<main class="wrap">
+  <section id="giornata"></section>
+  <section id="evidenza" hidden></section>
+  <section id="classifica" hidden></section>
+  <section id="squadre" hidden></section>
+  <section id="storico" hidden></section>
+  <section id="cerca" hidden></section>
+  <section id="dettaglio" hidden></section>
+  <footer id="foot"></footer>
+</main>
+
+<script id="dati" type="application/json">null</script>
+<script>
+let D = null, T = {}, LG = {}, LGN = 'Serie A';   // dati: dentro la pagina (anteprima) oppure nel file dati.json pubblicato accanto
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const pc = v => v == null ? '–' : Math.round(v * 100) + '%';
+const fx = (v, d = 1) => v == null ? '–' : Number(v).toLocaleString('it-IT', {minimumFractionDigits: d, maximumFractionDigits: d});
+const TZ = {timeZone: 'Europe/Rome'};
+const when = ts => new Date(ts * 1000).toLocaleString('it-IT', {...TZ, weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit'});
+const day = ts => new Date(ts * 1000).toLocaleString('it-IT', {...TZ, day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit'});
+function lum(hex) {
+  const m = /^#?([0-9a-f]{6})$/i.exec(hex || ''); if (!m) return 0;
+  const n = parseInt(m[1], 16), c = [n >> 16, (n >> 8) & 255, n & 255].map(v => { v /= 255; return v <= .03928 ? v / 12.92 : ((v + .055) / 1.055) ** 2.4; });
+  return .2126 * c[0] + .7152 * c[1] + .0722 * c[2];
+}
+let LOGOS = new Set();   // squadre con il logo pubblicato accanto alla pagina (sito su GitHub)
+function crest(id, small) {
+  if (LOGOS.has(String(id))) return `<img class="tlogo${small ? ' s' : ''}" src="loghi/${id}.png" alt="" aria-hidden="true">`;
+  const t = T[id] || {}, col = /^#[0-9a-f]{6}$/i.test(t.color || '') ? t.color : '#6C7A72';
+  return `<span class="crest${small ? ' s' : ''}" style="--c:${col};--cf:${lum(col) > .45 ? '#0F1B2D' : '#fff'}" aria-hidden="true">${esc((t.code || t.name || '?').slice(0, 3))}</span>`;
+}
+const team = (id, small) => `<span class="team">${crest(id, small)}<b>${esc((T[id] || {}).name || '?')}</b></span>`;
+const dots = f => `<span class="dots" aria-label="Forma: ${esc((f || []).join(' '))}">${(f || []).slice().reverse().map(r => `<i class="${r}"></i>`).join('')}</span>`;
+
+function vGiornata() {
+  const byRound = {};
+  D.fixtures.forEach(f => (byRound[f.round ?? 'altre'] ??= []).push(f));
+  const live = D.live.length ? `<h2>Live <small>al momento della fotografia</small></h2><div class="list">${D.live.map(e => `<div class="card live"><div class="fx-teams">
+      <div class="side">${team(e.home)}</div><div class="pick"><div class="sc num">${e.hs ?? 0}–${e.as ?? 0}</div><small>${esc(e.clock || '')}</small></div><div class="side r">${team(e.away)}</div></div></div>`).join('')}</div>` : '';
+  const rounds = Object.keys(byRound).sort((a, b) => (+a || 99) - (+b || 99)).slice(0, 2);
+  return live + rounds.map(r => `<h2>${r === 'altre' ? 'Prossime partite' : r + 'ª giornata'} <small>pronostici</small></h2>
+    <div class="list">${byRound[r].map(f => `<a class="card cardlink" href="#p${f.id}">
+      <div class="fx-top"><span>${when(f.start)}</span><span>${esc(f.lineups === 'ufficiale' ? 'Formazioni ufficiali' : f.lineups && f.lineups.startsWith('probabile') ? 'Formazioni probabili' : 'Formazioni stimate')}${f.referee ? ' · arbitro ' + esc(f.referee) + (refTone(f.P && f.P.referee) ? ' (' + refTone(f.P.referee) + ')' : '') : ''}</span></div>
+      <div class="fx-teams">
+        <div class="side">${team(f.home)}${dots((T[f.home] || {}).form)}</div>
+        <div class="pick"><div class="sc num">${f.pick.score.i}–${f.pick.score.j}</div><small>${esc(f.pick.label)}</small></div>
+        <div class="side r">${team(f.away)}${dots((T[f.away] || {}).form)}</div>
+      </div>
+      <div class="bars" role="img" aria-label="1 ${pc(f.p1)}, X ${pc(f.px)}, 2 ${pc(f.p2)}"><i class="h" style="width:${f.p1 * 100}%"></i><i class="x" style="width:${f.px * 100}%"></i><i class="a" style="width:${f.p2 * 100}%"></i></div>
+      <div class="bl num"><span>1 · ${pc(f.p1)}</span><span>X · ${pc(f.px)}</span><span>2 · ${pc(f.p2)}</span></div>
+      <div class="chips"><span class="chip">Gol attesi <b class="num">${fx(f.lh, 2)}–${fx(f.la, 2)}</b></span><span class="chip">Over 2,5 <b>${pc(f.over25)}</b></span><span class="chip">Gol/Gol <b>${pc(f.btts)}</b></span></div>
+      ${f.clash.length ? `<p class="clash"><b>${esc(f.clash[0].title)}.</b> ${esc(f.clash[0].text)}</p>` : `<p class="clash"><b>${esc((T[f.home] || {}).arch)}</b> contro <b>${esc((T[f.away] || {}).arch)}</b>: nessuno scontro di stili marcato.</p>`}
+      ${f.scorers.length ? `<div class="scorers">Probabili marcatori: ${f.scorers.map(s => `${esc(s.name)} ${pc(s.p)}`).join(' · ')}</div>` : ''}
+      ${f.P && f.P.yellowRisk && f.P.yellowRisk.top.length ? `<div class="scorers">Più a rischio giallo: ${f.P.yellowRisk.top.slice(0, 2).map(y => `${esc(y.name)} ${pc(y.p)}`).join(' · ')}</div>` : ''}
+      <div class="more">Scheda completa ›</div></a>`).join('')}</div>`).join('');
+}
+
+const ZONE = {'Champions League': ['cl', 'Champions League'], 'Europa League': ['el', 'Europa League'], 'Conference League Qualification': ['co', 'Conference League'], 'Conference League': ['co', 'Conference League'], 'Relegation': ['rel', 'Retrocessione']};
+function vClassifica() {
+  const zones = new Set();
+  const rows = D.standings.map(r => { const z = ZONE[r.zone]; if (z) zones.add(r.zone);
+    return `<tr><td class="l"><span class="pos ${z ? 'z-' + z[0] : ''}">${r.pos}</span></td><td class="l"><a class="plain" href="#s${r.team}">${team(r.team, true)}</a></td>
+      <td>${r.p}</td><td>${r.gf - r.ga > 0 ? '+' : ''}${r.gf - r.ga}</td><td><b>${r.pts}</b></td><td>${dots((T[r.team] || {}).form)}</td></tr>`; }).join('');
+  return `<h2>Classifica</h2><div class="card tw"><table><thead><tr><th class="l">#</th><th class="l">Squadra</th><th>G</th><th>DR</th><th>Pt</th><th>Forma</th></tr></thead><tbody>${rows}</tbody></table>
+    ${zones.size ? `<div class="legend">${[...zones].map(z => `<span><i style="background:var(--${{cl: 'home', el: 'away', co: 'accent', rel: 'bad'}[ZONE[z][0]]})"></i>${ZONE[z][1]}</span>`).join('')}</div>` : ''}</div>
+    ${xptsCard()}
+    ${D.results.length ? `<h2>Ultimi risultati</h2><div class="card"><table><tbody>${D.results.map(e => `<tr><td class="l">${team(e.home, true)}</td><td class="num"><b>${e.hs}–${e.as}</b></td><td class="l">${team(e.away, true)}</td></tr>`).join('')}</tbody></table></div>` : ''}`;
+}
+
+function xptsCard() {
+  const X = D.xpts || {}, rows = Object.entries(X).sort((a, b) => b[1].xpts - a[1].xpts);
+  if (!rows.length) return '';
+  const real = Object.fromEntries(D.standings.map(r => [r.team, r]));
+  return `<h2>Classifica attesa <small>punti attesi (xPts)</small></h2>
+    <div class="card tw"><table><thead><tr><th class="l">#</th><th class="l">Squadra</th><th>Pt</th><th>xPt</th><th>Diff.</th><th>xG</th><th>xGA</th></tr></thead><tbody>
+    ${rows.map(([id, x], i) => { const r = real[id] || {};
+      // stesse partite per punti e xPt: se Understat è indietro di qualche partita si usano i suoi punti
+      const pts = r.p === x.n ? r.pts : x.pts, df = pts - x.xpts;
+      return `<tr><td class="l">${i + 1}</td><td class="l"><a class="plain" href="#s${id}">${team(id, true)}</a></td><td>${pts}</td><td><b>${fx(x.xpts, 1)}</b></td>
+        <td><span class="pos-luck ${df >= 1.5 ? 'up' : df <= -1.5 ? 'dn' : ''}">${df > 0 ? '+' : ''}${fx(df, 1)}</span></td><td>${fx(x.xg, 1)}</td><td>${fx(x.xga, 1)}</td></tr>`; }).join('')}
+    </tbody></table>
+    <p class="small muted">I punti che ogni squadra avrebbe fatto in media con le occasioni create e concesse in ogni partita (Understat). Diff. positiva in verde: ha più punti di quanti ne meriterebbero le occasioni (è stata fortunata o molto cinica); negativa in rosso: ne ha meno. Con poche giornate le differenze contano poco.</p></div>`;
+}
+
+const DIMS = [['possesso', 'Possesso'], ['baricentro', 'Baricentro'], ['pressing', 'Pressing'], ['verticalita', 'Verticale'], ['ampiezza', 'Ampiezza'], ['transizioni', 'Transizioni'], ['fisicita', 'Fisicità'], ['ritmo', 'Ritmo']];
+function vSquadre() {
+  return `<h2>Squadre <small>identità tattica</small></h2><div class="list">${D.standings.map(r => { const t = T[r.team] || {};
+    return `<a class="card cardlink" href="#s${r.team}"><div class="fx-top"><span>${r.pos}ª · ${r.pts} punti</span><span>${t.coach ? 'All. ' + esc(t.coach) : t.vacant ? 'All. da nominare' : ''}</span></div>
+      <div style="display:flex;align-items:center;gap:10px;margin-top:8px">${crest(r.team)}<div><b>${esc(t.name)}</b><div class="arch">${esc(t.arch || '')}${t.second ? ` <small class="muted" style="font-family:var(--body);font-size:13px">con tratti di ${esc(t.second)}</small>` : ''}</div></div></div>
+      ${t.summary ? `<p class="lead" style="margin:8px 0 0;font-size:14px">${esc(t.summary)}</p>` : ''}
+      <div class="dims">${DIMS.map(([k, l]) => `<div class="dim">${l} <b class="num" style="color:var(--ink)">${Math.round(((t.dims || {})[k] ?? 0) * 100)}</b><span><i style="width:${((t.dims || {})[k] ?? 0) * 100}%"></i></span></div>`).join('')}</div>
+      ${t.roles ? `<p class="lead" style="margin:10px 0 0;font-size:13px">${esc(t.roles)}</p>` : ''}
+      ${t.scorer || t.assister ? `<div class="fx-top" style="margin-top:8px"><span>Più incline al gol: <b style="color:var(--ink)">${esc(t.scorer || '–')}</b></span><span>All'assist: <b style="color:var(--ink)">${esc(t.assister || '–')}</b></span></div>` : ''}
+      <div class="more">Scheda completa ›</div></a>`; }).join('')}</div>`;
+}
+
+function vStorico() {
+  const s = D.history.summary || {n: 0};
+  const tiles = s.n ? `<div class="tiles">${[['Partite', s.n], ['Esito 1X2', pc(s.pick)], ['Risultato esatto', pc(s.score)], ['Over/Under', pc(s.over25)], ['Gol/No gol', pc(s.btts)]].map(([k, v]) => `<div class="tile"><small>${k}</small><b class="num">${v}</b></div>`).join('')}</div>`
+    : '<p class="lead">Lo storico si riempie partita dopo partita: il server salva l\'ultimo pronostico prima di ogni calcio d\'inizio e lo confronta con il risultato.</p>';
+  const items = D.history.items.filter(i => i.pick);
+  // affidabilità: per fasce di fiducia, quante volte l'esito indicato è uscito davvero
+  const cal = (s.cal || []).length ? `<div class="card" style="margin-top:10px"><h3>Quanto fidarsi</h3>
+    <div class="cal">${s.cal.map(c => `<span>fiducia ${Math.round(c.lo * 100)}–${Math.round(c.hi * 100)}%</span>
+      <span class="tr" role="img" aria-label="azzeccate ${pc(c.hit)}, attese ${pc(c.p)}"><i style="width:${c.hit * 100}%"></i><u style="left:${c.p * 100}%"></u></span>
+      <span class="num"><b>${pc(c.hit)}</b> <small class="muted">su ${c.n}</small></span>`).join('')}</div>
+    <p class="small muted">Per ogni fascia di fiducia del pronostico (la probabilità che dava all'esito indicato), la barra mostra quante volte ci ha preso; la tacca nera è quante volte avrebbe dovuto prenderci. Se barra e tacca coincidono, le percentuali sono affidabili. Servono parecchie partite perché il confronto conti.</p></div>` : '';
+  const P = s.players;
+  const plc = P ? `<div class="card" style="margin-top:10px"><h3>Giocatori: previsto e vero <small class="muted">titolari, ${P.n} partite</small></h3>
+    <div class="facts">${[['Gialli', 'y', 1], ['Tiri', 'shots', 0], ['Falli', 'fouls', 0], ['Marcatori', 'goals', 1]].map(([l, k, d]) =>
+      `<div class="fact"><small>${l} previsti · veri</small><b class="num">${fx(P[k][0], d)} · ${P[k][1]}</b></div>`).join('')}</div>
+    <p class="small muted">Somma delle previsioni sui titolari al calcio d'inizio contro quello che è successo davvero (ESPN). Gialli e marcatori: somma delle probabilità contro quanti titolari hanno preso un giallo o segnato.</p></div>` : '';
+  const row = i => {
+    const inner = `<span class="evn"><b>${nm(i.home)} – ${nm(i.away)}</b><small>${day(i.start)} · pronostico ${esc(i.pick.label)} ${i.pick.score.i}–${i.pick.score.j}</small></span>
+      <span class="evv num">${i.result ? `${i.result.hs}–${i.result.as}` : '<small class="muted" style="font:500 12px var(--body)">da giocare</small>'}</span>
+      <span style="width:1.2em;text-align:center">${i.ok == null ? '' : i.ok ? '<b class="ok">✓</b>' : '<b class="ko">✗</b>'}</span>`;
+    return i.f ? `<a class="card cardlink ev" href="#r${i.id}">${inner}</a>` : `<div class="card ev" style="display:flex;align-items:center;gap:10px;padding:10px 14px">${inner}</div>`;
+  };
+  return `<h2>Storico pronostici</h2>${tiles}${cal}${plc}${items.length ? `<div class="list evl" style="margin-top:10px">${items.map(row).join('')}</div>
+      <p class="small muted">Tocca una partita giocata per vedere com'è andata rispetto al pronostico.</p>` : ''}`;
+}
+
+/* com'è andata: il pronostico al calcio d'inizio contro la partita vera */
+function vRivedi(id) {
+  const it = (D.history.items || []).find(i => String(i.id) === String(id));
+  if (!it || !it.f || !it.result) return back('storico', 'Storico') + '<p class="lead" style="margin-top:14px">Questa partita non è ancora nello storico.</p>';
+  const f = it.f, r = it.result, ev = it.eval || {}, real = it.real || {}, rp = real.players || {}, h = it.home, a = it.away;
+  const out = r.hs > r.as ? '1' : r.hs === r.as ? 'X' : '2';
+  const yn = (ok, txt) => `<b class="${ok ? 'ok' : 'ko'}">${txt}</b>`;
+  const side = key => {
+    const rows = ((f.pl || {})[key] || []);
+    if (!rows.length) return '';
+    const tot = {sh: [0, 0], fo: [0, 0], y: [0, 0]};
+    const tr = rows.map(([pid, name, mins, sh, sot, fo, py, pg]) => {
+      const x = rp[String(pid)];
+      if (x) { tot.sh[0] += sh || 0; tot.sh[1] += x[2]; tot.fo[0] += fo || 0; tot.fo[1] += x[4]; tot.y[0] += py || 0; tot.y[1] += Math.min(x[5], 1); }
+      return `<tr><td class="l"><a class="plain" href="#g${pid}"><b>${esc(name)}</b></a></td>
+        <td>${x ? x[1] + "'" : '<small>no</small>'}</td>
+        <td>${fx(sh, 1)} <small>· ${x ? x[2] : '–'}</small></td><td>${fx(fo, 1)} <small>· ${x ? x[4] : '–'}</small></td>
+        <td>${pc(py)} <small>· ${x ? (x[5] ? '<b class="ko">sì</b>' : 'no') : '–'}</small></td>
+        <td>${pc(pg)} <small>· ${x ? (x[6] ? `<b class="ok">${x[6]}</b>` : '0') : '–'}</small></td></tr>`;
+    }).join('');
+    return `<div class="card"><div style="margin-bottom:6px">${team(it[key], true)}</div>
+      <div class="tw"><table class="cmp"><thead><tr><th class="l">Titolare</th><th>Min</th><th>Tiri</th><th>Falli</th><th>Giallo</th><th>Gol</th></tr></thead><tbody>${tr}</tbody></table></div>
+      ${Object.keys(rp).length ? `<p class="small muted">Questi titolari: tiri previsti ${fx(tot.sh[0], 1)}, veri ${tot.sh[1]} · falli ${fx(tot.fo[0], 1)} e ${tot.fo[1]} · gialli attesi ${fx(tot.y[0], 1)}, presi ${tot.y[1]}.</p>` : ''}</div>`;
+  };
+  const tm = real.team || {};
+  const yReal = tm.home && tm.away ? (tm.home.yellowCards || 0) + (tm.away.yellowCards || 0) : null;
+  return `${back('storico', 'Storico')}
+  <article class="card" style="margin-top:10px">
+    <div class="fx-top"><span>${when(it.start)}${it.round ? ' · ' + it.round + 'ª giornata' : ''}</span><span>${f.ref ? 'arbitro ' + esc(f.ref) : ''}</span></div>
+    <div class="fx-teams"><a class="side" href="#s${h}">${team(h)}</a><div class="pick"><div class="sc num">${r.hs}–${r.as}</div><small>risultato finale</small></div><a class="side r" href="#s${a}">${team(a)}</a></div>
+    <div class="bars" role="img" aria-label="Pronostico: 1 ${pc(f.p1)}, X ${pc(f.px)}, 2 ${pc(f.p2)}"><i class="h" style="width:${f.p1 * 100}%"></i><i class="x" style="width:${f.px * 100}%"></i><i class="a" style="width:${f.p2 * 100}%"></i></div>
+    <div class="bl num"><span>${out === '1' ? '<b>1 · ' + pc(f.p1) + '</b>' : '1 · ' + pc(f.p1)}</span><span>${out === 'X' ? '<b>X · ' + pc(f.px) + '</b>' : 'X · ' + pc(f.px)}</span><span>${out === '2' ? '<b>2 · ' + pc(f.p2) + '</b>' : '2 · ' + pc(f.p2)}</span></div>
+    <div class="facts">
+      <div class="fact"><small>Esito indicato</small><b>${esc(f.pick.label)}</b><small>${ev.pick != null ? yn(ev.pick, ev.pick ? 'azzeccato' : 'sbagliato') : ''}</small></div>
+      <div class="fact"><small>Risultato indicato</small><b class="num">${f.pick.score.i}–${f.pick.score.j}</b><small>${ev.score != null ? yn(ev.score, ev.score ? 'esatto' : 'non esatto') : ''}</small></div>
+      <div class="fact"><small>Gol attesi · veri</small><b class="num">${fx(f.lh, 1)}–${fx(f.la, 1)}</b><small>veri ${r.hs}–${r.as}</small></div>
+      <div class="fact"><small>Over 2,5 previsto</small><b>${pc(f.over25)}</b><small>${ev.over25 != null ? yn(ev.over25, r.hs + r.as > 2 ? 'è finita over' : 'è finita under') : ''}</small></div>
+      <div class="fact"><small>Gol/Gol previsto</small><b>${pc(f.btts)}</b><small>${ev.btts != null ? yn(ev.btts, r.hs && r.as ? 'hanno segnato entrambe' : 'non hanno segnato entrambe') : ''}</small></div>
+      ${f.cards ? `<div class="fact"><small>Gialli attesi · veri</small><b class="num">${fx(f.cards[0] + f.cards[1], 1)}</b><small>${yReal != null ? 'veri ' + yReal : 'veri in arrivo'}</small></div>` : ''}
+    </div>
+  </article>
+  <div class="stack">
+    ${f.pl ? side('home') + side('away') : '<p class="small muted">Per questa partita lo storico ha solo il pronostico, senza le previsioni dei giocatori.</p>'}
+    ${f.pl && !Object.keys(rp).length ? '<p class="small muted">Le statistiche dei giocatori arrivano da ESPN poco dopo la fine della partita.</p>' : ''}
+    <p class="small muted">In ogni cella prima il previsto al calcio d'inizio (con le formazioni ${f.lineups === 'ufficiale' ? 'ufficiali' : 'di quel momento'}), dopo il punto quello che è successo davvero (ESPN). Min: minuti giocati davvero. Giallo: probabilità prevista e se l'ha preso. Gol: probabilità di segnare e gol fatti.</p>
+  </div>`;
+}
+
+/* ---------- schede complete: partita e squadra (come sul computer) ---------- */
+let MK = {};
+const F = id => (T[id] || {}).full || {};
+const nm = id => esc((T[id] || {}).name || '?');
+const mval = (M, v) => v == null || !M ? '–' : fx(v, M.d) + (M.u === '%' ? '%' : '');
+const munit = M => M && M.u === '/p' ? ' a partita' : '';
+const rankTxt = (f, k) => `${f.rank[k]}ª su ${D.N}`;
+const avg = xs => xs.length ? xs.reduce((a, b) => a + b, 0) / xs.length : null;
+const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+const col = (id, homeId) => String(id) === String(homeId) ? 'var(--home)' : 'var(--away)';
+const back = (href, label) => `<a class="back" href="#${href}">‹ ${label}</a>`;
+const CHG = {possesso: ['Più possesso', 'Meno possesso'], baricentro: ['Baricentro più alto', 'Baricentro più basso'],
+  pressing: ['Più pressing', 'Meno pressing'], verticalita: ['Gioco più verticale', 'Gioco meno verticale'],
+  ampiezza: ['Più gioco sulle fasce', 'Meno gioco sulle fasce'], transizioni: ['Più ripartenze', 'Meno ripartenze'],
+  fisicita: ['Più fisicità', 'Meno fisicità'], ritmo: ['Partite più aperte', 'Partite più chiuse']};
+const POSL = {G: 'P', D: 'D', M: 'C', F: 'A'};
+
+function strengths(f) {
+  const items = (D.metrics || []).filter(M => M.hi != null && f.z && f.z[M.k] != null);
+  return {
+    s: items.filter(M => f.z[M.k] >= .75 && f.rank[M.k] <= 5).sort((a, b) => f.z[b.k] - f.z[a.k]).slice(0, 5),
+    w: items.filter(M => f.z[M.k] <= -.75 && f.rank[M.k] >= D.N - 4).sort((a, b) => f.z[a.k] - f.z[b.k]).slice(0, 5),
+  };
+}
+const swItem = (f, M, up) => `<li><span class="ic ${up ? 'up' : 'dn'}" aria-hidden="true">${up ? '▲' : '▼'}</span><div><b>${esc(up ? M.S : M.W)}</b><small>${esc(M.l)}: ${mval(M, f.m[M.k])}${munit(M)} · ${rankTxt(f, M.k)}</small></div></li>`;
+function srcLabel(src) {
+  return src === 'ufficiale' ? ['ok', 'Formazione ufficiale'] : src && src.startsWith('probabile') ? ['mid', 'Formazione probabile'] : ['', 'Formazione stimata'];
+}
+
+/* partita */
+function narrative(P, h, a) {
+  const H = F(h), A = F(a), hn = `<b>${nm(h)}</b>`, an = `<b>${nm(a)}</b>`, out = [];
+  const mx = Math.max(P.p1, P.px, P.p2);
+  if (P.p1 === mx && P.p1 >= .55) out.push(`${hn} parte nettamente favorita (${pc(P.p1)} di vittoria): il modello vede una differenza di qualità chiara.`);
+  else if (P.p1 === mx && P.p1 - P.p2 >= .1) out.push(`Pronostico a favore di ${hn} (${pc(P.p1)}), ma ${an} ha margini per fare risultato: ${pc(P.px + P.p2)} tra pareggio e vittoria esterna.`);
+  else if (P.p2 === mx && P.p2 >= .5) out.push(`${an} è favorita anche in trasferta (${pc(P.p2)}): la differenza di rendimento supera il vantaggio del fattore campo.`);
+  else if (P.p2 === mx && P.p2 - P.p1 >= .08) out.push(`Leggero favore per ${an} (${pc(P.p2)}), con ${hn} che si affida al fattore campo (${pc(P.p1)}).`);
+  else out.push(`Partita molto equilibrata: ${hn} ${pc(P.p1)}, pareggio ${pc(P.px)}, ${an} ${pc(P.p2)}.`);
+  if (P.style) {
+    const st = P.style, main = st.items.find(i => i.kind === 'rule');
+    out.push(`Stili a confronto: ${hn} («${esc(st.home.arch.name)}»${st.home.coach ? `, allenata da ${esc(st.home.coach.name)}` : ''}) contro ${an} («${esc(st.away.arch.name)}»${st.away.coach ? `, allenata da ${esc(st.away.coach.name)}` : ''}).${main ? ' ' + esc(main.text) : ''}`);
+  }
+  const hp = (H.m || {}).poss, ap = (A.m || {}).poss;
+  if (hp != null && ap != null) {
+    const poss = clamp((hp + (100 - ap)) / 2 + ((P.style && P.style.poss) || 0), 25, 75);
+    if (poss >= 54) out.push(`Controllo del gioco: ${hn} dovrebbe tenere il pallone (circa ${Math.round(poss)}% di possesso), con ${an} costretta a difendersi più bassa.`);
+    else if (poss <= 46) out.push(`Controllo del gioco: sarà ${an} a gestire il possesso (circa ${Math.round(100 - poss)}%); ${hn} dovrà soffrire e sfruttare le poche occasioni.`);
+    else out.push(`Controllo del gioco: possesso prevedibilmente equilibrato (circa ${Math.round(poss)}% – ${Math.round(100 - poss)}%), la partita si deciderà nei duelli e sulle occasioni.`);
+  }
+  const e2 = (x, y) => (x != null && isFinite(x) && y != null && isFinite(y)) ? (x + y) / 2 : (isFinite(x) ? x : y);
+  const hs = H.s || {}, as = A.s || {}, hN = H.n || 1, aN = A.n || 1;
+  const shH = e2(hs.shots / hN, as.shotsAgainst / aN), shA = e2(as.shots / aN, hs.shotsAgainst / hN);
+  const coH = e2(hs.corners / hN, as.cornersAgainst / aN), coA = e2(as.corners / aN, hs.cornersAgainst / hN);
+  if (isFinite(shH) && isFinite(shA)) out.push(`Volume offensivo atteso: ${hn} circa ${fx(shH, 0)} tiri e ${fx(coH, 0)} angoli, ${an} circa ${fx(shA, 0)} tiri e ${fx(coA, 0)} angoli. Cartellini gialli attesi: circa ${fx(P.cards.home + P.cards.away, 1)} (${fx(P.cards.home, 1)} per ${nm(h)}, ${fx(P.cards.away, 1)} per ${nm(a)}).`);
+  if (P.referee && P.referee.games) {
+    const f = P.referee.factor;
+    out.push(`Arbitro: <b>${esc(P.referee.name)}</b>, ${fx(P.referee.ypg, 1)} gialli a partita: ${f >= 1.1 ? 'severo, i cartellini attesi salgono' : f <= .9 ? 'di manica larga, i cartellini attesi scendono' : 'nella media'}.`);
+  }
+  const tot = P.lh + P.la;
+  out.push(`${tot < 2.2 ? 'Si prevede una partita chiusa, con pochi gol' : tot > 3 ? 'Partita potenzialmente ricca di gol' : 'Numero di gol atteso nella media del campionato'} (${fx(tot, 1)} gol attesi): Over 2,5 al ${pc(P.over25)}, entrambe a segno al ${pc(P.btts)}.`);
+  const top = P.scores[0], pk = P.pick;
+  out.push(pk.score.i === top.i && pk.score.j === top.j
+    ? `Punteggio esatto più probabile: <b>${top.i}–${top.j}</b> (${fx(top.v * 100, 1)}%).`
+    : `Il punteggio esatto più probabile in assoluto è <b>${top.i}–${top.j}</b> (${fx(top.v * 100, 1)}%), ma l'esito più probabile è ${pk.k === 'X' ? 'il pareggio' : `la vittoria di <b>${pk.k === '1' ? nm(h) : nm(a)}</b>`} (${pc(pk.p)}), con <b>${pk.score.i}–${pk.score.j}</b> come punteggio tipico.`);
+  const abs = [...P.absent.home.map(x => [h, x]), ...P.absent.away.map(x => [a, x])].filter(([, x]) => x.att >= .1 || x.def >= .1 || x.pos === 'G');
+  if (abs.length) out.push(`Assenze che pesano: ${abs.map(([t, x]) => `<b>${esc(x.name)}</b> (${nm(t)}, ${esc(x.why.toLowerCase())})`).join(', ')}.`);
+  const fh = (H.m || {}).form, fa = (A.m || {}).form;
+  if (fh != null && fa != null && Math.abs(fh - fa) >= .8) out.push(`Forma: ${fh > fa ? hn : an} arriva in un momento migliore (${fx(Math.max(fh, fa), 1)} punti a partita nelle ultime gare contro ${fx(Math.min(fh, fa), 1)}).`);
+  return out.map(p => `<p>${p}</p>`).join('');
+}
+function clashCard(P, h, a) {
+  const st = P.style;
+  if (!st) return '';
+  const rows = (D.styleLabels || []).map(([k, l]) => {
+    const x = st.home.dims[k], y = st.away.dims[k];
+    if (x == null || y == null) return '';
+    return `<div class="mir"><span class="vl">${Math.round(x * 100)}</span><span class="bl"><i style="width:${x * 100}%"></i></span><span class="lb">${esc(l)}</span><span class="br"><i style="width:${y * 100}%"></i></span><span class="vr">${Math.round(y * 100)}</span></div>`;
+  }).join('');
+  const items = st.items.map(i => `<li><b>${esc(i.title)}</b>
+      ${i.winner ? ` <span class="tag"><span class="sq" style="background:${col(i.winner, h)}"></span>Vantaggio ${nm(i.winner)}</span>` : ''}${i.kind === 'evidence' ? ' <span class="tag">dai precedenti</span>' : ''}
+      <small>${esc(i.text)}</small>${i.chips.length ? `<div class="chips">${i.chips.map(c => `<span class="chip">${esc(c)}</span>`).join('')}</div>` : ''}</li>`).join('');
+  const duel = (x, what) => x && (x.home != null || x.away != null)
+    ? `<div>${what}: <b>${x.home ?? 0}</b> vittorie ${nm(h)}, <b>${x.draws ?? 0}</b> pareggi, <b>${x.away ?? 0}</b> vittorie ${nm(a)}</div>` : '';
+  const h2h = P.h2h ? duel(P.h2h.team, 'Tra le due squadre' + (P.h2h.games ? ` (ultime ${P.h2h.games})` : '')) + duel(P.h2h.manager, 'Tra i due allenatori') : '';
+  const who = (id, x, cls) => `<div class="${cls}"><div class="arch">${esc(x.arch.name)}</div><small class="muted">${nm(id)}${x.coach ? ' · ' + esc(x.coach.name) : ''}</small></div>`;
+  return `<div class="card"><h3>Scontro di stili</h3>
+    <div class="vsrow">${who(h, st.home, '')}<span class="muted">contro</span>${who(a, st.away, 'r')}</div>
+    <div style="margin-top:10px">${rows}</div>
+    <div class="legend"><span><i style="background:var(--home)"></i>${nm(h)}</span><span><i style="background:var(--away)"></i>${nm(a)}</span><span>posizione tra le ${D.N} squadre (0-100)</span></div>
+    <ul class="keys" style="margin-top:12px">${items || '<li class="muted">Nessuno scontro di stili marcato: le due squadre non si ostacolano né si favoriscono in modo netto.</li>'}</ul>
+    ${h2h ? `<h4>Precedenti</h4><div class="small">${h2h}</div>` : ''}
+    <p class="small muted">Lo scontro di stili sposta i gol attesi al massimo del 6% per squadra e il ritmo della partita dell'8%; i cartellini attesi salgono fino al 20% nelle partite più intense.${st.matches ? ` I precedenti tra stili si basano su ${st.matches} partite di ${LGN}.` : ''}</p></div>`;
+}
+function adjCard(P, h, a) {
+  const block = (id, base, fin) => {
+    const it = P.adj.filter(x => String(x.team) === String(id));
+    return `<div style="margin-top:10px"><div class="fx-top" style="font-size:13px;align-items:center">${team(id, true)}<span>gol attesi ${fx(base, 2)} → <b style="color:var(--ink)">${fx(fin, 2)}</b></span></div>
+      <ul class="adjl">${it.map(x => `<li><span class="${x.pct >= 0 ? 'up' : 'dn'}">${x.pct >= 0 ? '▲ +' : '▼ '}${fx(x.pct, 1)}%</span> ${esc(x.what)}</li>`).join('') || '<li class="muted">Nessuna correzione</li>'}</ul></div>`;
+  };
+  const pr = P.prior || {};
+  const pw = (w, p) => p ? `${pc(1 - w)} questa stagione, ${pc(w)} ${p === 'stagione scorsa' ? 'stagione ' + (pr.year || 'scorsa') : p}` : 'solo questa stagione';
+  return `<div class="card"><h3>Perché questo pronostico</h3>
+    <p class="small muted">Si parte dalla forza di attacco e difesa delle due squadre e dal fattore campo, poi si applicano le correzioni qui sotto.</p>
+    ${block(h, P.baseH, P.lh)}${block(a, P.baseA, P.la)}
+    <p class="small muted">Forza di base: ${nm(h)} ${esc(pw(pr.weightH || 0, pr.home))}; ${nm(a)} ${esc(pw(pr.weightA || 0, pr.away))}.</p></div>`;
+}
+function keysCard(P, h) {
+  return `<div class="card"><h3>Chiavi tattiche <small class="muted">forze contro debolezze</small></h3><ul class="keys">
+    ${P.ins.slice(0, 7).map(i => `<li><b>${esc(i.title)}</b> <span class="tag">${i.winner ? `<span class="sq" style="background:${col(i.winner, h)}"></span>Vantaggio ${nm(i.winner)}` : 'Forza contro forza'}</span>
+      ${i.lines.map(([tid, lab, det]) => `<small><span class="sq" style="background:${col(tid, h)}"></span> <b>${nm(tid)}</b> · ${esc(lab)} <span class="muted">(${esc(det)})</span></small>`).join('')}</li>`).join('')
+      || '<li class="muted">Nessun accoppiamento particolarmente sbilanciato: le due squadre si equivalgono nei singoli reparti.</li>'}</ul></div>`;
+}
+function lineupCard(P, key, id) {
+  const lu = P.lineups[key], ps = P.players[key];
+  const [c, l] = srcLabel(P.lineups.confirmed ? 'ufficiale' : lu.source);
+  const f1 = (v, d = 1) => v == null ? '–' : fx(v, d);
+  return `<div class="card"><div class="fx-top" style="align-items:center">${team(id, true)}<span class="st ${c}">${l}${lu.formation ? ' · ' + esc(lu.formation) : ''}</span></div>
+    <div class="tw" style="margin-top:8px"><table class="lu"><thead><tr><th class="l">Giocatore</th><th>Min</th><th>Tiri</th><th>Falli f.</th><th>Falli s.</th><th>Amm.</th><th>Gol</th><th>Assist</th><th class="l">Duello diretto</th></tr></thead><tbody>
+    ${ps.map(p => `<tr><td class="l">${p.id > 0 ? `<a class="plain" href="#g${p.id}"><b>${esc(p.name)}</b></a>` : `<b>${esc(p.name)}</b>`}<span class="rl">${esc(p.role || '')}${lu.pct && lu.pct[p.id] != null ? ' · ' + lu.pct[p.id] + '% di giocare' : ''}</span></td><td>${p.min}</td>
+      <td>${p.pos === 'G' ? (p.saves == null ? '–' : f1(p.saves) + ' par.') : f1(p.shots)}</td><td>${f1(p.fouls)}</td><td>${f1(p.fouled)}</td><td>${pc(p.pYellow)}</td>
+      <td>${p.pos === 'G' ? '–' : pc(p.pGoal)}</td><td>${p.pos === 'G' ? '–' : pc(p.pAssist)}</td>
+      <td class="l">${p.opp ? `${esc(p.opp.name)} <span class="muted">${esc(p.opp.role || '')}</span>` : '–'}</td></tr>`).join('')}
+    </tbody></table></div>
+    ${lu.subs && lu.subs.length ? `<p class="small muted">Panchina: ${lu.subs.map(s => esc(s.name) + (lu.pct && lu.pct[s.id] ? ` ${lu.pct[s.id]}%` : '')).join(', ')}</p>` : ''}
+    ${P.coachRoles && P.coachRoles[key] ? `<p class="small muted">${esc(P.coachRoles[key])}</p>` : ''}
+    ${lu.cautioned && lu.cautioned.length ? `<p class="small muted">Diffidati (con un giallo saltano la prossima): ${lu.cautioned.map(esc).join(', ')}</p>` : ''}</div>`;
+}
+function absentCard(P, h, a) {
+  const colx = (id, key) => {
+    const miss = P.lineups[key].missing || [], heavy = P.absent[key].filter(x => !miss.some(m => m.id === x.id));
+    return `<div><div style="margin-bottom:6px">${team(id, true)}</div>${miss.length || heavy.length ? `<ul class="sw">
+      ${miss.map(m => `<li><span class="st ${m.why === 'In dubbio' ? 'mid' : 'ko'}">${esc(m.why)}</span><div><b>${esc(m.name)}</b>${m.desc ? `<small>${esc(m.desc)}</small>` : ''}</div></li>`).join('')}
+      ${heavy.map(x => `<li><span class="st">${esc(x.why)}</span><div><b>${esc(x.name)}</b></div></li>`).join('')}</ul>` : '<p class="small muted">Nessuna assenza nota</p>'}</div>`;
+  };
+  return `<div class="card"><h3>Indisponibili</h3><div class="two">${colx(h, 'home')}${colx(a, 'away')}</div></div>`;
+}
+// quanto è severo l'arbitro rispetto alla media: dal suo effetto sui gialli attesi
+const refTone = r => { if (!r || !r.games || r.factor == null) return ''; const e = Math.round((r.factor - 1) * 100); return e >= 10 ? 'severo' : e <= -10 ? 'permissivo' : 'nella media'; };
+function refCard(P) {
+  const r = P.referee, lg = (D.league || {}).yellowGame;
+  if (!r || !r.name) return `<div class="card"><h3>Arbitro</h3><p class="small muted" style="margin:0">Non ancora designato: di solito le designazioni escono 2-3 giorni prima della partita.</p></div>`;
+  if (!r.games) return `<div class="card"><h3>Arbitro</h3><p class="small" style="margin:0"><b>${esc(r.name)}</b> · nessuna sua partita di ${LGN} nei dati (forse è al debutto): effetto neutro sui cartellini.</p></div>`;
+  const eff = Math.round((r.factor - 1) * 100);
+  return `<div class="card"><h3>Arbitro <small class="muted">${refTone(r)}</small></h3>
+    <div class="facts">
+      <div class="fact"><small>Arbitro</small><b>${esc(r.name)}</b></div>
+      <div class="fact"><small>Gialli a partita</small><b class="num">${fx(r.ypg, 2)}</b>${r.base || lg ? `<small>media di tutti gli arbitri ${fx(r.base || lg, 2)}</small>` : ''}</div>
+      ${r.seasons ? [['Stagione scorsa', r.seasons.prev], ['Questa stagione', r.seasons.cur]].map(([l, [g, y]]) =>
+        `<div class="fact"><small>${l}</small><b class="num">${g ? fx(y / g, 2) : '–'}</b><small>${g ? `gialli a partita in ${g} ${g === 1 ? 'partita' : 'partite'}` : 'nessuna partita'}</small></div>`).join('')
+        : `<div class="fact"><small>Partite nei dati</small><b class="num">${r.games}</b><small>scorsa stagione e questa</small></div>`}
+      <div class="fact"><small>Rossi</small><b class="num">${r.red ?? 0}</b></div>
+      <div class="fact"><small>Effetto sui gialli attesi</small><b class="num">${eff >= 0 ? '+' : ''}${eff}%</b></div>
+    </div>
+    <p class="small muted">Con poche partite il suo dato pesa meno e resta vicino alla media. Il rischio giallo di ogni giocatore e i gialli attesi della partita ne tengono già conto. Designazione da Fantacalcio.it, poi confermata da ESPN il giorno della partita.</p></div>`;
+}
+function scorersCard(P, h, a) {
+  const list = (key, c) => P.players[key].filter(p => p.pos !== 'G').sort((x, y) => y.pGoal - x.pGoal).slice(0, 4)
+    .map(p => `<div class="scr"><span>${esc(p.name)}</span><span class="tr"><i style="width:${p.pGoal * 100}%;background:${c}"></i></span><b class="num">${pc(p.pGoal)}</b></div>`).join('');
+  return `<div class="card"><h3>Probabili marcatori <small class="muted">probabilità di segnare</small></h3><h4>${nm(h)}</h4>${list('home', 'var(--home)')}<h4>${nm(a)}</h4>${list('away', 'var(--away)')}</div>`;
+}
+function yellowCard(P, h, a) {
+  const Y = P.yellowRisk || {}, top = Y.top || [];
+  if (!top.length) return '';
+  const dif = (Y.diffidati || []).filter(x => !top.some(t => t.id === x.id));
+  return `<div class="card"><h3>Più a rischio giallo <small class="muted">probabilità di ammonizione</small></h3>
+    ${Y.context ? `<p class="small muted" style="margin-top:0">${esc(Y.context)}</p>` : ''}
+    <ul class="keys">${top.map(x => `<li><div class="fx-top" style="align-items:center;font-size:14px;color:var(--ink)">${team(x.team, true)}<b class="num">${pc(x.p)}</b></div>
+      <b>${esc(x.name)}</b> <span class="muted" style="font-size:12px">${esc(x.role || '')}</span>${x.diffidato ? ' <span class="st mid">Diffidato</span>' : ''}
+      ${x.why.length ? `<small>${x.why.map(esc).join(' · ')}</small>` : ''}</li>`).join('')}</ul>
+    ${dif.length ? `<p class="small muted">Diffidati in campo (con un giallo saltano la prossima): ${dif.map(x => `${esc(x.name)} ${pc(x.p)}`).join(', ')}.</p>` : ''}
+    <p class="small muted">La probabilità combina i gialli presi in stagione, il ruolo in campo, i minuti attesi, l'avversario diretto, quante punizioni si procura l'altra squadra, l'arbitro e l'intensità dello scontro di stili. Gialli attesi: circa ${fx(P.cards.home + P.cards.away, 1)}.</p></div>`;
+}
+function heatCard(P, h, a) {
+  const n = 5, max = P.scores[0].v;
+  let g = `<div class="heat" style="grid-template-columns:22px repeat(${n + 1},minmax(0,1fr))"><div class="hd"></div>`;
+  for (let j = 0; j <= n; j++) g += `<div class="hd">${j}</div>`;
+  for (let i = 0; i <= n; i++) {
+    g += `<div class="hd">${i}</div>`;
+    for (let j = 0; j <= n; j++) {
+      const v = P.mat[i][j], k = Math.round(Math.sqrt(v / max) * 100);
+      g += `<div style="background:color-mix(in srgb,var(--home) ${k}%,var(--surface2));color:${k > 55 ? '#fff' : 'var(--ink)'}">${v >= .005 ? fx(v * 100, v >= .1 ? 0 : 1) : ''}</div>`;
+    }
+  }
+  return `<div class="card"><h3>Risultati esatti</h3>${g}</div>
+    <p class="small muted">Righe: gol di ${nm(h)} · colonne: gol di ${nm(a)} · valori in %.</p>
+    <div class="chips">${P.scores.slice(0, 6).map(s => `<span class="chip"><b>${s.i}–${s.j}</b> ${fx(s.v * 100, 1)}%</span>`).join('')}</div></div>`;
+}
+const RADAR = [['Attacco', ['gpm', 'xg', 'sot', 'bc']], ['Rifinitura', ['kp', 'cross']], ['Possesso', ['poss', 'pass', 'territory']],
+  ['Difesa', ['gapm', 'xga', 'sotA', 'bcA', 'cs']], ['Duelli', ['duel', 'air', 'rec']], ['Forma', ['form']]];
+function radarCard(h, a) {
+  const cx = 160, cy = 150, R = 100, n = RADAR.length;
+  const val = f => RADAR.map(([, ks]) => avg(ks.map(k => (f.pct || {})[k]).filter(v => v != null)) ?? .5);
+  const pt = (i, r) => [cx + Math.sin(2 * Math.PI * i / n) * r, cy - Math.cos(2 * Math.PI * i / n) * r];
+  let g = '';
+  for (const q of [.25, .5, .75, 1]) g += `<polygon points="${RADAR.map((_, i) => pt(i, R * q).join(',')).join(' ')}" style="fill:none;stroke:var(--line)"/>`;
+  RADAR.forEach(([l], i) => {
+    const [x, y] = pt(i, R);
+    g += `<line x1="${cx}" y1="${cy}" x2="${x}" y2="${y}" style="stroke:var(--line)"/>`;
+    const [lx, ly] = pt(i, R + 16);
+    g += `<text x="${lx}" y="${ly + 4}" text-anchor="${Math.abs(lx - cx) < 5 ? 'middle' : lx > cx ? 'start' : 'end'}" style="fill:var(--muted);font-size:11px">${l}</text>`;
+  });
+  for (const [f, c] of [[F(h), 'var(--home)'], [F(a), 'var(--away)']]) {
+    const v = val(f);
+    g += `<polygon points="${v.map((x, i) => pt(i, R * x).join(',')).join(' ')}" style="fill:${c};fill-opacity:.15;stroke:${c};stroke-width:2;stroke-linejoin:round"/>`;
+    v.forEach((x, i) => { const [px, py] = pt(i, R * x); g += `<circle cx="${px}" cy="${py}" r="3.5" style="fill:${c}"/>`; });
+  }
+  return `<div class="card"><h3>Profilo a confronto <small class="muted">percentile nel campionato</small></h3>
+    <svg viewBox="0 0 320 300" width="100%" style="max-width:360px;display:block;margin:0 auto" role="img" aria-label="Radar di confronto tra le due squadre">${g}</svg>
+    <div class="legend" style="justify-content:center"><span><i style="background:var(--home)"></i>${nm(h)}</span><span><i style="background:var(--away)"></i>${nm(a)}</span></div></div>`;
+}
+const MIRROR = ['gpm', 'xg', 'sot', 'bc', 'poss', 'pass', 'gapm', 'xga', 'sotA', 'bcA', 'duel', 'air', 'foul', 'card', 'form'];
+function mirrorCard(h, a) {
+  const H = F(h), A = F(a);
+  const rows = MIRROR.map(k => {
+    const M = MK[k], x = (H.m || {})[k], y = (A.m || {})[k];
+    if (!M || x == null || y == null) return '';
+    const mx = Math.max(Math.abs(x), Math.abs(y)) || 1, hw = M.hi ? x > y : x < y, aw = M.hi ? y > x : y < x;
+    return `<div class="mir"><span class="vl ${hw ? 'w' : ''}">${mval(M, x)}</span><span class="bl"><i style="width:${Math.abs(x) / mx * 100}%"></i></span>
+      <span class="lb">${esc(M.sh || M.l)}${M.hi ? '' : ' ↓'}</span><span class="br"><i style="width:${Math.abs(y) / mx * 100}%"></i></span><span class="vr ${aw ? 'w' : ''}">${mval(M, y)}</span></div>`;
+  }).join('');
+  return `<div class="card"><h3>Statistiche a confronto <small class="muted">a partita</small></h3>
+    <div class="legend" style="margin:0 0 6px"><span><i style="background:var(--home)"></i>${nm(h)}</span><span><i style="background:var(--away)"></i>${nm(a)}</span></div>${rows}
+    <p class="small muted">↓ = valore più basso è migliore. In grassetto la squadra in vantaggio.</p></div>`;
+}
+function swCard(h, a) {
+  const one = id => {
+    const f = F(id), {s, w} = strengths(f);
+    return `<div><div style="margin-bottom:6px">${team(id, true)}</div><ul class="sw">${s.slice(0, 3).map(M => swItem(f, M, true)).join('')}${w.slice(0, 3).map(M => swItem(f, M, false)).join('')}${!s.length && !w.length ? '<li class="muted">Profilo nella media</li>' : ''}</ul></div>`;
+  };
+  return `<div class="card"><h3>Punti di forza e debolezze</h3><div class="two">${one(h)}${one(a)}</div></div>`;
+}
+function vPartita(id) {
+  const x = D.fixtures.find(f => String(f.id) === String(id));
+  if (!x || !x.P) return back('giornata', 'Giornata') + '<p class="lead" style="margin-top:14px">Questa partita non è nella fotografia attuale.</p>';
+  const P = x.P, h = x.home, a = x.away;
+  const [sc, st] = srcLabel(P.lineups.confirmed ? 'ufficiale' : P.lineups.home.source);
+  const row = t => D.standings.find(r => r.team === String(t)) || {};
+  const side = (t, cls) => `<a class="side ${cls}" href="#s${t}">${team(t)}<small class="muted">${row(t).pos ?? '–'}ª · ${row(t).pts ?? 0} pt</small>${dots((T[t] || {}).form)}</a>`;
+  return `${back('giornata', 'Giornata')}
+  <article class="card" style="margin-top:10px">
+    <div class="fx-top"><span>${when(x.start)}${x.round ? ' · ' + x.round + 'ª giornata' : ''}</span><span class="st ${sc}">${st}</span></div>
+    <div class="fx-teams">${side(h, '')}<div class="pick"><div class="sc num">${P.pick.score.i}–${P.pick.score.j}</div><small>${esc(P.pick.label)}</small><small>${pc(P.pick.p)}</small></div>${side(a, 'r')}</div>
+    <div class="bars" role="img" aria-label="1 ${pc(P.p1)}, X ${pc(P.px)}, 2 ${pc(P.p2)}"><i class="h" style="width:${P.p1 * 100}%"></i><i class="x" style="width:${P.px * 100}%"></i><i class="a" style="width:${P.p2 * 100}%"></i></div>
+    <div class="bl num"><span>1 · ${pc(P.p1)}</span><span>X · ${pc(P.px)}</span><span>2 · ${pc(P.p2)}</span></div>
+    <div class="facts">
+      <div class="fact"><small>Gol attesi</small><b class="num">${fx(P.lh, 2)}–${fx(P.la, 2)}</b></div>
+      <div class="fact"><small>Over 2,5</small><b>${pc(P.over25)}</b></div>
+      <div class="fact"><small>Under 2,5</small><b>${pc(1 - P.over25)}</b></div>
+      <div class="fact"><small>Entrambe segnano</small><b>${pc(P.btts)}</b></div>
+      <div class="fact"><small>Porta inviolata ${nm(h)}</small><b>${pc(P.csH)}</b></div>
+      <div class="fact"><small>Porta inviolata ${nm(a)}</small><b>${pc(P.csA)}</b></div>
+      <div class="fact"><small>Gialli attesi</small><b class="num">${fx(P.cards.home + P.cards.away, 1)}</b></div>
+    </div>
+  </article>
+  <div class="stack">
+    <div class="card narr"><h3>Andamento previsto</h3>${narrative(P, h, a)}</div>
+    ${clashCard(P, h, a)}${adjCard(P, h, a)}${keysCard(P, h)}
+    ${refCard(P)}${lineupCard(P, 'home', h)}${lineupCard(P, 'away', a)}
+    ${absentCard(P, h, a)}${scorersCard(P, h, a)}${yellowCard(P, h, a)}${heatCard(P, h, a)}
+    ${radarCard(h, a)}${mirrorCard(h, a)}${swCard(h, a)}
+    <p class="small muted">Come funziona: per ogni squadra si stima la forza offensiva (gol segnati e xG) e difensiva (gol subiti, tiri in porta e palloni concessi vicino all'area) rispetto alla media della ${LGN}, partendo dalla stagione scorsa e dando sempre più peso a quella in corso. Poi si corregge per casa e trasferta, forma, accoppiamenti tra forze e debolezze, scontro di stili e assenze. I gol attesi alimentano un modello di Poisson con correzione Dixon-Coles.</p>
+  </div>`;
+}
+
+/* squadra */
+function pbar(f, M) {
+  const v = f.m[M.k];
+  if (v == null) return '';
+  const pct = f.pct[M.k], r = f.rank[M.k], style = M.hi == null;
+  const cls = style ? '' : r <= 3 ? 'top' : r >= D.N - 2 ? 'bot' : '';
+  return `<div class="pbr"><span class="lb">${esc(M.sh || M.l)}</span><span class="tr"><i class="${style ? 'nt' : ''}" style="width:${Math.max(3, (pct ?? .5) * 100)}%"></i></span><span class="v">${mval(M, v)}</span><span class="rk ${cls}">${r}ª</span></div>`;
+}
+function tacticCard(id) {
+  const f = F(id), ar = f.arch || {}, fm = f.formations || [], tot = fm.reduce((x, y) => x + y.n, 0);
+  const xs = ((f.rel || {}).roles || {}).xg || ((f.rel || {}).roles || {}).goals;
+  const bars = (D.styleLabels || []).map(([k, l]) => {
+    const v = (f.dims || {})[k];
+    if (v == null) return '';
+    const p = f.dimsPrev ? f.dimsPrev[k] : null;
+    return `<div class="pbr"><span class="lb">${esc(l)}</span><span class="tr"><i style="width:${Math.max(3, v * 100)}%"></i>${p != null ? `<span class="pv" style="left:${p * 100}%"></span>` : ''}</span><span class="v">${Math.round(v * 100)}</span><span class="rk">${p != null && Math.abs(v - p) >= .2 ? (v > p ? '▲' : '▼') : ''}</span></div>`;
+  }).join('');
+  return `<div class="card"><h3>Identità tattica</h3>
+    <div class="arch">${esc(ar.name || '–')}</div>${ar.second ? `<small class="muted">con tratti di «${esc(ar.second.name)}»</small>` : ''}
+    <p class="small" style="color:var(--ink2)">${esc((T[id] || {}).summary || '')}</p>${bars}
+    <div class="legend"><span>Barra: posizione tra le ${D.N} squadre (0-100)</span>${f.dimsPrev ? '<span><i style="background:var(--ink);width:2px;height:10px"></i>stagione scorsa</span>' : ''}</div>
+    ${(f.changes || []).length ? `<h4>Cosa è cambiato dalla scorsa stagione</h4><ul class="sw">${f.changes.slice(0, 4).map(c => `<li><span class="ic ${c.to > c.from ? 'up' : 'dn'}" aria-hidden="true">${c.to > c.from ? '▲' : '▼'}</span><div><b>${esc((CHG[c.k] || ['', ''])[c.to > c.from ? 0 : 1])}</b><small>da ${Math.round(c.from * 100)} a ${Math.round(c.to * 100)} su 100</small></div></li>`).join('')}</ul>` : ''}
+    <h4>Moduli</h4>${fm.length ? `<p class="small">Più usato: <b>${esc(fm[0].f)}</b> <span class="muted">(${fm[0].n} ${fm[0].n > 1 ? 'partite' : 'partita'} su ${tot}${fm.length > 1 ? '; poi ' + fm.slice(1, 3).map(y => `${esc(y.f)} ×${y.n}`).join(', ') : ''})</span></p>` : '<p class="small muted">—</p>'}
+    ${(f.style || []).length ? `<h4>Tratti distintivi</h4><ul class="sw">${f.style.map(y => `<li><span class="ic nt" aria-hidden="true">●</span><div><b>${esc(y.t)}</b><small>${esc(y.why)}</small></div></li>`).join('')}</ul>` : ''}
+    ${xs ? `<h4>Da dove arrivano le occasioni (xG)</h4><div class="bars"><i class="h" style="width:${(xs.F || 0) * 100}%"></i><i class="x" style="width:${(xs.M || 0) * 100}%"></i><i class="a" style="width:${(xs.D || 0) * 100}%"></i></div>
+      <div class="bl"><span>Attaccanti ${pc(xs.F)}</span><span>Centrocampisti ${pc(xs.M)}</span><span>Difensori ${pc(xs.D)}</span></div>` : ''}</div>`;
+}
+function vacantText(v) {
+  const when = v.date ? ` il ${new Date(v.date * 1000).toLocaleDateString('it-IT', {...TZ, day: 'numeric', month: 'long'})}`
+    : v.after ? ` dopo la ${v.after}ª giornata` : '';
+  return `${esc(v.name)} ha lasciato la panchina${when}${v.how ? ` (${esc(v.how)})` : ''}. Il nuovo allenatore non è ancora stato annunciato: finché non arriva, il pronostico non tiene conto delle abitudini dell'allenatore.`;
+}
+function coachCard(id) {
+  const f = F(id), c = f.coach;
+  if (!c) return f.vacant ? `<div class="card"><h3>Allenatore</h3><div class="arch" style="font-size:20px">Da nominare</div>
+    <p class="small muted">${vacantText(f.vacant)}</p></div>` : '';
+  const r = c.record || {}, n = r.n || 0, fm = f.formations || [];
+  const same = c.same === true ? `Allenava già ${nm(id)} la scorsa stagione: lo stile dell'anno scorso resta una buona base per il pronostico.`
+    : c.same === false ? 'Allenatore nuovo rispetto alla scorsa stagione: nel pronostico i dati dell\'anno scorso pesano meno.' : '';
+  return `<div class="card"><h3>Allenatore</h3><div class="arch" style="font-size:20px">${esc(c.name)}</div>
+    <div class="facts">
+      ${fm[0] ? `<div class="fact"><small>Modulo più usato</small><b>${esc(fm[0].f)}</b></div>` : ''}
+      ${n ? `<div class="fact"><small>${n} partite in ${LGN} (ultime 2 stagioni)</small><b>${r.w}V ${r.d}N ${r.l}P</b></div>
+        <div class="fact"><small>Gol fatti / subiti</small><b class="num">${fx(r.gf / n, 1)} / ${fx(r.ga / n, 1)}</b></div>
+        <div class="fact"><small>Over 2,5</small><b>${pc(r.over / n)}</b></div>
+        <div class="fact"><small>Porta inviolata</small><b>${pc(r.cs / n)}</b></div>` : ''}
+    </div>
+    ${c.teams && c.teams.length ? `<p class="small muted">Squadre allenate in queste partite: ${c.teams.map(([t, k]) => `${esc(t)} (${k})`).join(', ')}.</p>` : ''}
+    ${same ? `<p class="small muted">${same}</p>` : ''}</div>`;
+}
+function rolesCard(id) {
+  const R = F(id).coachRoles;
+  if (!R || !R.roles || !R.G) return '';
+  const rows = R.roles.filter(r => r.g || r.a).sort((x, y) => (y.g + y.a) - (x.g + x.a));
+  const one = (v, what, n) => n < 3 ? '' : v >= 1.3 ? `<span class="st ok">${what} ×${fx(v, 1)}</span>` : v <= .75 ? `<span class="st ko">${what} ×${fx(v, 1)}</span>` : '';
+  const base = R.teams.map(y => `${y.n} con ${esc(y.team)} ${y.season === 'cur' ? 'in questa stagione' : 'nel ' + esc(y.season)}`).join(', ');
+  return `<div class="card"><h3>Ruoli che valorizza <small class="muted">${esc(R.coach)}</small></h3>
+    ${R.text ? `<p class="small">${esc(R.text)}</p>` : ''}
+    <div class="tw"><table class="lu"><thead><tr><th class="l">Ruolo</th><th>Gol</th><th>Assist</th><th class="l">Rispetto alla media</th></tr></thead><tbody>
+    ${rows.map(r => `<tr><td class="l">${esc(r.f)}<span class="rl">${r.per >= .1 ? fx(r.per, 1) + ' in campo a partita' : 'quasi mai schierati'}</span></td>
+      <td>${r.g} <span class="muted">· ${pc(r.gShare)}</span></td><td>${r.a} <span class="muted">· ${pc(r.aShare)}</span></td><td class="l">${one(r.gIdx, 'gol', r.g + r.a)} ${one(r.aIdx, 'assist', r.g + r.a)}</td></tr>`).join('')}
+    </tbody></table></div>
+    <p class="small muted">Su ${R.n} partite (${base}): ${R.G} gol e ${R.A} assist. Il ruolo è quello in campo secondo il modulo della formazione ufficiale.</p></div>`;
+}
+function relianceCard(id) {
+  const r = F(id).rel || {};
+  const line = (k, items) => items && items.length ? `<div class="relrow"><div class="k">${k}</div><div class="v">${items.join('')}</div></div>` : '';
+  const pl = (p, extra) => `<div><b>${esc(p.name)}</b> <small>${extra}</small></div>`;
+  return `<div class="card"><h3>Su chi fa affidamento</h3><div class="rel">
+    ${line('Peso offensivo', (r.attack || []).map(p => pl(p, `${pc(p.share)} di gol, assist e xG · ${p.g} gol, ${p.a} assist`)))}
+    ${line('Rifinitura', (r.creator || []).map(p => pl(p, `${pc(p.share)} dei passaggi chiave (${p.kp})`)))}
+    ${line('Costruzione del gioco', (r.defense || []).map(p => pl(p, `${pc(p.share)} dell'xGBuildup della squadra`)))}
+    ${line('Sempre in campo', (r.always || []).map(p => pl(p, `${pc(p.share)} dei minuti`)))}
+    ${line('Più incline al gol', r.scorer ? [pl(r.scorer, `${fx(r.scorer.per90, 2)} xG ogni 90' · ${r.scorer.real} gol`)] : [])}
+    ${line('Più incline all\'assist', r.assister ? [pl(r.assister, `${fx(r.assister.per90, 2)} xA ogni 90' · ${r.assister.real} assist`)] : [])}
+    ${line('Miglior media voto', r.best ? [pl(r.best, `${fx(r.best.rating, 2)} su ${r.best.pv} partite (Fantacalcio.it)`)] : [])}
+  </div></div>`;
+}
+function squadCard(id) {
+  const sq = (D.squads || {})[id] || [];
+  if (!sq.length) return '';
+  return `<div class="card"><h3>Giocatori più impiegati</h3><div class="tw"><table class="lu"><thead><tr><th class="l">Giocatore</th><th>Min</th><th>Gol</th><th>Ass</th><th>xG</th><th>MV</th><th>FM</th></tr></thead><tbody>
+    ${sq.map(p => `<tr><td class="l"><b>${esc(p.name)}</b> <span class="muted">${POSL[p.pos] || ''}</span></td><td>${p.min ?? '–'}</td><td>${p.g ?? 0}</td><td>${p.a ?? 0}</td><td>${fx(p.xg, 2)}</td><td>${p.mv != null ? fx(p.mv, 2) : '–'}</td><td>${p.fm != null ? fx(p.fm, 2) : '–'}</td></tr>`).join('')}
+    </tbody></table></div><p class="small muted">MV = media voto, FM = fantamedia (Fantacalcio.it).</p></div>`;
+}
+function vSquadra(id) {
+  const t = T[id], f = F(id);
+  if (!t || !f.m) return back('squadre', 'Squadre') + '<p class="lead" style="margin-top:14px">Squadra non trovata in questa fotografia.</p>';
+  const r = D.standings.find(x => x.team === String(id)) || {};
+  const nx = D.fixtures.filter(x => x.home === String(id) || x.away === String(id)).sort((x, y) => x.start - y.start);
+  const {s, w} = strengths(f);
+  const cats = [...new Set((D.metrics || []).map(m => m.c))];
+  const kp = [['gpm', 'Gol segnati'], ['xg', 'xG prodotti'], ['gapm', 'Gol subiti'], ['xga', 'xG concessi'], ['poss', 'Possesso'], ['cs', 'Porta inviolata']];
+  const played = (D.played || []).filter(e => e.home === String(id) || e.away === String(id)).sort((x, y) => y.start - x.start).slice(0, 5);
+  const rt = f.rating || {};
+  return `${back('squadre', 'Squadre')}
+  <article class="card" style="margin-top:10px">
+    <div style="display:flex;align-items:center;gap:12px">${crest(id)}<div><div class="arch" style="font-size:22px">${esc(t.fullName || t.name)}</div>
+      <small class="muted">${r.pos ?? '–'}ª · ${r.pts ?? 0} punti · ${r.w ?? 0}V ${r.d ?? 0}N ${r.l ?? 0}P · gol ${r.gf ?? 0}:${r.ga ?? 0}</small></div></div>
+    <div class="chips">${(f.formDet || []).map(g => `<span class="chip"><b class="${g.r === 'V' ? 'ok' : g.r === 'P' ? 'ko' : ''}">${g.r}</b> ${g.gf}–${g.ga} ${g.home ? 'vs' : '@'} ${esc(g.opp)}</span>`).join('')}</div>
+    ${nx[0] ? `<a class="nextlink" href="#p${nx[0].id}">Prossima: ${nx[0].home === String(id) ? 'vs ' + nm(nx[0].away) + ' in casa' : '@ ' + nm(nx[0].home) + ' in trasferta'} · ${when(nx[0].start)} · pronostico ›</a>` : ''}
+    <div class="facts">${kp.map(([k, l]) => `<div class="fact"><small>${l}${munit(MK[k])}</small><b class="num">${mval(MK[k], f.m[k])}</b><small>${f.rank[k] ? rankTxt(f, k) : '–'}</small></div>`).join('')}</div>
+  </article>
+  <div class="stack">
+    <div class="card"><h3>Punti di forza</h3><ul class="sw">${s.length ? s.map(M => swItem(f, M, true)).join('') : '<li class="muted">Nessun dato che spicchi nettamente sopra la media</li>'}</ul>
+      <h3 style="margin-top:16px">Punti deboli</h3><ul class="sw">${w.length ? w.map(M => swItem(f, M, false)).join('') : '<li class="muted">Nessuna debolezza marcata rispetto al campionato</li>'}</ul></div>
+    ${tacticCard(id)}${coachCard(id)}${rolesCard(id)}${relianceCard(id)}
+    <div class="card"><h3>Profilo statistico</h3>
+      <p class="small muted">La barra indica la posizione tra le ${D.N} squadre: più è lunga, meglio è. Le voci di "Stile" non sono né buone né cattive.</p>
+      ${cats.map(c => `<h4>${esc(c)}</h4>${D.metrics.filter(M => M.c === c).map(M => pbar(f, M)).join('')}`).join('')}
+      <p class="small muted">Nel pronostico la forza di ${nm(id)} combina questa stagione (${f.n} partite)${rt.prior ? ` con la base ${rt.prior === 'stagione scorsa' ? 'della stagione ' + esc(D.priorYear || 'scorsa') : 'da ' + esc(rt.prior)}, che pesa il ${pc(rt.priorWeight)}` : ''}. Attacco ${fx(rt.att, 2)}, difesa ${fx(rt.de, 2)} (1 = media della ${LGN}; in difesa più basso è meglio).</p></div>
+    ${squadCard(id)}
+    <div class="card"><h3>Ultime partite</h3><table><tbody>${played.map(e => `<tr><td class="l">${team(e.home, true)}</td><td class="num"><b>${e.hs}–${e.as}</b></td><td class="l">${team(e.away, true)}</td></tr>`).join('') || '<tr><td class="l muted">—</td></tr>'}</tbody></table></div>
+    ${nx.length ? `<div class="card"><h3>Prossime partite</h3>${nx.slice(0, 4).map(x => `<a class="rowlink" href="#p${x.id}"><span>${team(x.home, true)}</span><span class="muted">${when(x.start)}</span><span>${team(x.away, true)}</span></a>`).join('')}</div>` : ''}
+  </div>`;
+}
+
+/* scheda del giocatore */
+let PL = {};   // giocatori per id (statistiche della stagione)
+const POSN = {G: 'Portiere', D: 'Difensore', M: 'Centrocampista', F: 'Attaccante'};
+const POSP = {G: 'portieri', D: 'difensori', M: 'centrocampisti', F: 'attaccanti'};
+const backAny = `<a class="back" href="#cerca" onclick="if (history.length > 1) { history.back(); return false; }">‹ Indietro</a>`;
+// la prossima partita della sua squadra: se è tra i titolari previsti le sue previsioni, se no panchina o assenza
+function nextOf(id, tid) {
+  const f = D.fixtures.filter(f => f.P && (f.home === tid || f.away === tid)).sort((a, b) => a.start - b.start)[0];
+  if (!f) return null;
+  const k = f.home === tid ? 'home' : 'away', lu = f.P.lineups[k] || {}, same = x => String(x.id) === String(id);
+  return {f, k, p: f.P.players[k].find(same), sub: (lu.subs || []).find(same), miss: (lu.missing || []).find(same),
+          pct: lu.pct ? lu.pct[id] : null};
+}
+// squadra di un giocatore che non ha ancora minuti in stagione: dalle formazioni previste
+function teamFromFixtures(id) {
+  for (const f of D.fixtures) for (const k of ['home', 'away'])
+    if (f.P && f.P.players[k].some(x => String(x.id) === String(id))) return {tid: String(f[k]), name: f.P.players[k].find(x => String(x.id) === String(id)).name};
+  return null;
+}
+const P90 = [['xg', 'xG', 2], ['g', 'Gol', 2], ['xa', 'xA', 2], ['kp', 'Chance create', 1], ['sh', 'Tiri', 1], ['sot', 'Tiri in porta', 1],
+  ['fo', 'Falli fatti', 1], ['fd', 'Falli subiti', 1], ['yc', 'Gialli', 2], ['tk', 'Contrasti (Opta)', 1], ['itc', 'Intercetti (Opta)', 1],
+  ['rec', 'Palloni recuperati (Opta)', 1], ['pcar', 'Conduzioni progressive (Opta)', 1], ['gp', 'Gol evitati (Opta)', 2]];
+function vGiocatore(id) {
+  const p = PL[String(id)], alt = p ? null : teamFromFixtures(id);
+  if (!p && !alt) return backAny + '<p class="lead" style="margin-top:14px">Questo giocatore non è nella fotografia attuale.</p>';
+  const tid = p ? p.t : alt.tid, name = p ? p.n : alt.name, nx = nextOf(id, tid);
+  const pos = (p ? p.pos : nx && nx.p && nx.p.pos) || 'M';
+  let season = '<p class="small muted">Nessun minuto giocato in questa stagione.</p>';
+  if (p) {
+    const tiles = [['Presenze', `${p.ap ?? '–'}`, p.st != null ? `${p.st} da titolare` : ''], ['Minuti', fx(p.min, 0), ''],
+      ['Gol', fx(p.g, 0), `xG ${fx(p.xg, 1)}`], ['Assist', fx(p.a, 0), `xA ${fx(p.xa, 1)}`], ['Chance create', fx(p.kp, 0), ''],
+      ['Tiri', fx(p.sh, 0), `${fx(p.sot, 0)} in porta`], ['Falli fatti', fx(p.fo, 0), `subiti ${fx(p.fd, 0)}`],
+      ['Ammonizioni', fx(p.yc, 0), p.rc ? `${p.rc} espulsioni` : ''], ...(pos === 'G' ? [['Parate', fx(p.sv, 0), '']] : []),
+      ...(p.mv != null ? [['Media voto', fx(p.mv, 2), p.fm != null ? `fantamedia ${fx(p.fm, 2)}` : '']] : []),
+      ...(p.tk != null && pos !== 'G' ? [['Contrasti', fx(p.tk, 0), `intercetti ${fx(p.itc, 0)}`], ['Palloni recuperati', fx(p.rec, 0), ''],
+        ['Duelli a terra vinti', p.gd ? `${Math.round(p.gw / p.gd * 100)}%` : '–', p.gd ? `${fx(p.gw, 0)} su ${fx(p.gd, 0)}` : ''],
+        ['Duelli aerei vinti', p.ad ? `${Math.round(p.aw / p.ad * 100)}%` : '–', p.ad ? `${fx(p.aw, 0)} su ${fx(p.ad, 0)}` : ''],
+        ['Conduzioni progressive', fx(p.pcar, 0), '']] : []),
+      ...(p.gp != null && pos === 'G' ? [['Gol evitati', (p.gp > 0 ? '+' : '') + fx(p.gp, 2), `xG nello specchio subiti ${fx(p.xgot, 1)}`]] : [])];
+    // per 90 minuti, con la posizione tra i giocatori dello stesso ruolo che hanno giocato abbastanza
+    const maxMin = Math.max(...D.players.map(x => x.min || 0)), minQ = Math.max(180, .3 * maxMin);
+    const peers = D.players.filter(x => x.pos === pos && (x.min || 0) >= minQ);
+    const r90 = (x, k) => x.min ? (x[k] || 0) / x.min * 90 : null;
+    const rows = P90.filter(([k]) => p[k] != null && (pos === 'G' ? ['yc', 'gp'].includes(k) : k !== 'gp')).map(([k, l, d]) => {
+      const v = r90(p, k), enough = (p.min || 0) >= minQ;
+      const rank = enough ? peers.filter(x => r90(x, k) > v).length + 1 : null;
+      return `<tr><td class="l">${l}</td><td><b>${fx(v, d)}</b></td><td class="l muted">${rank ? `${rank}° su ${peers.length} ${POSP[pos]}` : ''}</td></tr>`;
+    }).join('');
+    season = `<div class="facts">${tiles.map(([k, v, s]) => `<div class="fact"><small>${k}</small><b class="num">${v}</b>${s ? `<small>${s}</small>` : ''}</div>`).join('')}</div>
+      ${rows ? `<h4>Ogni 90 minuti</h4><div class="tw"><table><tbody>${rows}</tbody></table></div>
+      <p class="small muted">${(p.min || 0) >= minQ ? `Posizione tra i ${POSP[pos]} con almeno ${Math.round(minQ)} minuti giocati.` : `Ha giocato meno di ${Math.round(minQ)} minuti: niente confronto con gli altri ${POSP[pos]}.`} Dati di Understat, ESPN${p.tk != null || p.gp != null ? ', Opta (Opta Analyst)' : ''}${p.mv != null ? ' e Fantacalcio.it' : ''}.</p>` : ''}`;
+  }
+  let next = '';
+  if (nx && !nx.p) {
+    const {f, k, sub, miss, pct} = nx, opp = k === 'home' ? f.away : f.home, conf = f.P.lineups.confirmed, src = srcLabel(conf ? 'ufficiale' : f.P.lineups[k].source)[1];
+    const why = miss ? `<span class="st ko">${esc(miss.why || 'Indisponibile')}</span>${miss.desc ? ` <span class="muted">${esc(miss.desc)}</span>` : ''}`
+      : sub ? `In panchina${pct ? ` (${pct}% di giocare secondo Fantacalcio.it)` : ''}` : 'Non è tra i titolari previsti';
+    next = `<div class="card"><h3>Prossima partita</h3>
+      <a class="cardlink" href="#p${f.id}"><div class="fx-top"><span>${when(f.start)}</span><span>${k === 'home' ? 'in casa' : 'in trasferta'}</span></div>
+        <div style="display:flex;align-items:center;gap:8px;margin-top:6px">contro ${team(opp, true)}</div></a>
+      <p class="small">${why} <span class="muted">· ${esc(src.toLowerCase())}</span></p>
+      <a class="more" style="display:block;text-decoration:none" href="#p${f.id}">Pronostico della partita ›</a></div>`;
+  } else if (nx) {
+    const {f, k, p: q} = nx, opp = k === 'home' ? f.away : f.home, conf = f.P.lineups.confirmed;
+    const st = [['Minuti previsti', fx(q.min, 0)], ...(pos === 'G' ? [['Parate', fx(q.saves, 1)]] : [['Probabilità di segnare', pc(q.pGoal)], ['Probabilità di assist', pc(q.pAssist)],
+      ['Tiri', fx(q.shots, 1)], ['Tiri in porta', fx(q.sot, 1)], ['Chance create', fx(q.kp, 1)]]), ['Falli fatti', fx(q.fouls, 1)], ['Falli subiti', fx(q.fouled, 1)], ['Rischio giallo', pc(q.pYellow)]];
+    next = `<div class="card"><h3>Prossima partita <small class="muted">${conf ? 'formazione ufficiale' : 'titolare previsto'}</small></h3>
+      <a class="cardlink" href="#p${f.id}"><div class="fx-top"><span>${when(f.start)}</span><span>${k === 'home' ? 'in casa' : 'in trasferta'}</span></div>
+        <div style="display:flex;align-items:center;gap:8px;margin-top:6px">contro ${team(opp, true)}</div></a>
+      ${q.role ? `<p class="small muted">Ruolo in campo: ${esc(q.role)}</p>` : ''}
+      <div class="facts">${st.map(([l, v]) => `<div class="fact"><small>${l}</small><b class="num">${v}</b></div>`).join('')}</div>
+      ${q.opp ? `<p class="small">Duello diretto: <b>${esc(q.opp.name)}</b> <span class="muted">${esc(q.opp.role || '')}</span></p>` : ''}
+      <a class="more" style="display:block;text-decoration:none" href="#p${f.id}">Pronostico della partita ›</a></div>`;
+  } else if (p) {
+    next = `<div class="card"><h3>Prossima partita</h3><p class="small muted">Non è tra i titolari previsti delle prossime partite (formazioni probabili o stimate: può cambiare).</p></div>`;
+  }
+  return `${backAny}
+    <article class="card" style="margin-top:10px"><div class="fx-top"><span>${POSN[pos] || ''}</span><a class="plain" href="#s${tid}">${team(tid, true)}</a></div>
+      <h2 style="margin:8px 0 0">${esc(name)}</h2></article>
+    <div class="stack">${next}<div class="card"><h3>Stagione</h3>${season}</div></div>`;
+}
+
+/* ricerca di giocatori e squadre */
+let CQ = '';
+const norm = s => String(s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
+function cercaRes() {
+  const q = norm(CQ).trim();
+  if (q.length < 2) return '<p class="small muted">Scrivi almeno due lettere del nome, del cognome o della squadra.</p>';
+  const teams = D.standings.filter(r => norm((T[r.team] || {}).name).includes(q));
+  const tids = new Set(teams.map(r => r.team));
+  const pls = (D.players || []).filter(p => norm(p.n).includes(q) || tids.has(p.t)).sort((a, b) => (norm(b.n).includes(q) - norm(a.n).includes(q)) || (b.min || 0) - (a.min || 0)).slice(0, 40);
+  if (!teams.length && !pls.length) return '<p class="small muted">Nessun giocatore o squadra trovati.</p>';
+  return `<div class="list evl">${teams.map(r => `<a class="card cardlink ev" href="#s${r.team}">${crest(r.team)}<span class="evn"><b>${nm(r.team)}</b><small>${r.pos}ª in classifica · ${r.pts} punti</small></span><span class="muted">›</span></a>`).join('')}
+    ${pls.map(p => `<a class="card cardlink ev" href="#g${p.id}">${crest(p.t, true)}<span class="evn"><b>${esc(p.n)}</b><small>${nm(p.t)} · ${POSN[p.pos] || ''} · ${p.ap ?? 0} presenze${p.g ? ` · ${fx(p.g, 0)} gol` : ''}${p.a ? ` · ${fx(p.a, 0)} assist` : ''}</small></span><span class="muted">›</span></a>`).join('')}</div>`;
+}
+function vCerca() {
+  return `<h2>Cerca</h2><input id="q" class="search" type="search" placeholder="Giocatore o squadra" value="${esc(CQ)}" autocomplete="off" aria-label="Cerca un giocatore o una squadra">
+    <div id="qres" style="margin-top:10px">${cercaRes()}</div>`;
+}
+document.addEventListener('input', e => { if (e.target.id === 'q') { CQ = e.target.value; document.getElementById('qres').innerHTML = cercaRes(); } });
+
+let esel = 0, egrp = 'next', emode = 'tot';   // voce, gruppo (prossima giornata o stagione) e totale/a partita in "In evidenza"
+function vEvidenza() {
+  const E = D.evidenza, SE = E?.season;
+  const hasNext = !!(E?.cats || []).length, hasSeason = !!(SE?.cats || []).length;
+  if (!hasNext && !hasSeason) return `<h2>In evidenza</h2><p class="lead">I giocatori in evidenza compaiono quando è in programma la prossima giornata.</p>`;
+  const grp = egrp === 'season' && hasSeason || !hasNext ? 'season' : 'next';
+  const tabs = hasNext && hasSeason ? `<div class="seg evg" role="group" aria-label="Classifiche"><button type="button" data-eg="next" aria-pressed="${grp === 'next'}">Prossima giornata</button><button type="button" data-eg="season" aria-pressed="${grp === 'season'}">Stagione</button></div>` : '';
+  if (grp === 'season') {
+    const c = SE.cats[esel] || SE.cats[0], pg = emode === 'pg' || c.avg;
+    const rows = (pg ? c.pg : c.tot) || [];
+    const main = r => pg ? fx(r.pg, 2) : fx(r.tot, c.nd);
+    const side = r => c.avg ? `${r.apps} voti` : `${r.apps} presenze · ${pg ? 'totale ' + fx(r.tot, c.nd) : fx(r.pg, 2) + ' a partita'}`;
+    return `<h2>In evidenza <small>stagione</small></h2>${tabs}
+      <p class="lead">Le classifiche della stagione con i dati reali di ${SE.games} giornate: per ogni voce i primi 10.</p>
+      <div class="seg" role="group" aria-label="Statistica">${SE.cats.map((x, i) => `<button type="button" data-e="${i}" aria-pressed="${x === c}">${esc(x.l)}</button>`).join('')}</div>
+      ${c.avg ? '' : `<div class="seg evm" role="group" aria-label="Totale o media"><button type="button" data-em="tot" aria-pressed="${!pg}">Totale</button><button type="button" data-em="pg" aria-pressed="${pg}">A partita</button></div>`}
+      <p class="small muted">${esc(c.d)}${c.avg ? '' : pg ? ', a partita' : ', in totale'}.</p>
+      <div class="list evl">${rows.map((r, i) => `<a class="card cardlink ev" href="#g${r.id}">
+        <span class="rk num">${i + 1}</span>${crest(r.team, true)}
+        <span class="evn"><b>${esc(r.name)}</b><small>${nm(r.team)} · ${side(r)}</small></span>
+        <span class="evv num">${main(r)}</span></a>`).join('') || '<p class="muted">Nessun dato.</p>'}</div>
+      <p class="small muted">Dati di Understat, ESPN${LG.fantacalcio === false ? '' : ' e Fantacalcio.it'}. Nella media a partita contano solo i giocatori con almeno ${SE.minApps} presenze ${LG.fantacalcio === false ? '' : `(fantamedia e media voto: almeno ${SE.minApps} voti)`}. Tocca un giocatore per aprire la sua scheda.</p>`;
+  }
+  const c = E.cats[esel] || E.cats[0];
+  const val = r => c.u === '%' ? pc(r.v) : fx(r.v, 1);
+  return `<h2>In evidenza <small>${E.round ? E.round + 'ª giornata' : 'prossima giornata'}</small></h2>${tabs}
+    <p class="lead">Chi spicca nelle statistiche previste per le partite della giornata: per ogni voce i primi 10.</p>
+    <div class="seg" role="group" aria-label="Statistica">${E.cats.map((x, i) => `<button type="button" data-e="${i}" aria-pressed="${x === c}">${esc(x.l)}</button>`).join('')}</div>
+    <p class="small muted">${esc(c.d)}.</p>
+    <div class="list evl">${c.rows.map((r, i) => `<a class="card cardlink ev" href="#g${r.id}">
+      <span class="rk num">${i + 1}</span>${crest(r.team, true)}
+      <span class="evn"><b>${esc(r.name)}</b><small>${nm(r.team)} ${r.home ? 'vs' : '@'} ${nm(r.opp)} · ${day(r.start)}${r.official ? ' · <span class="uff">ufficiale</span>' : ''}</small></span>
+      <span class="evv num">${val(r)}</span></a>`).join('')}</div>
+    <p class="small muted">Solo i titolari previsti. I numeri tengono conto dei minuti previsti, dell'avversario, di chi marca chi e dell'arbitro, e sommano ai totali realistici di ogni squadra. Si aggiornano con le probabili formazioni e poi con quelle ufficiali, circa un'ora prima di ogni partita: chi ha già la formazione ufficiale è segnato con «ufficiale». Tocca un giocatore per aprire la sua scheda, con le previsioni per la partita.</p>`;
+}
+const VIEWS = {giornata: vGiornata, evidenza: vEvidenza, classifica: vClassifica, squadre: vSquadre, storico: vStorico, cerca: vCerca};
+function show(name) {
+  // #p123 = partita, #s123 = squadra, #g123 = giocatore, #r123 = com'è andata una partita dello storico
+  const m = /^([psgr])(e?-?\d+)$/.exec(name || '');   // le partite nuove di ESPN hanno id come e401875056
+  const view = m ? null : VIEWS[name] ? name : 'giornata';
+  for (const k of Object.keys(VIEWS)) {
+    const el = document.getElementById(k);
+    el.hidden = k !== view;
+    if (k === view) el.innerHTML = VIEWS[k]();
+  }
+  const det = document.getElementById('dettaglio');
+  det.hidden = !m;
+  det.innerHTML = m ? {p: vPartita, s: vSquadra, g: vGiocatore, r: vRivedi}[m[1]](m[2]) : '';
+  const cur = m ? {p: 'giornata', s: 'squadre', g: '', r: 'storico'}[m[1]] : view;
+  document.querySelectorAll('#nav a').forEach(a => a.setAttribute('aria-current', a.dataset.s === cur ? 'page' : 'false'));
+  if (m) window.scrollTo(0, 0);
+  if (view === 'cerca') { const q = document.getElementById('q'); if (q) q.focus(); }
+}
+document.addEventListener('click', e => {
+  const v = e.target.closest('[data-e]');
+  if (v) { esel = +v.dataset.e; document.getElementById('evidenza').innerHTML = vEvidenza(); }
+  const g = e.target.closest('[data-eg]');
+  if (g && g.dataset.eg !== egrp) { egrp = g.dataset.eg; esel = 0; document.getElementById('evidenza').innerHTML = vEvidenza(); }
+  const m = e.target.closest('[data-em]');
+  if (m) { emode = m.dataset.em; document.getElementById('evidenza').innerHTML = vEvidenza(); }
+});
+window.addEventListener('hashchange', () => { if (D) show(location.hash.slice(1)); });
+const FONTE = {'statistiche': 'Understat', 'fantacalcio.it': 'Fantacalcio.it', 'sito': 'pubblicazione del sito',
+               'storico': 'copia dello storico', 'designazioni': 'designazioni arbitrali (Fantacalcio.it)',
+               'arbitri': 'arbitri della scorsa stagione (Fantacalcio.it)'};
+function stamp() {
+  // il sito si ripubblica ogni 30 minuti anche senza novità: se l'ora è vecchia, gli aggiornamenti si sono fermati
+  const errs = Object.keys(D.errors || {}).map(k => FONTE[k] || k);
+  const late = Date.now() / 1000 - D.generatedAt > 70 * 60;
+  document.getElementById('stamp').innerHTML = `Aggiornato il ${day(D.generatedAt)}`
+    + (late ? `<br><span class="warn">nessun aggiornamento da più di un'ora</span>` : '')
+    + (errs.length ? `<br><span class="warn">non risponde: ${esc(errs.join(', '))}</span>` : '');
+}
+async function boot() {
+  const box = document.getElementById('giornata');
+  try {
+    D = JSON.parse(document.getElementById('dati').textContent || 'null');
+    if (!D) {
+      box.innerHTML = '<p class="lead">Carico i dati…</p>';
+      const r = await fetch('dati.json', {cache: 'no-store'});
+      if (!r.ok) throw new Error(r.status);
+      D = await r.json();
+    }
+  } catch (e) {
+    box.innerHTML = '<p class="lead">I dati non si sono caricati: ricarica la pagina tra qualche secondo.</p>';
+    return;
+  }
+  T = D.teams;
+  // lega di questa pagina e collegamenti alle altre (la Serie A in cima al sito, le altre in una sottocartella)
+  LG = D.league || {name: 'Serie A', dir: ''}; LGN = LG.name || 'Serie A';
+  document.querySelector('.logo').innerHTML = `${esc(LGN)} <span>tascabile</span>`;
+  document.querySelector('.logo').classList.toggle('long', LGN.length > 10);
+  const up = LG.dir ? '../' : '';
+  document.getElementById('leghe').innerHTML = (D.leagues || []).length > 1 ? D.leagues.map(l => `<a href="${up + (l.dir ? l.dir + '/' : '') || './'}" aria-current="${l.dir === LG.dir ? 'page' : 'false'}">${esc(l.name)}</a>`).join('') : '';
+  D.players = D.players || [];
+  PL = Object.fromEntries(D.players.map(p => [String(p.id), p]));
+  LOGOS = new Set((D.logos || []).map(String));
+  MK = Object.fromEntries((D.metrics || []).map(x => [x.k, x]));
+  stamp();
+  document.getElementById('foot').textContent = `Versione tascabile di ${LGN}, aggiornata in automatico ogni 30 minuti. Risultati, classifica, formazioni e statistiche delle partite da ESPN; xG da Understat; ${LG.fantacalcio === false ? 'probabili formazioni da OneFootball; allenatori da Wikipedia' : 'voti, probabili formazioni e designazioni arbitrali da Fantacalcio.it'}. I pronostici sono stime statistiche, non certezze.`;
+  show(location.hash.slice(1) || 'giornata');
+}
+boot();
+</script>
+
+</body></html>
