@@ -11,6 +11,7 @@ Rami del repository:
 - `main`: il codice dell'app e la programmazione (`.github/workflows/aggiorna.yml`)
 - `dati`: i dati da cui riparte ogni aggiornamento (un solo commit, sovrascritto ogni volta)
 - `sito`: il sito pubblicato da GitHub Pages (un solo commit, sovrascritto ogni volta)
+- `storico`: una copia al giorno dello storico dei pronostici, con tutte le versioni (serve a recuperarlo se si rovina)
 
 Per aggiornare subito: Actions → Aggiorna Serie A Live → Run workflow.
 Com'è andato l'ultimo aggiornamento: `esecuzione.json` nel ramo `dati`.
