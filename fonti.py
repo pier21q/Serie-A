@@ -1,16 +1,26 @@
 """Fonti per i dati di ogni partita e per gli allenatori.
 
 - fantacalcio.it: probabili formazioni con le percentuali, squalificati, diffidati, infortunati, in dubbio
-- Wikipedia: allenatori della stagione (e di quella scorsa, per sapere chi è nuovo)
+- Wikipedia: allenatori della stagione (e di quella scorsa, per sapere chi è nuovo); in inglese i cambi di
+  allenatore con le date, spesso aggiornati prima (Fantacalcio.it, Lega Serie A ed ESPN arrivano dopo o non li hanno)
 - ESPN: precedenti tra le squadre, arbitro designato e cartellini delle partite (per le statistiche degli arbitri)
 
 Qui ci sono solo le funzioni che leggono le pagine: le richieste le fa server.py.
 """
 import html
 import re
+import unicodedata
+from datetime import datetime, timezone
 
 FC_PROBABILI = "https://www.fantacalcio.it/probabili-formazioni-serie-a"
 WIKI = "https://it.wikipedia.org/wiki/Serie_A_{a}-{b}"
+WIKI_EN = "https://en.wikipedia.org/w/api.php"
+WIKI_EN_TITLE = "{a}–{b:02d} Serie A"   # "2026–27 Serie A"
+COME = {"sacked": "esonero", "mutual consent": "risoluzione consensuale", "resigned": "dimissioni",
+        "end of contract": "fine del contratto", "end of caretaker": "fine dell'interim", "retired": "ritiro",
+        "signed by": "passato a un'altra squadra", "health": "motivi di salute"}
+MESI_EN = {m: i for i, m in enumerate(("january", "february", "march", "april", "may", "june", "july", "august",
+                                       "september", "october", "november", "december"), 1)}
 
 
 def _text(s):
@@ -139,6 +149,91 @@ def coach_at(tenures, rnd):
             if (t["from"] or 1) <= rnd <= (t["to"] or 99):
                 return t["name"]
     return tenures[-1]["name"]
+
+
+def table_grid(table):
+    """Righe di una tabella HTML come liste di testi, ripetendo le celle unite (rowspan e colspan)."""
+    grid, carry = [], {}   # carry: colonna -> (testo, righe che restano)
+    for r in re.findall(r"<tr[^>]*>(.*?)</tr>", table, re.S):
+        cells = re.findall(r"<t[hd]([^>]*)>(.*?)</t[hd]>", r, re.S)
+        row, col, k = [], 0, 0
+        while k < len(cells) or col in carry:
+            if col in carry:
+                text, left = carry.pop(col)
+                if left > 1:
+                    carry[col] = (text, left - 1)
+            else:
+                attrs, body = cells[k]
+                k += 1
+                text = re.sub(r"\[[^\]]*\]", "", _text(body)).strip()
+                wide = re.search(r'colspan="?(\d+)', attrs)
+                down = re.search(r'rowspan="?(\d+)', attrs)
+                for _ in range(int(wide.group(1)) - 1 if wide else 0):
+                    row.append(text)
+                    col += 1
+                if down and int(down.group(1)) > 1:
+                    carry[col] = (text, int(down.group(1)) - 1)
+            row.append(text)
+            col += 1
+        grid.append(row)
+    return grid
+
+
+def _data_en(s):
+    m = re.search(r"(\d{1,2}) ([A-Za-z]+) (\d{4})", s or "")
+    if not m or m.group(2).lower() not in MESI_EN:
+        return None
+    return int(datetime(int(m.group(3)), MESI_EN[m.group(2).lower()], int(m.group(1)), 12, tzinfo=timezone.utc).timestamp())
+
+
+def parse_cambi_en(page):
+    """Tabella «Managerial changes» di Wikipedia in inglese -> cambi di allenatore della stagione, in ordine:
+    [{"team", "out", "how", "left" (data), "in" (None se non è ancora stato nominato), "since" (data)}]."""
+    clean = lambda s: re.sub(r"\s*\((?:caretaker|interim)\)", "", s or "", flags=re.I).strip()
+    for t in re.findall(r'<table class="wikitable.*?</table>', page, re.S):
+        grid = table_grid(t)
+        head = [h.lower() for h in grid[0]] if grid else []
+        col = lambda key: next((i for i, h in enumerate(head) if key in h), None)
+        it, io, ih, il, ii, isn = (col(k) for k in ("team", "outgoing", "manner", "vacancy", "incoming", "appointment"))
+        if None in (it, io, ii):
+            continue
+        cell = lambda g, i: g[i] if i is not None and i < len(g) else ""
+        out = []
+        for g in grid[1:]:
+            if not cell(g, it) or not cell(g, io):
+                continue
+            how = cell(g, ih).lower()
+            out.append({"team": cell(g, it), "out": clean(cell(g, io)), "how": next((v for k, v in COME.items() if k in how), None),
+                        "left": _data_en(cell(g, il)), "in": clean(cell(g, ii)) or None, "since": _data_en(cell(g, isn))})
+        return out
+    return []
+
+
+def stesso(a, b):
+    """Stessa persona: nomi uguali senza accenti, oppure stesso cognome."""
+    n = lambda s: re.sub(r"[^a-z ]", "", unicodedata.normalize("NFKD", s or "").encode("ascii", "ignore").decode().lower()).split()
+    x, y = n(a), n(b)
+    return bool(x and y and (x == y or x[-1] == y[-1]))
+
+
+def allenatore_attuale(ten, cambi):
+    """Chi allena adesso: Wikipedia in italiano (giornate in panchina) e in inglese (cambi con le date); vince
+    la fonte che conosce il cambio più recente. -> (nome, lasciato): nome è None se la panchina è vuota, e
+    lasciato dice chi è andato via, dopo quale giornata, quando e come."""
+    r = cambi[-1] if cambi else None
+    if ten:
+        name, closed = ten[-1]["name"], bool(ten[-1].get("to"))
+        if r and stesso(r["out"], name) and not (r["in"] and stesso(r["in"], name)):
+            name, closed = (r["in"], False) if r["in"] else (name, True)   # l'inglese sa già dell'addio o del successore
+    elif r:
+        name, closed = (r["in"], False) if r["in"] else (r["out"], True)
+    else:
+        return None, None
+    if not closed:
+        return name, None
+    after = ten[-1]["to"] if ten and stesso(ten[-1]["name"], name) else None
+    info = next((c for c in reversed(cambi or []) if stesso(c["out"], name)), {})
+    return None, {"name": name, "after": after, "date": info.get("left"), "how": info.get("how")}
 
 
 # ---------- ESPN ----------

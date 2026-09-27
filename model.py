@@ -702,6 +702,8 @@ def build(data, prior=None, matches=None, now=None, coaches=None, role_rows=None
     for tid, t in T.items():
         t["pct"] = pct[tid]
         t["coach"] = coach_profile(tid, coaches, season_start)
+        # panchina vacante: chi è andato via, quando e come (finché Wikipedia non indica il successore)
+        t["vacant"] = None if t["coach"] else (((coaches or {}).get(tid) or {}).get("wiki") or {}).get("left")
         k_prior = K_PRIOR_NEW if t["coach"] and t["coach"]["same"] is False else K_PRIOR
         r = rating(t["m"], {"mu": L["mu"], "sotA": cur["sotA"] or L["sotA"], "bcA": cur["bcA"] or L["bcA"]})
         base = pr_rating.get(tid) or pr_rating.get("_promoted") or dict(NO_PRIOR, xg=L["mu"])
@@ -788,7 +790,8 @@ def public_analysis(A):
                       "rating": {"att": round(t["att"], 3), "de": round(t["de"], 3), "prior": t["prior"],
                                  "priorWeight": round(t["priorWeight"], 2)},
                       "dims": t["dims"], "dimsPrev": t["dimsPrev"], "arch": t["arch"], "changes": t["changes"],
-                      "summary": t["summary"], "coach": t["coach"], "coachRoles": t.get("coachRoles")}
+                      "summary": t["summary"], "coach": t["coach"], "coachRoles": t.get("coachRoles"),
+                      "vacant": t.get("vacant")}
     L = A["L"]
     return {"metrics": metrics_meta(), "teams": teams, "hasPrior": A["hasPrior"], "priorYear": A["priorYear"],
             "styleLabels": STYLE_LABELS, "archMatches": A.get("archMatches", 0),

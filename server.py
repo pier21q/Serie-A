@@ -35,7 +35,7 @@ import zlib
 import webbrowser
 from datetime import datetime, timezone
 from pathlib import Path
-from urllib.parse import urlsplit
+from urllib.parse import urlencode, urlsplit
 
 import aiohttp
 from aiohttp import web
@@ -79,7 +79,7 @@ LIVE_EVERY, IDLE_EVERY = 60, 1800
 STAND_LIVE, STAND_IDLE = 300, 7200
 MONTHS_EVERY = 6 * 3600
 FC_NEAR, FC_FAR = 3600, 4 * 3600   # probabili formazioni: ogni ora nei 2 giorni prima, ogni 4 ore nella settimana
-WIKI_EVERY = 2 * 86400             # allenatori da Wikipedia
+WIKI_EVERY = 2 * 3600              # allenatori da Wikipedia: ogni 2 ore, per vedere presto esoneri e dimissioni
 PRE_EVERY = 6 * 3600               # precedenti e arbitro designato (ESPN), nei 3 giorni prima
 US_EVERY = 6 * 3600                # Understat e Fantacalcio.it: ogni 6 ore, e 1-3 ore dopo le partite
 ROSTER_EVERY = 7 * 86400           # rose da ESPN: una volta a settimana
@@ -642,6 +642,18 @@ async def fantacalcio_step(d, now):
     save_json(EXTRA_FILE, EXTRA)
 
 
+async def wiki_en_changes(year):
+    """Cambi di allenatore della stagione da Wikipedia in inglese (sezione «Managerial changes»)."""
+    base = {"action": "parse", "page": fonti.WIKI_EN_TITLE.format(a=year, b=(year + 1) % 100), "format": "json",
+            "formatversion": "2"}
+    get = lambda **p: web_text(fonti.WIKI_EN + "?" + urlencode(dict(base, **p)), headers={"User-Agent": WIKI_UA})
+    secs = json.loads(await get(prop="sections")).get("parse", {}).get("sections") or []
+    sec = next((s["index"] for s in secs if "managerial" in s["line"].lower()), None)
+    if not sec:
+        return []
+    return fonti.parse_cambi_en(json.loads(await get(prop="text", section=sec))["parse"]["text"])
+
+
 async def wiki_table(year):
     # Wikipedia respinge i finti browser che arrivano dai computer di GitHub: vuole un programma che dica chi è
     return fonti.parse_allenatori(await web_text(fonti.WIKI.format(a=year, b=year + 1), headers={"User-Agent": WIKI_UA}))
@@ -658,20 +670,30 @@ async def wiki_coaches(d, now):
     prev = EXTRA.get("wikiPrev")
     if not prev or not all(isinstance(v, list) for v in prev.values()):
         prev = EXTRA["wikiPrev"] = await wiki_table(y - 1)
+    try:
+        EXTRA["wikiEn"] = await wiki_en_changes(y)
+        STATUS.pop("err_Wikipedia inglese", None)
+    except Exception as e:
+        STATUS["err_Wikipedia inglese"] = str(e)[:200]
+        log(f"Errore Wikipedia inglese: {e}")
+    en = EXTRA.get("wikiEn") or []
     n = 0
     for team, ten in cur.items():
         tid = team_by_name(d, team)
         if not tid or not ten:
             continue
-        coach = ten[-1]["name"]
+        # vince la Wikipedia che sa del cambio più recente; se è andato via e non c'è ancora il successore,
+        # la panchina resta "da nominare"
+        coach, left = fonti.allenatore_attuale(ten, [c for c in en if team_by_name(d, c["team"]) == tid])
         before = next((v[-1]["name"] for k, v in prev.items() if v and tokens(k) & tokens(team)), None)
         c = COACHES.setdefault(tid, {})
         old = (c.get("wiki") or {}).get("name")
-        if old and tokens(old) != tokens(coach):
+        if left and old:
+            log(f"{team}: {left['name']} ha lasciato la panchina, nuovo allenatore non ancora annunciato")
+        elif coach and old and tokens(old) != tokens(coach):
             log(f"Cambio di allenatore ({team}): {coach} al posto di {old}")
-        c["wiki"] = {"name": coach, "new": (tokens(before) != tokens(coach)) if before else None}
-        if not (c.get("manager") or {}).get("id"):
-            c["manager"] = {"id": None, "name": coach}
+        c["wiki"] = {"name": coach, "new": (tokens(before) != tokens(coach)) if before and coach else None, "left": left}
+        c["manager"] = {"id": None, "name": coach} if coach else None
         n += 1
     if n:
         EXTRA["wikiCur"] = cur
@@ -1243,14 +1265,15 @@ def snapshot():
     pub = model.public_analysis(A)
     teams = {tid: {"name": t["team"]["name"], "code": t["team"].get("code"), "color": t["team"].get("color"),
                    "arch": t["arch"]["name"], "second": (t["arch"].get("second") or {}).get("name"),
-                   "coach": (t.get("coach") or {}).get("name"), "summary": t.get("summary"),
+                   "coach": (t.get("coach") or {}).get("name"), "vacant": t.get("vacant"), "summary": t.get("summary"),
                    "dims": {k: round(v, 2) for k, v in t["dims"].items()},
                    "form": [f["r"] for f in t["ctx"]["form"][:5]],
                    "roles": (t.get("coachRoles") or {}).get("text"),
                    "scorer": (t["rel"].get("scorer") or {}).get("name"), "assister": (t["rel"].get("assister") or {}).get("name"),
                    "fullName": t["team"].get("fullName") or t["team"]["name"],
                    "full": _r({k: pub["teams"][tid].get(k) for k in ("n", "m", "rank", "pct", "z", "style", "rel", "formations", "rating",
-                                                                     "dims", "dimsPrev", "arch", "changes", "coach", "coachRoles")}
+                                                                     "dims", "dimsPrev", "arch", "changes", "coach", "coachRoles",
+                                                                     "vacant")}
                               | {"formDet": [{"r": f["r"], "gf": f["gf"], "ga": f["ga"], "home": f["home"], "opp": f["opp"]["name"],
                                               "start": f["start"]} for f in t["ctx"]["form"][:5]],
                                  "s": {k: t["s"].get(k) for k in ("shots", "shotsAgainst", "corners", "cornersAgainst")}})}

@@ -23,6 +23,7 @@ header{position:sticky;top:env(safe-area-inset-top,0px);z-index:5;background:col
 .logo{font-family:var(--display);font-weight:700;font-size:28px;letter-spacing:.01em;line-height:1}
 .logo span{color:var(--accent)}
 .stamp{margin-left:auto;font-size:12px;color:var(--muted);text-align:right;line-height:1.3}
+.stamp .warn{color:var(--warn);font-weight:600}
 nav{display:flex;gap:4px;overflow-x:auto;scrollbar-width:none;padding-block:4px 10px}
 nav::-webkit-scrollbar{display:none}
 nav a{flex:none;text-decoration:none;color:var(--ink2);font-family:var(--display);font-weight:600;font-size:17px;letter-spacing:.02em;padding:4px 12px;border-radius:999px;text-transform:uppercase}
@@ -280,7 +281,7 @@ function vFanta() {
 const DIMS = [['possesso', 'Possesso'], ['baricentro', 'Baricentro'], ['pressing', 'Pressing'], ['verticalita', 'Verticale'], ['ampiezza', 'Ampiezza'], ['transizioni', 'Transizioni'], ['fisicita', 'Fisicità'], ['ritmo', 'Ritmo']];
 function vSquadre() {
   return `<h2>Squadre <small>identità tattica</small></h2><div class="list">${D.standings.map(r => { const t = T[r.team] || {};
-    return `<a class="card cardlink" href="#s${r.team}"><div class="fx-top"><span>${r.pos}ª · ${r.pts} punti</span><span>${t.coach ? 'All. ' + esc(t.coach) : ''}</span></div>
+    return `<a class="card cardlink" href="#s${r.team}"><div class="fx-top"><span>${r.pos}ª · ${r.pts} punti</span><span>${t.coach ? 'All. ' + esc(t.coach) : t.vacant ? 'All. da nominare' : ''}</span></div>
       <div style="display:flex;align-items:center;gap:10px;margin-top:8px">${crest(r.team)}<div><b>${esc(t.name)}</b><div class="arch">${esc(t.arch || '')}${t.second ? ` <small class="muted" style="font-family:var(--body);font-size:13px">con tratti di ${esc(t.second)}</small>` : ''}</div></div></div>
       ${t.summary ? `<p class="lead" style="margin:8px 0 0;font-size:14px">${esc(t.summary)}</p>` : ''}
       <div class="dims">${DIMS.map(([k, l]) => `<div class="dim">${l} <b class="num" style="color:var(--ink)">${Math.round(((t.dims || {})[k] ?? 0) * 100)}</b><span><i style="width:${((t.dims || {})[k] ?? 0) * 100}%"></i></span></div>`).join('')}</div>
@@ -575,9 +576,15 @@ function tacticCard(id) {
     ${xs ? `<h4>Da dove arrivano le occasioni (xG)</h4><div class="bars"><i class="h" style="width:${(xs.F || 0) * 100}%"></i><i class="x" style="width:${(xs.M || 0) * 100}%"></i><i class="a" style="width:${(xs.D || 0) * 100}%"></i></div>
       <div class="bl"><span>Attaccanti ${pc(xs.F)}</span><span>Centrocampisti ${pc(xs.M)}</span><span>Difensori ${pc(xs.D)}</span></div>` : ''}</div>`;
 }
+function vacantText(v) {
+  const when = v.date ? ` il ${new Date(v.date * 1000).toLocaleDateString('it-IT', {...TZ, day: 'numeric', month: 'long'})}`
+    : v.after ? ` dopo la ${v.after}ª giornata` : '';
+  return `${esc(v.name)} ha lasciato la panchina${when}${v.how ? ` (${esc(v.how)})` : ''}. Il nuovo allenatore non è ancora stato annunciato: finché non arriva, il pronostico non tiene conto delle abitudini dell'allenatore.`;
+}
 function coachCard(id) {
   const f = F(id), c = f.coach;
-  if (!c) return '';
+  if (!c) return f.vacant ? `<div class="card"><h3>Allenatore</h3><div class="arch" style="font-size:20px">Da nominare</div>
+    <p class="small muted">${vacantText(f.vacant)}</p></div>` : '';
   const r = c.record || {}, n = r.n || 0, fm = f.formations || [];
   const same = c.same === true ? `Allenava già ${nm(id)} la scorsa stagione: lo stile dell'anno scorso resta una buona base per il pronostico.`
     : c.same === false ? 'Allenatore nuovo rispetto alla scorsa stagione: nel pronostico i dati dell\'anno scorso pesano meno.' : '';
@@ -680,6 +687,28 @@ document.addEventListener('click', e => {
   if (b) { fsel = +b.dataset.f; document.getElementById('fanta').innerHTML = vFanta(); }
 });
 window.addEventListener('hashchange', () => { if (D) show(location.hash.slice(1)); });
+const FONTE = {'statistiche': 'Understat', 'fantacalcio.it': 'Fantacalcio.it', 'sito': 'pubblicazione del sito'};
+function stamp(E) {
+  let h = `Fotografia del ${day(D.generatedAt)}<br>statistiche del ${D.statsAt ? day(D.statsAt) : '–'}`;
+  if (E && E.at) {
+    // gli orari sopra cambiano solo quando c'è qualcosa di nuovo; questo dice che GitHub continua a controllare
+    const last = Math.max(E.at, D.generatedAt);
+    const late = Date.now() / 1000 - last > 45 * 60;
+    const errs = Object.keys(E.errori || {}).map(k => FONTE[k] || k);
+    h += `<br><span class="${late || errs.length ? 'warn' : ''}">ultimo controllo ${day(last)}`
+       + (errs.length ? `<br>non risponde: ${esc(errs.join(', '))}` : '') + '</span>';
+  }
+  document.getElementById('stamp').innerHTML = h;
+}
+async function lastCheck() {
+  // solo sul sito di GitHub: com'è andato l'ultimo controllo, anche quando non c'era niente di nuovo da pubblicare
+  const m = /^([\w-]+)\.github\.io$/.exec(location.hostname);
+  if (!m) return;
+  try {
+    const r = await fetch(`https://raw.githubusercontent.com/${m[1]}/${location.pathname.split('/')[1]}/dati/esecuzione.json`, {cache: 'no-store'});
+    if (r.ok) stamp(await r.json());
+  } catch (e) {}
+}
 async function boot() {
   const box = document.getElementById('giornata');
   try {
@@ -697,7 +726,8 @@ async function boot() {
   T = D.teams;
   LOGOS = new Set((D.logos || []).map(String));
   MK = Object.fromEntries((D.metrics || []).map(x => [x.k, x]));
-  document.getElementById('stamp').innerHTML = `Fotografia del ${day(D.generatedAt)}<br>statistiche del ${D.statsAt ? day(D.statsAt) : '–'}`;
+  stamp();
+  lastCheck();
   document.getElementById('foot').textContent = `Versione tascabile di Serie A Live, aggiornata in automatico. Risultati, classifica, formazioni e statistiche delle partite da ESPN; xG da Understat; voti e probabili formazioni da Fantacalcio.it. I pronostici sono stime statistiche, non certezze.`;
   show(location.hash.slice(1) || 'giornata');
 }
