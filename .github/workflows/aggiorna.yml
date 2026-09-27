@@ -1,7 +1,8 @@
 # Aggiorna il sito di Serie A Live sui computer di GitHub, anche con il Mac spento.
-# Ogni 15 minuti: scarica le novità (ESPN, Understat, Fantacalcio.it, Wikipedia), ricalcola statistiche e
-# pronostici, pubblica il sito nel ramo "sito" se è cambiato qualcosa e salva i dati nel ramo "dati".
-# Durante le partite resta acceso e aggiorna di continuo (al massimo 5 ore e mezza per volta).
+# Ogni 30 minuti: riscarica tutte le fonti (ESPN, Understat, Fantacalcio.it, Wikipedia), ricalcola statistiche e
+# pronostici, ripubblica il sito nel ramo "sito" (anche se non è cambiato niente) e salva i dati nel ramo "dati".
+# GitHub a volte ritarda o salta le esecuzioni programmate: per questo parte ogni 15 minuti e aggiorna solo se
+# l'ultimo aggiornamento ha più di 25 minuti.
 # Il file originale sta nella cartella dell'app sul Mac (cloud/aggiorna.yml): lo carica "python sito.py codice".
 name: Aggiorna Serie A Live
 
@@ -23,33 +24,53 @@ concurrency:
 jobs:
   aggiorna:
     runs-on: ubuntu-latest
-    timeout-minutes: 350
+    timeout-minutes: 30
     env:
       TZ: Europe/Rome
       SERIEA_DATA_DIR: ${{ github.workspace }}/dati
       SERIEA_SITE_DIR: ${{ github.workspace }}/sito
     steps:
-      - name: Codice dell'app
-        uses: actions/checkout@v7
-        with:
-          path: app
       - name: Dati salvati
         uses: actions/checkout@v7
         with:
           ref: dati
           path: dati
+      - name: Serve un aggiornamento?
+        id: serve
+        run: |
+          python3 - <<'PY'
+          import json, os, time
+          try:
+              at = json.load(open("dati/esecuzione.json"))["at"]
+          except Exception:
+              at = 0
+          due = os.environ["GITHUB_EVENT_NAME"] != "schedule" or time.time() - at >= 25 * 60
+          print(f"Ultimo aggiornamento {int((time.time() - at) // 60)} minuti fa: " + ("si aggiorna" if due else "niente da fare"))
+          open(os.environ["GITHUB_OUTPUT"], "a").write(f"ok={'true' if due else 'false'}\n")
+          PY
+      - name: Codice dell'app
+        if: steps.serve.outputs.ok == 'true'
+        uses: actions/checkout@v7
+        with:
+          path: app
       - name: Sito
+        if: steps.serve.outputs.ok == 'true'
         uses: actions/checkout@v7
         with:
           ref: sito
           path: sito
-      - uses: actions/setup-python@v7
+      - name: Python
+        if: steps.serve.outputs.ok == 'true'
+        uses: actions/setup-python@v7
         with:
           python-version: "3.12"
           cache: pip
           cache-dependency-path: app/requirements.txt
-      - run: pip install -r app/requirements.txt
+      - name: Componenti
+        if: steps.serve.outputs.ok == 'true'
+        run: pip install -r app/requirements.txt
       - name: Aggiorna dati e sito
+        if: steps.serve.outputs.ok == 'true'
         run: |
           git config --global user.name "Serie A Live"
           git config --global user.email "serie-a-live@users.noreply.github.com"

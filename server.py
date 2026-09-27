@@ -18,9 +18,9 @@ Sofascore non si usa più: bloccava la rete dopo poche richieste.
 Avvio:  python server.py            (apre la pagina nel browser)
         python server.py --no-open  (non apre il browser)
         python server.py --offline  (usa solo i dati salvati, nessuna richiesta esterna)
-        python server.py --cloud    (su GitHub Actions: nessuna pagina web; aggiorna i dati, pubblica il sito
-                                     nel ramo "sito" e salva i dati nel ramo "dati", poi esce. Durante le
-                                     partite resta acceso e aggiorna di continuo, al massimo 5 ore e mezza)
+        python server.py --cloud    (su GitHub Actions, ogni 30 minuti: nessuna pagina web; riscarica tutte le
+                                     fonti, ripubblica il sito nel ramo "sito" anche senza novità e salva i
+                                     dati nel ramo "dati", poi esce)
 """
 import asyncio
 import json
@@ -74,21 +74,19 @@ UA = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML,
 WIKI_UA = "SerieALive/1.0 (https://github.com/pier21q/Serie-A)"   # come chiede Wikipedia ai programmi
 DATA_VERSION = 4   # 4: statistiche da ESPN, Understat e Fantacalcio.it (non più Sofascore)
 
+# ogni fonte si riscarica a ogni aggiornamento, cioè ogni 30 minuti (25, per non saltarne uno per pochi secondi)
+NEWS_EVERY = 25 * 60
 # ESPN
 LIVE_EVERY, IDLE_EVERY = 60, 1800
-STAND_LIVE, STAND_IDLE = 300, 7200
-MONTHS_EVERY = 6 * 3600
-FC_NEAR, FC_FAR = 3600, 4 * 3600   # probabili formazioni: ogni ora nei 2 giorni prima, ogni 4 ore nella settimana
-WIKI_EVERY = 2 * 3600              # allenatori da Wikipedia: ogni 2 ore, per vedere presto esoneri e dimissioni
-PRE_EVERY = 6 * 3600               # precedenti e arbitro designato (ESPN), nei 3 giorni prima
-US_EVERY = 6 * 3600                # Understat e Fantacalcio.it: ogni 6 ore, e 1-3 ore dopo le partite
-ROSTER_EVERY = 7 * 86400           # rose da ESPN: una volta a settimana
+STAND_LIVE, STAND_IDLE = 300, NEWS_EVERY
+MONTHS_EVERY = NEWS_EVERY
+FC_NEAR, FC_FAR = NEWS_EVERY, NEWS_EVERY   # probabili formazioni e indisponibili, nella settimana prima
+WIKI_EVERY = NEWS_EVERY            # allenatori da Wikipedia, per vedere presto esoneri e dimissioni
+PRE_EVERY = NEWS_EVERY             # precedenti e arbitro designato (ESPN), nei 3 giorni prima
+US_EVERY = NEWS_EVERY              # Understat e Fantacalcio.it
+ROSTER_EVERY = 7 * 86400           # rose da ESPN: una volta a settimana (cambiano solo col mercato)
 CLOUD = "--cloud" in sys.argv
-# sito: dal Mac al massimo ogni 15 minuti; su GitHub ogni 7 (GitHub Pages ne regge al massimo 10 all'ora)
-SITE_EVERY = (7 if CLOUD else 15) * 60
-CLOUD_MAX = 5.5 * 3600             # un'esecuzione su GitHub dura al massimo 5 ore e mezza (il limite è 6)
-CLOUD_GAP = 10 * 60                # se il prossimo controllo è più lontano, esce: ci pensa l'esecuzione successiva
-STATE_EVERY = 20 * 60              # durante le partite i dati si salvano su GitHub ogni 20 minuti
+SITE_EVERY = 15 * 60               # sito dal Mac: al massimo ogni 15 minuti (su GitHub a ogni aggiornamento)
 LINEUP_EVERY = 600
 MATCH_LENGTH = 150 * 60        # durata massima stimata di una partita dal calcio d'inizio
 
@@ -663,7 +661,7 @@ async def wiki_coaches(d, now):
     """Allenatori da Wikipedia, con le giornate in panchina (anche quelli della scorsa stagione)."""
     if now - EXTRA.get("wikiAt", 0) < WIKI_EVERY and EXTRA.get("wikiCur"):
         return
-    EXTRA["wikiAt"] = now - WIKI_EVERY + 3600   # se va male, si riprova tra un'ora
+    EXTRA["wikiAt"] = now - WIKI_EVERY + 900   # se va male, si riprova tra un quarto d'ora
     save_json(EXTRA_FILE, EXTRA)
     y = 2000 + int(str((d.get("season") or {}).get("year") or "26/27")[:2])
     cur = await wiki_table(y)
@@ -1016,11 +1014,12 @@ def site_conf():
     return c if c.get("remote") and not c.get("cloud") else {}
 
 
-async def site_step(gap=SITE_EVERY):
-    """Carica su GitHub la versione tascabile quando ci sono novità (al massimo ogni SITE_EVERY)."""
+async def site_step():
+    """Carica su GitHub la versione tascabile. Su GitHub Actions a ogni aggiornamento (ogni 30 minuti), anche
+    senza novità; dal Mac solo quando c'è qualcosa di nuovo, al massimo ogni 15 minuti."""
     conf = site_conf()
     now = time.time()
-    if not conf or now - EXTRA.get("siteAt", 0) < gap:
+    if not conf or (not CLOUD and now - EXTRA.get("siteAt", 0) < SITE_EVERY):
         return
     EXTRA["siteAt"] = now
     save_json(EXTRA_FILE, EXTRA)
@@ -1028,7 +1027,7 @@ async def site_step(gap=SITE_EVERY):
     if not snap:
         return
     sig = sito.firma(snap)
-    if sig == EXTRA.get("siteSig"):
+    if sig == EXTRA.get("siteSig") and not CLOUD:
         return
 
     for tid in snap.get("teams") or {}:   # loghi che mancano ancora: da ESPN
@@ -1163,6 +1162,8 @@ async def refresher():
             except Exception as e:
                 STATUS["err_sito"] = str(e)[:200]
                 log(f"Errore sito: {e}")
+        if CLOUD:
+            return   # su GitHub un giro solo: il prossimo lo fa l'esecuzione programmata tra 30 minuti
         # 4. quando ricontrollare
         now = time.time()
         live = bool(d) and in_window(d, now)
@@ -1187,35 +1188,29 @@ async def refresher():
             targets.append(now + 60)
         sleep = max(20, min(targets) - now)
         STATUS["nextCheck"] = now + sleep
-        if CLOUD:
-            CLOUD_RUN["giri"] += 1
-            # su GitHub: se non c'è niente da fare a breve si esce, ci pensa l'esecuzione programmata successiva
-            if not d or sleep > CLOUD_GAP or now + sleep - CLOUD_RUN["start"] > CLOUD_MAX or CLOUD_RUN.get("stop"):
-                return
-            if now - CLOUD_RUN["stateAt"] > STATE_EVERY:
-                await asyncio.to_thread(cloud_state_push)
         await asyncio.sleep(sleep)
 
 
 # ---------- aggiornamento su GitHub Actions (--cloud) ----------
 
-CLOUD_RUN = {"start": time.time(), "stateAt": time.time(), "giri": 0}
+CLOUD_START = time.time()
 
 
-def cloud_state_push():
-    """Salva i dati nel ramo "dati" del repository: da lì riparte l'esecuzione successiva."""
+def source_errors():
+    """Fonti che nell'ultimo giro hanno dato errore: {fonte: messaggio}."""
     errors = {k[4:]: v for k, v in STATUS.items() if k.startswith("err_")}
     if STATUS.get("espnError"):
         errors["ESPN"] = STATUS["espnError"]
-    save_json(CLOUD_FILE, {"at": time.time(), "start": CLOUD_RUN["start"], "giri": CLOUD_RUN["giri"],
-                           "sito": EXTRA.get("siteSig"), "errori": errors, "codice": CODE_VERSION})
+    return errors
+
+
+def cloud_state_push():
+    """Salva i dati nel ramo "dati" del repository: da lì riparte l'esecuzione successiva. Se nel frattempo
+    qualcuno li ha cambiati non li sovrascrive (la prossima esecuzione riparte da quelli)."""
+    save_json(CLOUD_FILE, {"at": time.time(), "start": CLOUD_START, "sito": EXTRA.get("siteSig"),
+                           "errori": source_errors(), "codice": CODE_VERSION})
     ok, out = sito.pubblica(DATA_DIR, ["dati"], lease=True)
-    CLOUD_RUN["stateAt"] = time.time()
-    if ok:
-        log("Dati salvati su GitHub")
-    else:
-        CLOUD_RUN["stop"] = True   # qualcuno ha cambiato i dati nel frattempo: si riparte da quelli
-        log(f"Dati non salvati su GitHub: {out[-300:]}")
+    log("Dati salvati su GitHub" if ok else f"Dati non salvati su GitHub: {out[-300:]}")
     return ok
 
 
@@ -1237,7 +1232,7 @@ def history_backup():
 
 
 async def cloud_main():
-    """Un aggiornamento su GitHub Actions, senza pagina web: dati, sito se è cambiato qualcosa, salvataggio."""
+    """Un aggiornamento su GitHub Actions, senza pagina web: tutte le fonti, sito ripubblicato, salvataggio."""
     HTTP["espn"] = aiohttp.ClientSession()
     HTTP["web"] = aiohttp.ClientSession(headers={"User-Agent": UA, "Accept-Language": "it-IT,it;q=0.9"})
     try:
@@ -1248,17 +1243,9 @@ async def cloud_main():
         reg_seed(STATE["data"])
         refresh_squads(STATE["data"])
         await refresher()
-        if not CLOUD_RUN.get("stop"):
-            try:
-                await site_step(gap=180)   # l'ultima novità prima di uscire (es. il risultato finale)
-            except Exception as e:
-                STATUS["err_sito"] = str(e)[:200]
-                log(f"Errore sito: {e}")
     finally:
         await HTTP["espn"].close()
         await HTTP["web"].close()
-    if CLOUD_RUN.get("stop"):
-        return 1
     await asyncio.to_thread(history_backup)
     return 0 if await asyncio.to_thread(cloud_state_push) else 1
 
@@ -1324,7 +1311,7 @@ def snapshot():
                           for p in t["players"]]} for t in fv["teams"]]
     hist = sorted(HISTORY.get("matches", {}).values(), key=lambda it: -it["start"])[:30]
     return {
-        "generatedAt": time.time(), "statsAt": d.get("fullAt"), "season": d.get("season"),
+        "generatedAt": time.time(), "statsAt": d.get("fullAt"), "season": d.get("season"), "errors": source_errors(),
         "standings": [{"team": str(r["team"]["id"]), "pos": r["pos"], "p": r["p"], "w": r["w"], "d": r["d"], "l": r["l"],
                        "gf": r["gf"], "ga": r["ga"], "pts": r["pts"], "zone": r.get("zone")} for r in d["standings"]["total"]],
         "teams": teams, "fixtures": fixtures, "squads": squads,

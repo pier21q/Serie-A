@@ -689,26 +689,13 @@ document.addEventListener('click', e => {
 window.addEventListener('hashchange', () => { if (D) show(location.hash.slice(1)); });
 const FONTE = {'statistiche': 'Understat', 'fantacalcio.it': 'Fantacalcio.it', 'sito': 'pubblicazione del sito',
                'storico': 'copia dello storico'};
-function stamp(E) {
-  let h = `Fotografia del ${day(D.generatedAt)}<br>statistiche del ${D.statsAt ? day(D.statsAt) : '–'}`;
-  if (E && E.at) {
-    // gli orari sopra cambiano solo quando c'è qualcosa di nuovo; questo dice che GitHub continua a controllare
-    const last = Math.max(E.at, D.generatedAt);
-    const late = Date.now() / 1000 - last > 45 * 60;
-    const errs = Object.keys(E.errori || {}).map(k => FONTE[k] || k);
-    h += `<br><span class="${late || errs.length ? 'warn' : ''}">ultimo controllo ${day(last)}`
-       + (errs.length ? `<br>non risponde: ${esc(errs.join(', '))}` : '') + '</span>';
-  }
-  document.getElementById('stamp').innerHTML = h;
-}
-async function lastCheck() {
-  // solo sul sito di GitHub: com'è andato l'ultimo controllo, anche quando non c'era niente di nuovo da pubblicare
-  const m = /^([\w-]+)\.github\.io$/.exec(location.hostname);
-  if (!m) return;
-  try {
-    const r = await fetch(`https://raw.githubusercontent.com/${m[1]}/${location.pathname.split('/')[1]}/dati/esecuzione.json`, {cache: 'no-store'});
-    if (r.ok) stamp(await r.json());
-  } catch (e) {}
+function stamp() {
+  // il sito si ripubblica ogni 30 minuti anche senza novità: se l'ora è vecchia, gli aggiornamenti si sono fermati
+  const errs = Object.keys(D.errors || {}).map(k => FONTE[k] || k);
+  const late = Date.now() / 1000 - D.generatedAt > 70 * 60;
+  document.getElementById('stamp').innerHTML = `Aggiornato il ${day(D.generatedAt)}`
+    + (late ? `<br><span class="warn">nessun aggiornamento da più di un'ora</span>` : '')
+    + (errs.length ? `<br><span class="warn">non risponde: ${esc(errs.join(', '))}</span>` : '');
 }
 async function boot() {
   const box = document.getElementById('giornata');
@@ -728,8 +715,7 @@ async function boot() {
   LOGOS = new Set((D.logos || []).map(String));
   MK = Object.fromEntries((D.metrics || []).map(x => [x.k, x]));
   stamp();
-  lastCheck();
-  document.getElementById('foot').textContent = `Versione tascabile di Serie A Live, aggiornata in automatico. Risultati, classifica, formazioni e statistiche delle partite da ESPN; xG da Understat; voti e probabili formazioni da Fantacalcio.it. I pronostici sono stime statistiche, non certezze.`;
+  document.getElementById('foot').textContent = `Versione tascabile di Serie A Live, aggiornata in automatico ogni 30 minuti. Risultati, classifica, formazioni e statistiche delle partite da ESPN; xG da Understat; voti e probabili formazioni da Fantacalcio.it. I pronostici sono stime statistiche, non certezze.`;
   show(location.hash.slice(1) || 'giornata');
 }
 boot();

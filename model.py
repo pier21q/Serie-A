@@ -893,10 +893,50 @@ def outcome_probs(mat):
 
 PKEYS = ["totalShots", "shotsOnTarget", "fouls", "wasFouled", "yellowCards", "redCards", "expectedGoals", "expectedAssists",
          "goals", "assists", "saves", "keyPasses"]
-# peso della posizione in campo sulla probabilità di ammonizione (sulla parte "di ruolo" della stima)
-ROLE_CARD = {"Mediano": 1.2, "Regista": 1.1, "Centrocampista": 1.05, "Mezzala": 1.0, "Difensore centrale": 1.1,
-             "Terzino": 1.05, "Esterno": 0.95, "Trequartista": 0.85, "Esterno offensivo": 0.85, "Ala": 0.85,
-             "Attaccante": 0.8, "Centravanti": 0.8, "Portiere": 0.3}
+YC_CONV_PRIOR = 60   # falli: quanto pesa la media del ruolo nel rapporto gialli/falli di un giocatore
+# quanto conta l'avversario diretto sui falli: marcano soprattutto difensori e centrocampisti, gli attaccanti poco
+DUEL_EXP = {"D": .6, "M": .45, "F": .2}
+
+
+def card_conv(A, p):
+    """Gialli per fallo del giocatore (questa stagione e la scorsa), avvicinati alla media del suo ruolo: in
+    Serie A un attaccante prende un giallo ogni 10 falli circa, un difensore ogni 6. -> (gialli a fallo, del ruolo)"""
+    pa = A["posavg"].get(p.get("pos") or "M") or {}
+    base = pa["yellowCards"] / pa["fouls"] if pa.get("fouls") and pa.get("yellowCards") else 1 / 7
+    pp = A["prior_players"].get(p.get("id")) or {}
+    yc = (num(p.get("yellowCards")) or 0) + (num(pp.get("yellowCards")) or 0)
+    fo = (num(p.get("fouls")) or 0) + (num(pp.get("fouls")) or 0)
+    return clamp((yc + base * YC_CONV_PRIOR) / (fo + YC_CONV_PRIOR), .5 * base, 2 * base), base
+
+
+def card_context(A, tid, oid):
+    """Quanto dovrà difendere la squadra: chi ha meno palla fa più falli, e contro chi si procura tante
+    punizioni se ne fanno di più. -> (fattore, possesso atteso, fattore del possesso, fattore delle punizioni)"""
+    L, t, o = A["L"], A["T"][tid], A["T"][oid]
+    pt, po = t["m"].get("poss"), o["m"].get("poss")
+    poss = pt / (pt + po) if pt and po else .5
+    poss_f = clamp(((1 - poss) / .5) ** .7, .75, 1.3)
+    fk_f = clamp(((o["m"].get("fk") or L.get("fk") or 13) / (L.get("fk") or 13)) ** .4, .85, 1.2)
+    return poss_f * fk_f, poss, poss_f, fk_f
+
+
+def anchor_cards(A, projs, tid, oid, card_f):
+    """I gialli attesi dei titolari restano vicini a quanti ne prende di solito la squadra (con l'avversario,
+    l'arbitro e l'intensità della partita): i singoli giocatori si dividono quel totale."""
+    L, t = A["L"], A["T"][tid]
+    have = [p for p in projs if p.get("lamY")]
+    tot = sum(p["lamY"] for p in have)
+    cards = [x["m"]["card"] for x in A["T"].values() if x["m"].get("card") is not None]
+    if not tot or not cards or t["m"].get("card") is None:
+        return
+    lg_card, n = sum(cards) / len(cards), t.get("n") or 0
+    rel = (n * t["m"]["card"] + 6 * lg_card) / (n + 6) / lg_card   # cartellini della squadra rispetto alla media
+    exp_team = (L.get("yellowGame") or 3.4) / 2 * rel * card_context(A, tid, oid)[0] * card_f
+    share = sum(p["min"] for p in have) / 990   # il resto dei minuti lo giocano i cambi
+    s = (exp_team * share / tot) ** .75
+    for p in have:
+        p["lamY"] *= s
+        p["pYellow"] = 1 - math.exp(-p["lamY"])
 
 
 def parse_formation(f, n_outfield=10):
@@ -1050,8 +1090,8 @@ def player_projections(A, tid, oid, xi, lay, opp_lay, opp_xi, duels, lam_team, l
     t, o = T[tid], T[oid]
     ratio_ = clamp(lam_team / (t["xgBase"] or L["mu"]), .4, 2.5)
     shot_f = clamp((o["m"].get("shA") or L["shA"] or 12) / (L["shA"] or 12), .6, 1.6)
-    fk_f = clamp((o["m"].get("fk") or L["fk"] or 13) / (L["fk"] or 13), .7, 1.4) if L.get("fk") else 1.0
     foul_f = clamp((o["m"].get("foul") or L["foul"] or 13) / (L["foul"] or 13), .7, 1.4) if L.get("foul") else 1.0
+    team_card, poss, poss_f, fk_f = card_context(A, tid, oid)
     opp_by_id = {p["id"]: p for p in opp_xi["starters"]}
     out = []
     for s in xi["starters"][:11]:
@@ -1063,21 +1103,24 @@ def player_projections(A, tid, oid, xi, lay, opp_lay, opp_xi, duels, lam_team, l
         r = {k: prate(A, p, k) for k in PKEYS}
         opp_id = duels.get(s["id"])
         opp = A["players"].get(opp_id) or ({"id": opp_id, "name": opp_by_id[opp_id]["name"]} if opp_id in opp_by_id else None)
-        duel_f = 1.0
+        # chi marca chi: contro un avversario diretto che subisce tanti falli se ne fanno di più
+        duel_f, opp_wf = 1.0, None
         if opp:
             oposp = dict(opp)
             oposp.setdefault("pos", (opp_by_id.get(opp_id) or {}).get("pos"))
-            wf = prate(A, oposp, "wasFouled")
+            opp_wf = prate(A, oposp, "wasFouled")
             base = (A["posavg"].get(oposp.get("pos") or "M") or {}).get("wasFouled")
-            if base and wf is not None:
-                duel_f = clamp(1 + .3 * (wf / base - 1), .85, 1.3)   # contro chi subisce tanti falli se ne fanno di più
-        role_mult = ROLE_CARD.get(c["role"], 1.0)
-        y90 = r["yellowCards"]
-        lam_y = None
-        if y90 is not None:
-            posy = (A["posavg"].get(p.get("pos") or "M") or {}).get("yellowCards") or y90
-            y90 = .7 * y90 + .3 * posy * role_mult   # la posizione in campo pesa sul dato di base
-            lam_y = y90 * f * ref_factor * (.6 + .4 * fk_f) * duel_f
+            if base and opp_wf is not None:
+                duel_f = clamp((opp_wf / base) ** DUEL_EXP.get(p.get("pos") or "M", .45), .75, 1.6)
+        # giallo: falli che farà (suoi, dell'avversario diretto e di quanto difenderà la squadra) per i gialli
+        # che prende a fallo, con arbitro e intensità della partita; il totale di squadra lo fissa anchor_cards.
+        # I portieri no: prendono gialli per perdita di tempo, non per falli
+        conv, conv_pos = card_conv(A, p)
+        exp_fouls = r["fouls"] * f * duel_f * team_card if r["fouls"] is not None else None
+        if p.get("pos") == "G":
+            lam_y = r["yellowCards"] * f * ref_factor if r["yellowCards"] is not None else None
+        else:
+            lam_y = exp_fouls * conv * ref_factor if exp_fouls is not None else None
         xg90 = r["expectedGoals"] if r["expectedGoals"] is not None else r["goals"]
         xa90 = r["expectedAssists"] if r["expectedAssists"] is not None else r["assists"]
         g90 = .8 * (xg90 or 0) + .2 * (r["goals"] or 0)
@@ -1087,7 +1130,7 @@ def player_projections(A, tid, oid, xi, lay, opp_lay, opp_xi, duels, lam_team, l
             "min": round(mins), "rating": p.get("rating"),
             "shots": r["totalShots"] * f * shot_f ** .7 * ratio_ ** .5 if r["totalShots"] is not None else None,
             "sot": r["shotsOnTarget"] * f * shot_f ** .7 * ratio_ ** .5 if r["shotsOnTarget"] is not None else None,
-            "fouls": r["fouls"] * f * fk_f * duel_f ** .5 if r["fouls"] is not None else None,
+            "fouls": exp_fouls,
             "fouled": r["wasFouled"] * f * foul_f if r["wasFouled"] is not None else None,
             "pYellow": 1 - math.exp(-lam_y) if lam_y is not None else None,
             "pRed": 1 - math.exp(-r["redCards"] * f * ref_factor) if r["redCards"] is not None else None,
@@ -1100,8 +1143,9 @@ def player_projections(A, tid, oid, xi, lay, opp_lay, opp_xi, duels, lam_team, l
                     + (opp_lay.get(opp_id) or {}).get("side", "")} if opp else None,
             "lamY": lam_y,
             # da cosa dipende il rischio di giallo (serve a spiegarlo nella pagina)
-            "yWhy": {"own": r["yellowCards"], "pos": (A["posavg"].get(p.get("pos") or "M") or {}).get("yellowCards"),
-                     "role": role_mult, "fk": fk_f, "duel": duel_f, "yc": p.get("yellowCards"), "apps": p.get("appearances")},
+            "yWhy": {"fouls": r["fouls"], "foulsPos": (A["posavg"].get(p.get("pos") or "M") or {}).get("fouls"),
+                     "duel": duel_f, "oppWf": opp_wf, "poss": poss, "possF": poss_f, "fk": fk_f,
+                     "conv": conv, "convPos": conv_pos, "yc": p.get("yellowCards"), "apps": p.get("appearances")},
         }
         out.append(proj)
     coach_role_shift(t, out, lay)
@@ -1138,8 +1182,9 @@ def norm_name(n):
 
 
 def yellow_risk(proj_h, proj_a, hid, aid, cautioned, ref, ref_f, ref_ypg, clash_cards):
-    """I giocatori più a rischio di ammonizione nella partita, con il perché (ruolo, precedenti, avversario
-    diretto, stile dell'avversario), più i diffidati: con un giallo saltano la partita dopo."""
+    """I giocatori più a rischio di ammonizione nella partita, con il perché (falli che fa, chi marca, quanto
+    difenderà la squadra, quanti falli gli servono per un giallo), più i diffidati: con un giallo saltano la
+    partita dopo."""
     rows, diffidati = [], []
     for key, tid, projs in (("h", hid, proj_h), ("a", aid, proj_a)):
         for p in projs:
@@ -1147,17 +1192,24 @@ def yellow_risk(proj_h, proj_a, hid, aid, cautioned, ref, ref_f, ref_ypg, clash_
                 continue
             w = p.get("yWhy") or {}
             why = []
-            yc, apps = int(w.get("yc") or 0), int(w.get("apps") or 0)
-            if yc and apps:
-                often = yc >= 2 and w.get("own") and w.get("pos") and w["own"] >= 1.25 * w["pos"]
-                why.append(f"{'ammonito spesso: ' if often else ''}{yc} {'giallo' if yc == 1 else 'gialli'} in {apps} {'presenza' if apps == 1 else 'presenze'}")
-            role = (p.get("role") or "").split(" (")[0]
-            if (w.get("role") or 1) >= 1.1:
-                why.append(f"{role.lower()}, ruolo tra i più ammoniti")
-            if (w.get("duel") or 1) >= 1.08 and p.get("opp"):
-                why.append(f"marca {p['opp']['name']}, che subisce molti falli")
-            if (w.get("fk") or 1) >= 1.15:
+            fo, fp = w.get("fouls"), w.get("foulsPos")
+            if fo is not None and fp and fo >= 1.2 * fp:
+                why.append(f"fa tanti falli: {fmt(fo, 1)} a partita (media del ruolo {fmt(fp, 1)})")
+            if (w.get("duel") or 1) >= 1.1 and p.get("opp") and w.get("oppWf") is not None:
+                why.append(f"{'si trova davanti' if p.get('pos') == 'F' else 'marca'} {p['opp']['name']}, "
+                           f"che subisce {fmt(w['oppWf'], 1)} falli a partita")
+            if (w.get("possF") or 1) >= 1.08:
+                why.append(f"la sua squadra avrà meno palla (possesso atteso {fmt((w.get('poss') or .5) * 100, 0)}%)")
+            conv, cp = w.get("conv"), w.get("convPos")
+            if conv and cp and conv >= 1.3 * cp:
+                why.append(f"si fa ammonire spesso: un giallo ogni {fmt(1 / conv, 0)} falli (nel suo ruolo uno ogni {fmt(1 / cp, 0)})")
+            if (w.get("fk") or 1) >= 1.08:
                 why.append("contro una squadra che si procura tante punizioni")
+            yc, apps = int(w.get("yc") or 0), int(w.get("apps") or 0)
+            if yc and apps and len(why) < 3:
+                why.append(f"{yc} {'giallo' if yc == 1 else 'gialli'} in {apps} {'presenza' if apps == 1 else 'presenze'} quest'anno")
+            if not why:
+                why.append("rischio nella media del suo ruolo")
             dif = norm_name(p.get("name")) in cautioned[key]
             row = {"id": p["id"], "name": p["name"], "team": int(tid), "role": p.get("role"), "p": p["pYellow"],
                    "why": why[:3], "diffidato": dif}
@@ -1322,6 +1374,8 @@ def predict(A, hid, aid, ev=None, extra=None):
     card_f = ref_f * (1 + clash["cards"])   # arbitro e scontro di stili
     proj_h = player_projections(A, hid, aid, xis["h"], lay_h, lay_a, xis["a"], duels, lh, la, card_f)
     proj_a = player_projections(A, aid, hid, xis["a"], lay_a, lay_h, xis["h"], duels, la, lh, card_f)
+    anchor_cards(A, proj_h, hid, aid, card_f)
+    anchor_cards(A, proj_a, aid, hid, card_f)
     cards_h = sum(p["lamY"] or 0 for p in proj_h) + .15
     cards_a = sum(p["lamY"] or 0 for p in proj_a) + .15
     for p in proj_h + proj_a:
@@ -1485,13 +1539,17 @@ def _single_projection(A, p, tid, oid, lam_team, lam_opp, ref_f, minutes):
     L, t, o = A["L"], A["T"][tid], A["T"][oid]
     f = minutes / 90
     ratio_ = clamp(lam_team / (t["xgBase"] or L["mu"]), .4, 2.5)
-    r = {k: prate(A, p, k) for k in ("expectedGoals", "goals", "expectedAssists", "assists", "yellowCards", "redCards")}
+    r = {k: prate(A, p, k) for k in ("expectedGoals", "goals", "expectedAssists", "assists", "fouls", "redCards")}
     g90 = .8 * (r["expectedGoals"] if r["expectedGoals"] is not None else (r["goals"] or 0)) + .2 * (r["goals"] or 0)
     a90 = .8 * (r["expectedAssists"] if r["expectedAssists"] is not None else (r["assists"] or 0)) + .2 * (r["assists"] or 0)
-    ly = (r["yellowCards"] or 0) * f * ref_f
+    # giallo come per i titolari (falli per gialli a fallo, quanto difenderà la squadra), senza l'avversario diretto
+    if p.get("pos") == "G":
+        ly = (prate(A, p, "yellowCards") or 0) * f * ref_f
+    else:
+        ly = r["fouls"] * f * card_context(A, tid, oid)[0] * card_conv(A, p)[0] * ref_f if r["fouls"] is not None else None
     return {"min": round(minutes), "pGoal": 1 - math.exp(-g90 * f * ratio_) if p.get("pos") != "G" else 0.0,
             "pAssist": 1 - math.exp(-a90 * f * ratio_) if p.get("pos") != "G" else 0.0,
-            "pYellow": 1 - math.exp(-ly) if r["yellowCards"] is not None else None,
+            "pYellow": 1 - math.exp(-ly) if ly is not None else None,
             "pRed": 1 - math.exp(-(r["redCards"] or 0) * f * ref_f),
             "lamG": g90 * f * ratio_, "lamA": a90 * f * ratio_}
 

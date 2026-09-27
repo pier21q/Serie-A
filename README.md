@@ -2,9 +2,9 @@
 
 Sito: https://pier21q.github.io/Serie-A/
 
-Il sito si aggiorna da solo sui computer di GitHub (GitHub Actions), anche con il Mac spento. Ogni 15 minuti
-l'app scarica le novità da ESPN, Understat, Fantacalcio.it e Wikipedia, ricalcola statistiche e pronostici
-e, se è cambiato qualcosa, ripubblica il sito. Durante le partite resta accesa e aggiorna di continuo.
+Il sito si aggiorna da solo sui computer di GitHub (GitHub Actions), anche con il Mac spento. Ogni 30 minuti
+l'app riscarica i dati da ESPN, Understat, Fantacalcio.it e Wikipedia, ricalcola statistiche e pronostici
+e ripubblica il sito, anche se non è cambiato niente.
 
 Rami del repository:
 
