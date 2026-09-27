@@ -687,7 +687,8 @@ document.addEventListener('click', e => {
   if (b) { fsel = +b.dataset.f; document.getElementById('fanta').innerHTML = vFanta(); }
 });
 window.addEventListener('hashchange', () => { if (D) show(location.hash.slice(1)); });
-const FONTE = {'statistiche': 'Understat', 'fantacalcio.it': 'Fantacalcio.it', 'sito': 'pubblicazione del sito'};
+const FONTE = {'statistiche': 'Understat', 'fantacalcio.it': 'Fantacalcio.it', 'sito': 'pubblicazione del sito',
+               'storico': 'copia dello storico'};
 function stamp(E) {
   let h = `Fotografia del ${day(D.generatedAt)}<br>statistiche del ${D.statsAt ? day(D.statsAt) : '–'}`;
   if (E && E.at) {

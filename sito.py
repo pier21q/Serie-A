@@ -3,7 +3,8 @@
 GitHub Pages fa solo da vetrina, i dati li prende e li calcola l'app. Il sito sta nel ramo "sito" del
 repository e lo aggiorna GitHub Actions ogni 15 minuti, anche con il Mac spento (vedi server.py --cloud e
 .github/workflows/aggiorna.yml). Il commit è sempre uno solo, sovrascritto ogni volta, così il repository
-non cresce. Lo stesso vale per il ramo "dati", da cui riparte ogni aggiornamento.
+non cresce. Lo stesso vale per il ramo "dati", da cui riparte ogni aggiornamento. Il ramo "storico" invece
+tiene una copia al giorno dello storico dei pronostici, con tutte le versioni.
 
     python sito.py codice   carica nel ramo main il codice dell'app (da rifare dopo ogni modifica)
     python sito.py dati     carica nel ramo "dati" i dati del Mac, al posto di quelli su GitHub
@@ -135,6 +136,24 @@ def pubblica(site, branches=("main",), lease=False):
     salva(site)
     code, out = git(site, "push", "-q", "--force-with-lease" if lease else "-f", "origin", *[f"HEAD:{b}" for b in branches])
     return code == 0, out
+
+
+def copia_storico(repo, src, msg, branch="storico", name="storico.json"):
+    """Aggiunge una versione di src al ramo `branch`, che al contrario di "dati" tiene tutte le versioni.
+    Usa il repository già scaricato in `repo` (e le sue credenziali), senza toccarne i file."""
+    env = dict(os.environ, GIT_TERMINAL_PROMPT="0")
+    run = lambda *a, inp=None: subprocess.run(["git", "-C", str(repo), *a], input=inp, capture_output=True, text=True,
+                                             timeout=90, env=env)
+    parent = run("rev-parse", "FETCH_HEAD").stdout.strip() if run("fetch", "-q", "--depth=1", "origin", branch).returncode == 0 else None
+    blob = run("hash-object", "-w", str(src)).stdout.strip()
+    if parent and run("rev-parse", f"{parent}:{name}").stdout.strip() == blob:
+        return True, "Storico già salvato"
+    tree = run("mktree", inp=f"100644 blob {blob}\t{name}\n").stdout.strip()
+    commit = run("commit-tree", tree, *(["-p", parent] if parent else []), "-m", msg).stdout.strip()
+    if not commit:
+        return False, "Copia dello storico non creata"
+    r = run("push", "-q", "origin", f"{commit}:refs/heads/{branch}")
+    return r.returncode == 0, "Copia dello storico salvata" if r.returncode == 0 else (r.stdout + r.stderr).strip()
 
 
 def pubblica_codice(remote):

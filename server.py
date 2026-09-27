@@ -1219,6 +1219,23 @@ def cloud_state_push():
     return ok
 
 
+def history_backup():
+    """Una volta al giorno: copia dello storico dei pronostici nel ramo "storico", che tiene tutte le versioni.
+    È l'unico dato che non si può ricreare, e nel ramo "dati" viene sovrascritto a ogni giro."""
+    today = time.strftime("%Y-%m-%d")
+    if EXTRA.get("storicoDay") == today or not HISTORY_FILE.exists():
+        return
+    ok, out = sito.copia_storico(DATA_DIR, HISTORY_FILE, f"Storico dei pronostici del {time.strftime('%d/%m/%Y')}")
+    if ok:
+        EXTRA["storicoDay"] = today
+        save_json(EXTRA_FILE, EXTRA)
+        STATUS.pop("err_storico", None)
+        log(out)
+    else:
+        STATUS["err_storico"] = out[-200:]
+        log(f"Copia dello storico non salvata: {out[-200:]}")
+
+
 async def cloud_main():
     """Un aggiornamento su GitHub Actions, senza pagina web: dati, sito se è cambiato qualcosa, salvataggio."""
     HTTP["espn"] = aiohttp.ClientSession()
@@ -1242,6 +1259,7 @@ async def cloud_main():
         await HTTP["web"].close()
     if CLOUD_RUN.get("stop"):
         return 1
+    await asyncio.to_thread(history_backup)
     return 0 if await asyncio.to_thread(cloud_state_push) else 1
 
 
