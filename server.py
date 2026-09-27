@@ -71,6 +71,7 @@ PORT = int(os.environ.get("SERIEA_PORT", 8765))
 ESPN_SITE = os.environ.get("SERIEA_ESPN", "https://site.api.espn.com/apis/site/v2/sports/soccer/ita.1")
 ESPN_STAND = os.environ.get("SERIEA_ESPN_STAND", "https://site.api.espn.com/apis/v2/sports/soccer/ita.1/standings")
 UA = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36"
+WIKI_UA = "SerieALive/1.0 (https://github.com/pier21q/Serie-A)"   # come chiede Wikipedia ai programmi
 DATA_VERSION = 4   # 4: statistiche da ESPN, Understat e Fantacalcio.it (non più Sofascore)
 
 # ESPN
@@ -559,8 +560,8 @@ def update_history():
 
 # ---------- fonti di riserva (fantacalcio.it, Wikipedia, ESPN) ----------
 
-async def web_text(url):
-    async with HTTP["web"].get(url, timeout=aiohttp.ClientTimeout(total=30)) as r:
+async def web_text(url, headers=None):
+    async with HTTP["web"].get(url, headers=headers, timeout=aiohttp.ClientTimeout(total=30)) as r:
         if r.status != 200:
             raise RuntimeError(f"{urlsplit(url).netloc} HTTP {r.status}")
         return await r.text()
@@ -642,7 +643,8 @@ async def fantacalcio_step(d, now):
 
 
 async def wiki_table(year):
-    return fonti.parse_allenatori(await web_text(fonti.WIKI.format(a=year, b=year + 1)))
+    # Wikipedia respinge i finti browser che arrivano dai computer di GitHub: vuole un programma che dica chi è
+    return fonti.parse_allenatori(await web_text(fonti.WIKI.format(a=year, b=year + 1), headers={"User-Agent": WIKI_UA}))
 
 
 async def wiki_coaches(d, now):

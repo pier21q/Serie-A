@@ -159,7 +159,7 @@ def pubblica_codice(remote):
             return True, "Il codice su GitHub è già aggiornato"
         git(dest, "commit", "-q", "-m", "Aggiorna il codice di Serie A Live")
         code, out = git(dest, "push", "-q", "origin", "HEAD:main")
-        return code == 0, out or "Codice caricato su GitHub"
+        return code == 0, "Codice caricato su GitHub" if code == 0 else out
 
 
 def pubblica_dati(data_dir, remote):
@@ -192,7 +192,7 @@ def pubblica_dati(data_dir, remote):
         git(dest, "remote", "add", "origin", remote)
         salva(dest)
         code, out = git(dest, "push", "-q", "-f", "origin", "HEAD:dati")
-        return code == 0, out or "Dati caricati su GitHub"
+        return code == 0, "Dati caricati su GitHub" if code == 0 else out
 
 
 if __name__ == "__main__":
