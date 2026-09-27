@@ -82,6 +82,7 @@ tr:last-child td{border-bottom:0}
 .ev .evn b{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .ev .evn small{color:var(--muted);font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .ev .evv{font-family:var(--display);font-weight:700;font-size:20px;flex:none}
+.ev .uff{color:var(--good);font-weight:600}
 .xi{display:grid;gap:8px;margin-top:12px}
 .xrow{display:flex;flex-wrap:wrap;gap:6px;align-items:center}
 .role{display:inline-grid;place-items:center;width:22px;height:22px;border-radius:50%;font-weight:700;font-size:11px;color:#fff;flex:none}
@@ -686,9 +687,9 @@ function vEvidenza() {
     <p class="small muted">${esc(c.d)}.</p>
     <div class="list evl">${c.rows.map((r, i) => `<a class="card cardlink ev" href="#p${r.fid}">
       <span class="rk num">${i + 1}</span>${crest(r.team, true)}
-      <span class="evn"><b>${esc(r.name)}</b><small>${nm(r.team)} ${r.home ? 'vs' : '@'} ${nm(r.opp)} · ${day(r.start)}</small></span>
+      <span class="evn"><b>${esc(r.name)}</b><small>${nm(r.team)} ${r.home ? 'vs' : '@'} ${nm(r.opp)} · ${day(r.start)}${r.official ? ' · <span class="uff">ufficiale</span>' : ''}</small></span>
       <span class="evv num">${val(r)}</span></a>`).join('')}</div>
-    <p class="small muted">Solo i titolari previsti (formazioni: ${esc((E.sources || []).join(', '))}). I numeri tengono conto dei minuti previsti, dell'avversario, di chi marca chi e dell'arbitro, e sommano ai totali realistici di ogni squadra. Tocca un giocatore per aprire la sua partita.</p>`;
+    <p class="small muted">Solo i titolari previsti. I numeri tengono conto dei minuti previsti, dell'avversario, di chi marca chi e dell'arbitro, e sommano ai totali realistici di ogni squadra. Si aggiornano con le probabili formazioni e poi con quelle ufficiali, circa un'ora prima di ogni partita: chi ha già la formazione ufficiale è segnato con «ufficiale». Tocca un giocatore per aprire la sua partita.</p>`;
 }
 const VIEWS = {giornata: vGiornata, evidenza: vEvidenza, classifica: vClassifica, fanta: vFanta, squadre: vSquadre, storico: vStorico};
 function show(name) {

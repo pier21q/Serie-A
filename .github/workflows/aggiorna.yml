@@ -2,7 +2,8 @@
 # Ogni 30 minuti: riscarica tutte le fonti (ESPN, Understat, Fantacalcio.it, Wikipedia), ricalcola statistiche e
 # pronostici, ripubblica il sito nel ramo "sito" (anche se non è cambiato niente) e salva i dati nel ramo "dati".
 # GitHub a volte ritarda o salta le esecuzioni programmate: per questo parte ogni 15 minuti e aggiorna solo se
-# l'ultimo aggiornamento ha più di 25 minuti.
+# l'ultimo aggiornamento ha più di 25 minuti. Nell'ora e mezza prima di ogni partita invece aggiorna ogni 15
+# minuti, per prendere subito le formazioni ufficiali.
 # Il file originale sta nella cartella dell'app sul Mac (cloud/aggiorna.yml): lo carica "python sito.py codice".
 name: Aggiorna Serie A Live
 
@@ -40,12 +41,21 @@ jobs:
         run: |
           python3 - <<'PY'
           import json, os, time
+          now = time.time()
           try:
               at = json.load(open("dati/esecuzione.json"))["at"]
           except Exception:
               at = 0
-          due = os.environ["GITHUB_EVENT_NAME"] != "schedule" or time.time() - at >= 25 * 60
-          print(f"Ultimo aggiornamento {int((time.time() - at) // 60)} minuti fa: " + ("si aggiorna" if due else "niente da fare"))
+          try:
+              nxt = json.load(open("dati/cache/data.json")).get("next") or []
+          except Exception:
+              nxt = []
+          # nell'ora e mezza prima di una partita si aggiorna ogni 15 minuti: le formazioni ufficiali escono circa
+          # un'ora prima, e pronostici e giocatori in evidenza si rifanno con quelle
+          lineups = any(e.get("status") == "notstarted" and -300 <= e.get("start", 0) - now <= 95 * 60 for e in nxt)
+          due = os.environ["GITHUB_EVENT_NAME"] != "schedule" or now - at >= 25 * 60 or (lineups and now - at >= 10 * 60)
+          print(f"Ultimo aggiornamento {int((now - at) // 60)} minuti fa" + (", partita in arrivo" if lineups else "")
+                + (": si aggiorna" if due else ": niente da fare"))
           open(os.environ["GITHUB_OUTPUT"], "a").write(f"ok={'true' if due else 'false'}\n")
           PY
       - name: Codice dell'app

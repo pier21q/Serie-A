@@ -15,14 +15,20 @@ import re
 import time
 import unicodedata
 
-K_PRIOR = 6            # peso della stagione scorsa sulle squadre, in partite equivalenti
-K_PRIOR_NEW = 3        # con un allenatore nuovo la stagione scorsa pesa meno
+K_PRIOR = 12           # peso della stagione scorsa sulle squadre, in partite equivalenti (un buon inizio conta, ma poco)
+K_PRIOR_NEW = 6        # con un allenatore nuovo la stagione scorsa pesa meno
+SOFT_CAP = .10         # tetto complessivo di forma, accoppiamenti tattici, stili e ritmo sui gol attesi
+GOAL_SHARE_CAP, ASSIST_SHARE_CAP = .40, .30   # quota massima dei gol e degli assist dei titolari per un giocatore
+# taratura degli attaccanti titolari sulle partite reali (confronto del 28/09/2026 su 50 partite)
+F_CALIB = {"shots": .9, "sot": .87, "fouls": .85, "fouled": .88, "lamG": .85, "lamA": .65}
 STYLE_EFF_CAP, TEMPO_CAP, CARDS_CAP = .06, .08, .2   # tetti degli effetti dello scontro di stili
 EVID_K, EVID_CAP = 30, .05                            # precedenti tra stili: peso del campione e tetto
 K_LEAGUE = 40          # peso della stagione scorsa sulle medie di campionato, in partite
 PLAYER_PRIOR_MIN = 450  # peso del dato di base nelle statistiche per 90' dei giocatori, in minuti
+RARE_PRIOR_MIN = 1200   # per gol, assist, xG e xA (eventi rari): circa 13 partite
+RARE_KEYS = {"goals", "assists", "expectedGoals", "expectedAssists"}
 RHO = -0.08            # correzione Dixon-Coles
-CALIB = 0.85           # le forze di attacco e difesa vengono avvicinate un po' alla media (evita pronostici troppo netti)
+CALIB = 0.80           # le forze di attacco e difesa vengono avvicinate un po' alla media (evita pronostici troppo netti)
 FORM_EFF = 0.05        # effetto massimo della forma recente sui gol attesi
 PAIR_ADV, PAIR_NEUT, PAIR_CAP = .03, -.02, .08   # accoppiamenti tattici: effetto per vantaggio, per neutralizzazione, tetto
 MAXG = 10
@@ -947,13 +953,36 @@ def anchor_team(A, projs, tid, oid, lam_team):
         "fouled": (avg(t["m"].get("fk"), L.get("fk")) or 0)
                   * clamp(((opp_fouls or 1) / (L.get("foul") or opp_fouls or 1)) ** .6, .7, 1.4) * share,
     }
+    # falli subiti: le punizioni a favore contano anche falli non attribuiti ai giocatori, si usa il rapporto reale
+    pl_fouled = sum(num(p.get("wasFouled")) or 0 for p in A["players"].values())
+    tm_fk = sum((x["m"].get("fk") or 0) * (x.get("n") or 0) for x in A["T"].values())
+    if pl_fouled and tm_fk:
+        targets["fouled"] *= clamp(pl_fouled / tm_fk, .6, 1)
     for k, target in targets.items():
         have = [p for p in projs if p.get(k)]
+        for p in have:   # taratura sulle partite reali: gli attaccanti uscivano sovrastimati
+            if p.get("pos") == "F":
+                p[k] *= F_CALIB.get(k, 1)
         tot = sum(p[k] for p in have)
         if not tot or not target:
             continue
         for p in have:
             p[k] *= target / tot
+    # nessuno si prende più del 40% dei gol previsti dei titolari (30% degli assist): nella realtà quasi nessuno ci arriva
+    for k, cap in (("lamG", GOAL_SHARE_CAP), ("lamA", ASSIST_SHARE_CAP)):
+        have = [p for p in projs if p.get(k)]
+        tot = sum(p[k] for p in have)
+        for _ in range(3):
+            over = [p for p in have if p[k] > cap * tot + 1e-12]
+            rest = [p for p in have if p not in over]
+            rs = sum(p[k] for p in rest)
+            if not over or not rs:
+                break
+            excess = sum(p[k] - cap * tot for p in over)
+            for p in over:
+                p[k] = cap * tot
+            for p in rest:
+                p[k] += excess * p[k] / rs
     for p in projs:
         if p.get("lamG") is not None:
             p["pGoal"] = 1 - math.exp(-p["lamG"])
@@ -974,13 +1003,15 @@ def evidenza(items, n=10):
     """Giocatori in evidenza della giornata: per ogni statistica prevista, i primi 10 fra tutte le partite.
     items: [(partita, pronostico)]."""
     rows = [(p, e, side) for e, P in items for side in ("home", "away") for p in P["players"][side]]
+    P_of = {e["id"]: P for e, P in items}
     cats = []
     for k, label, unit, desc in EVIDENZA:
         top = sorted((r for r in rows if r[0].get(k) is not None and r[0].get("pos") != "G"), key=lambda r: -r[0][k])[:n]
         cats.append({"k": k, "l": label, "u": unit, "d": desc, "rows": [
             {"id": p["id"], "name": (p.get("name") or "").strip(), "pos": p.get("pos"), "min": p.get("min"),
              "team": str(e[side]["id"]), "opp": str(e["away" if side == "home" else "home"]["id"]), "home": side == "home",
-             "fid": e["id"], "start": e.get("start"), "v": round(p[k], 3)} for p, e, side in top]})
+             "fid": e["id"], "start": e.get("start"), "v": round(p[k], 3),
+             "official": P_of[e["id"]]["lineups"][side]["source"] == "ufficiale"} for p, e, side in top]})
     return {"round": items[0][0].get("round") if items else None, "cats": cats,
             "sources": sorted({P["lineups"][s]["source"] for _, P in items for s in ("home", "away")})}
 
@@ -1121,12 +1152,18 @@ def estimate_xi(A, tid, missing_ids):
 
 
 def prate(A, p, key):
-    """Statistica per 90' di un giocatore, avvicinata al dato di base (stagione scorsa o media di ruolo)."""
+    """Statistica per 90' di un giocatore, avvicinata al dato di base (stagione scorsa o media di ruolo).
+    Gol, assist, xG e xA sono rari e casuali: servono più minuti prima di fidarsi del dato del giocatore, e
+    anche la stagione scorsa, se breve, viene avvicinata alla media del ruolo."""
     pos = p.get("pos") or "M"
-    base = (A["posavg"].get(pos) or {}).get(key)
+    pos_base = (A["posavg"].get(pos) or {}).get(key)
+    rare = key in RARE_KEYS
+    base = pos_base
     pp = A["prior_players"].get(p.get("id"))
     if pp and (pp.get("minutesPlayed") or 0) >= 450 and num(pp.get(key)) is not None:
-        base = pp[key] / pp["minutesPlayed"] * 90
+        pm = pp["minutesPlayed"]
+        base = (pp[key] + pos_base * RARE_PRIOR_MIN / 90) / ((pm + RARE_PRIOR_MIN) / 90) if rare and pos_base is not None \
+            else pp[key] / pm * 90
     cnt, m = num(p.get(key)), num(p.get("minutesPlayed")) or 0
     if cnt is None:
         cnt, m = 0.0, 0.0
@@ -1134,20 +1171,27 @@ def prate(A, p, key):
             return None
     if base is None:
         base = cnt / m * 90 if m else 0.0
-    return (cnt + base * PLAYER_PRIOR_MIN / 90) / ((m + PLAYER_PRIOR_MIN) / 90)
+    k = RARE_PRIOR_MIN if rare else PLAYER_PRIOR_MIN
+    return (cnt + base * k / 90) / ((m + k) / 90)
+
+
+STARTER_MIN = {"G": 90, "D": 84, "M": 77, "F": 74}   # minuti medi reali dei titolari in Serie A, per ruolo
 
 
 def exp_minutes(p, starter):
+    """Minuti attesi: metà dal giocatore, metà dalla media reale dei titolari del suo ruolo (centrocampisti e
+    attaccanti vengono sostituiti spesso)."""
     if not starter:
         return 12.0
+    pos_min = STARTER_MIN.get(p.get("pos") or "M", 78)
     apps, started, mins = p.get("appearances") or 0, p.get("matchesStarted"), p.get("minutesPlayed") or 0
     if started:
         avg = (mins - 20 * max(0, apps - started)) / started
     elif apps:
         avg = mins / apps * 1.15
     else:
-        return 75.0
-    return clamp(avg, 55, 90)
+        return float(pos_min)
+    return clamp(.5 * clamp(avg, 55, 90) + .5 * pos_min, 55, 90)
 
 
 def player_projections(A, tid, oid, xi, lay, opp_lay, opp_xi, duels, lam_team, lam_opp, ref_factor):
@@ -1386,6 +1430,17 @@ def predict(A, hid, aid, ev=None, extra=None):
             adj.append({"team": int(tid), "what": "Ritmo della partita (scontro di stili)", "pct": clash["tempo"] * 100})
     lh *= (1 + clash["eff"]["h"]) * (1 + clash["tempo"])
     la *= (1 + clash["eff"]["a"]) * (1 + clash["tempo"])
+    # forma, accoppiamenti, stili e ritmo tendono a premiare la squadra più forte: insieme non spostano i gol
+    # attesi più di SOFT_CAP (come nelle quote reali, dove questi fattori contano poco)
+    for tid, lam, base in ((hid, lh, base_h), (aid, la, base_a)):
+        capped = clamp(lam, base * (1 - SOFT_CAP), base * (1 + SOFT_CAP))
+        if abs(capped - lam) > 1e-9:
+            adj.append({"team": int(tid), "what": f"Tetto alle correzioni qui sopra (insieme al massimo ±{SOFT_CAP * 100:.0f}%)",
+                        "pct": (capped / lam - 1) * 100})
+        if tid == hid:
+            lh = capped
+        else:
+            la = capped
 
     # formazioni e assenti
     lu = (extra or {}).get("lineups")
