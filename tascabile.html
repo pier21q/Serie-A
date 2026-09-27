@@ -75,6 +75,13 @@ tr:last-child td{border-bottom:0}
 .seg{display:flex;flex-wrap:wrap;gap:6px}
 .seg button{font:inherit;font-size:13px;border:1px solid var(--line);background:var(--surface);color:var(--ink2);border-radius:999px;padding:5px 12px;cursor:pointer}
 .seg button[aria-pressed="true"]{background:var(--ink);color:var(--ground);border-color:var(--ink)}
+.evl{gap:6px;margin-top:10px}
+.cardlink.ev{display:flex;align-items:center;gap:10px;padding:10px 14px}
+.ev .rk{width:1.5em;text-align:right;color:var(--muted);font-weight:600;flex:none}
+.ev .evn{flex:1;min-width:0;display:grid}
+.ev .evn b{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ev .evn small{color:var(--muted);font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ev .evv{font-family:var(--display);font-weight:700;font-size:20px;flex:none}
 .xi{display:grid;gap:8px;margin-top:12px}
 .xrow{display:flex;flex-wrap:wrap;gap:6px;align-items:center}
 .role{display:inline-grid;place-items:center;width:22px;height:22px;border-radius:50%;font-weight:700;font-size:11px;color:#fff;flex:none}
@@ -180,13 +187,14 @@ a.plain{color:inherit;text-decoration:none}
 <header><div class="wrap">
   <div class="bar1"><div class="logo">Serie A <span>tascabile</span></div><div class="stamp" id="stamp"></div></div>
   <nav id="nav" aria-label="Sezioni">
-    <a href="#giornata" data-s="giornata">Giornata</a><a href="#classifica" data-s="classifica">Classifica</a>
+    <a href="#giornata" data-s="giornata">Giornata</a><a href="#evidenza" data-s="evidenza">In evidenza</a><a href="#classifica" data-s="classifica">Classifica</a>
     <a href="#fanta" data-s="fanta">Fanta</a><a href="#squadre" data-s="squadre">Squadre</a><a href="#storico" data-s="storico">Storico</a>
   </nav>
 </div></header>
 
 <main class="wrap">
   <section id="giornata"></section>
+  <section id="evidenza" hidden></section>
   <section id="classifica" hidden></section>
   <section id="fanta" hidden></section>
   <section id="squadre" hidden></section>
@@ -666,7 +674,23 @@ function vSquadra(id) {
   </div>`;
 }
 
-const VIEWS = {giornata: vGiornata, classifica: vClassifica, fanta: vFanta, squadre: vSquadre, storico: vStorico};
+let esel = 0;   // voce scelta in "In evidenza"
+function vEvidenza() {
+  const E = D.evidenza;
+  if (!E || !(E.cats || []).length) return `<h2>In evidenza</h2><p class="lead">I giocatori in evidenza compaiono quando è in programma la prossima giornata.</p>`;
+  const c = E.cats[esel] || E.cats[0];
+  const val = r => c.u === '%' ? pc(r.v) : fx(r.v, 1);
+  return `<h2>In evidenza <small>${E.round ? E.round + 'ª giornata' : 'prossima giornata'}</small></h2>
+    <p class="lead">Chi spicca nelle statistiche previste per le partite della giornata: per ogni voce i primi 10.</p>
+    <div class="seg" role="group" aria-label="Statistica">${E.cats.map((x, i) => `<button type="button" data-e="${i}" aria-pressed="${x === c}">${esc(x.l)}</button>`).join('')}</div>
+    <p class="small muted">${esc(c.d)}.</p>
+    <div class="list evl">${c.rows.map((r, i) => `<a class="card cardlink ev" href="#p${r.fid}">
+      <span class="rk num">${i + 1}</span>${crest(r.team, true)}
+      <span class="evn"><b>${esc(r.name)}</b><small>${nm(r.team)} ${r.home ? 'vs' : '@'} ${nm(r.opp)} · ${day(r.start)}</small></span>
+      <span class="evv num">${val(r)}</span></a>`).join('')}</div>
+    <p class="small muted">Solo i titolari previsti (formazioni: ${esc((E.sources || []).join(', '))}). I numeri tengono conto dei minuti previsti, dell'avversario, di chi marca chi e dell'arbitro, e sommano ai totali realistici di ogni squadra. Tocca un giocatore per aprire la sua partita.</p>`;
+}
+const VIEWS = {giornata: vGiornata, evidenza: vEvidenza, classifica: vClassifica, fanta: vFanta, squadre: vSquadre, storico: vStorico};
 function show(name) {
   const m = /^([ps])(\d+)$/.exec(name || '');   // #p123 = scheda della partita, #s123 = scheda della squadra
   const view = m ? null : VIEWS[name] ? name : 'giornata';
@@ -685,6 +709,8 @@ function show(name) {
 document.addEventListener('click', e => {
   const b = e.target.closest('[data-f]');
   if (b) { fsel = +b.dataset.f; document.getElementById('fanta').innerHTML = vFanta(); }
+  const v = e.target.closest('[data-e]');
+  if (v) { esel = +v.dataset.e; document.getElementById('evidenza').innerHTML = vEvidenza(); }
 });
 window.addEventListener('hashchange', () => { if (D) show(location.hash.slice(1)); });
 const FONTE = {'statistiche': 'Understat', 'fantacalcio.it': 'Fantacalcio.it', 'sito': 'pubblicazione del sito',

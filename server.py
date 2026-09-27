@@ -540,11 +540,18 @@ def analysis():
            sum(1 for v in (PRIOR.get("refCards") or {}).values() if "roles" in v) // 20)
     if ANALYSIS["key"] != key:
         A = model.build(d, PRIOR, MATCHES, coaches=COACHES, role_rows=role_rows(d))
-        fixtures = {}
-        for e in d.get("next") or []:
-            if e.get("status") == "notstarted" and str(e["home"]["id"]) in A["T"] and str(e["away"]["id"]) in A["T"]:
-                fixtures[str(e["id"])] = model.summary(model.predict(A, e["home"]["id"], e["away"]["id"], e, MATCHES.get(str(e["id"]))))
-        ANALYSIS.update(key=key, A=A, pub=model.public_analysis(A), fixtures=fixtures)
+        nxt = sorted((e for e in d.get("next") or [] if e.get("status") == "notstarted"
+                      and str(e["home"]["id"]) in A["T"] and str(e["away"]["id"]) in A["T"]), key=lambda e: e["start"])
+        # giocatori in evidenza: le partite della prossima giornata (o dei 4 giorni dopo la prima, se manca la giornata)
+        same = ((lambda e: e.get("round") == nxt[0].get("round")) if nxt and nxt[0].get("round") is not None
+                else (lambda e: e["start"] - nxt[0]["start"] < 4 * 86400))
+        fixtures, items = {}, []
+        for e in nxt:
+            P = model.predict(A, e["home"]["id"], e["away"]["id"], e, MATCHES.get(str(e["id"])))
+            fixtures[str(e["id"])] = model.summary(P)
+            if same(e):
+                items.append((e, P))
+        ANALYSIS.update(key=key, A=A, pub=model.public_analysis(A), fixtures=fixtures, evidenza=model.evidenza(items))
     return ANALYSIS
 
 
@@ -1314,7 +1321,7 @@ def snapshot():
         "generatedAt": time.time(), "statsAt": d.get("fullAt"), "season": d.get("season"), "errors": source_errors(),
         "standings": [{"team": str(r["team"]["id"]), "pos": r["pos"], "p": r["p"], "w": r["w"], "d": r["d"], "l": r["l"],
                        "gf": r["gf"], "ga": r["ga"], "pts": r["pts"], "zone": r.get("zone")} for r in d["standings"]["total"]],
-        "teams": teams, "fixtures": fixtures, "squads": squads,
+        "teams": teams, "fixtures": fixtures, "squads": squads, "evidenza": an["evidenza"],
         "metrics": pub["metrics"], "styleLabels": pub["styleLabels"], "N": len(A["T"]), "priorYear": A.get("priorYear"),
         "played": [{"home": str(e["home"]["id"]), "away": str(e["away"]["id"]), "hs": e["hs"], "as": e["as"], "start": e["start"],
                     "round": e.get("round")} for e in (d.get("played") or []) if e.get("hs") is not None],
@@ -1348,6 +1355,7 @@ async def h_data(_):
                     "referee": (x.get("referee") or {}).get("name")}
               for eid, x in MATCHES.items() if not x.get("final")}
     return web.json_response({**STATE["data"], "analysis": an["pub"], "fixtures": an["fixtures"], "extras": extras,
+                              "evidenza": an["evidenza"],
                               "fantaTeams": len(FANTA.get("teams", [])), "status": status_public(), "now": time.time()})
 
 

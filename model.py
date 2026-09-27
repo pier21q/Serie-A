@@ -920,6 +920,71 @@ def card_context(A, tid, oid):
     return poss_f * fk_f, poss, poss_f, fk_f
 
 
+def anchor_team(A, projs, tid, oid, lam_team):
+    """I numeri previsti dei titolari sommano a quelli realistici della squadra in questa partita, e i giocatori
+    se li dividono secondo i loro numeri per 90' e i minuti previsti:
+      - gol e assist: dai gol attesi della squadra (una parte la segnano i cambi, e ci sono gli autogol);
+      - tiri e tiri in porta: quanti ne fa di solito, di più o di meno secondo quanto attaccherà in questa partita;
+      - falli fatti: la sua media, con il possesso atteso e le punizioni che si procura l'avversario;
+      - falli subiti: la sua media, con i falli che fa l'avversario.
+    Le medie di squadra nelle prime giornate sono avvicinate a quelle della lega."""
+    L, t, o = A["L"], A["T"][tid], A["T"][oid]
+    share = min(.88, sum(p["min"] for p in projs) / 990)   # con 5 cambi i titolari giocano circa l'88% dei minuti
+    rel = clamp(lam_team / (t["xgBase"] or L["mu"]), .5, 2) ** .6   # più o meno attacco del solito
+    n = t.get("n") or 0
+    avg = lambda v, lg: (n * v + 5 * lg) / (n + 5) if v is not None and lg else lg
+    s = t.get("s") or {}
+    shots = s["shots"] / s["matches"] if s.get("shots") and s.get("matches") else None
+    goals = sum(num(p.get("goals")) or 0 for p in A["players"].values())
+    ast_rate = sum(num(p.get("assists")) or 0 for p in A["players"].values()) / goals if goals else .7
+    opp_fouls = avg(o["m"].get("foul"), L.get("foul")) if (o.get("n") or 0) else L.get("foul")
+    targets = {
+        "lamG": lam_team * .97 * share,
+        "lamA": lam_team * ast_rate * share,
+        "shots": (avg(shots, L.get("shA")) or 0) * rel * share,
+        "sot": (avg(t["m"].get("sot"), L.get("sotA")) or 0) * rel * share,
+        "fouls": (avg(t["m"].get("foul"), L.get("foul")) or 0) * card_context(A, tid, oid)[0] * share,
+        "fouled": (avg(t["m"].get("fk"), L.get("fk")) or 0)
+                  * clamp(((opp_fouls or 1) / (L.get("foul") or opp_fouls or 1)) ** .6, .7, 1.4) * share,
+    }
+    for k, target in targets.items():
+        have = [p for p in projs if p.get(k)]
+        tot = sum(p[k] for p in have)
+        if not tot or not target:
+            continue
+        for p in have:
+            p[k] *= target / tot
+    for p in projs:
+        if p.get("lamG") is not None:
+            p["pGoal"] = 1 - math.exp(-p["lamG"])
+        if p.get("lamA") is not None:
+            p["pAssist"] = 1 - math.exp(-p["lamA"])
+
+
+EVIDENZA = [("pGoal", "Marcatori", "%", "Probabilità di segnare almeno un gol"),
+            ("pAssist", "Assist", "%", "Probabilità di fare almeno un assist"),
+            ("shots", "Tiri", "n", "Tiri previsti nella partita"),
+            ("sot", "Tiri in porta", "n", "Tiri in porta previsti nella partita"),
+            ("fouls", "Falli commessi", "n", "Falli che dovrebbe commettere"),
+            ("fouled", "Falli subiti", "n", "Falli che dovrebbe subire"),
+            ("pYellow", "Ammonizione", "%", "Probabilità di essere ammonito")]
+
+
+def evidenza(items, n=10):
+    """Giocatori in evidenza della giornata: per ogni statistica prevista, i primi 10 fra tutte le partite.
+    items: [(partita, pronostico)]."""
+    rows = [(p, e, side) for e, P in items for side in ("home", "away") for p in P["players"][side]]
+    cats = []
+    for k, label, unit, desc in EVIDENZA:
+        top = sorted((r for r in rows if r[0].get(k) is not None and r[0].get("pos") != "G"), key=lambda r: -r[0][k])[:n]
+        cats.append({"k": k, "l": label, "u": unit, "d": desc, "rows": [
+            {"id": p["id"], "name": (p.get("name") or "").strip(), "pos": p.get("pos"), "min": p.get("min"),
+             "team": str(e[side]["id"]), "opp": str(e["away" if side == "home" else "home"]["id"]), "home": side == "home",
+             "fid": e["id"], "start": e.get("start"), "v": round(p[k], 3)} for p, e, side in top]})
+    return {"round": items[0][0].get("round") if items else None, "cats": cats,
+            "sources": sorted({P["lineups"][s]["source"] for _, P in items for s in ("home", "away")})}
+
+
 def anchor_cards(A, projs, tid, oid, card_f):
     """I gialli attesi dei titolari restano vicini a quanti ne prende di solito la squadra (con l'avversario,
     l'arbitro e l'intensità della partita): i singoli giocatori si dividono quel totale."""
@@ -1376,6 +1441,8 @@ def predict(A, hid, aid, ev=None, extra=None):
     proj_a = player_projections(A, aid, hid, xis["a"], lay_a, lay_h, xis["h"], duels, la, lh, card_f)
     anchor_cards(A, proj_h, hid, aid, card_f)
     anchor_cards(A, proj_a, aid, hid, card_f)
+    anchor_team(A, proj_h, hid, aid, lh)
+    anchor_team(A, proj_a, aid, hid, la)
     cards_h = sum(p["lamY"] or 0 for p in proj_h) + .15
     cards_a = sum(p["lamY"] or 0 for p in proj_a) + .15
     for p in proj_h + proj_a:
