@@ -26,6 +26,7 @@ import asyncio
 import json
 import os
 import re
+import shutil
 import signal
 import subprocess
 import sys
@@ -551,7 +552,8 @@ def analysis():
             fixtures[str(e["id"])] = model.summary(P)
             if same(e):
                 items.append((e, P))
-        ANALYSIS.update(key=key, A=A, pub=model.public_analysis(A), fixtures=fixtures, evidenza=model.evidenza(items))
+        ANALYSIS.update(key=key, A=A, pub=model.public_analysis(A), fixtures=fixtures, evidenza=model.evidenza(items),
+                        preds=items)
     return ANALYSIS
 
 
@@ -1378,6 +1380,130 @@ async def h_match(req):
     return web.json_response(model.predict(A, e["home"]["id"], e["away"]["id"], e, MATCHES.get(str(e["id"]))))
 
 
+# ---------- chat: domande a Claude sui dati dell'app (solo sul Mac) ----------
+
+CHAT_DIR = DATA_DIR / "chat"   # i dati per Claude, in file che può solo leggere e cercare
+CHAT = {"key": None, "lock": None}
+CHAT_PROMPT = """Sei l'assistente di Serie A Live, l'app di statistiche e pronostici di Serie A dell'utente (stagione {season}).
+Oggi è {today}. Rispondi in italiano, in modo chiaro e breve, per una persona che non è un tecnico.
+Usa SOLO i dati dei file JSON di questa cartella: parti da indice.json per sapere cosa c'è, poi leggi o cerca con Grep
+i file che servono. Non inventare numeri né notizie: se un dato non c'è, dillo. Quando dai un numero di'
+da dove viene (statistiche della stagione, pronostico dell'app, fonte). Probabilità e dati attesi sono stime del
+modello dell'app, non certezze. Per le partite di' se le formazioni sono probabili, stimate o ufficiali.
+Niente tabelle larghe: elenchi brevi o frasi."""
+
+
+def slug(s):
+    s = unicodedata.normalize("NFKD", str(s or "")).encode("ascii", "ignore").decode().lower()
+    return re.sub(r"[^a-z0-9]+", "-", s).strip("-")
+
+
+def chat_files():
+    """Scrive (quando cambiano i dati) i file che Claude legge per rispondere: indice, classifica, partite,
+    pronostici completi della prossima giornata, squadre, giocatori, in evidenza, fanta, storico."""
+    an = analysis()
+    if CHAT["key"] == an["key"] and (CHAT_DIR / "indice.json").exists():
+        return
+    d, A, pub = STATE["data"], an["A"], an["pub"]
+    name = lambda tid: (A["T"].get(str(tid)) or {}).get("team", {}).get("name") or str(tid)
+    CHAT_DIR.mkdir(parents=True, exist_ok=True)
+    for f in CHAT_DIR.glob("*.json"):
+        f.unlink()
+    files = {}
+
+    def put(fname, obj, what):
+        (CHAT_DIR / fname).write_text(json.dumps(_r(obj, 3), ensure_ascii=False, indent=1))
+        files[fname] = what
+
+    put("classifica.json", [{"pos": r["pos"], "squadra": r["team"]["name"], "punti": r["pts"], "giocate": r["p"], "V": r["w"],
+                             "N": r["d"], "P": r["l"], "gol_fatti": r["gf"], "gol_subiti": r["ga"]} for r in d["standings"]["total"]],
+        "classifica attuale")
+    put("risultati.json", [{"giornata": e.get("round"), "data": time.strftime("%d/%m/%Y", time.localtime(e["start"])),
+                            "partita": f"{e['home']['name']} - {e['away']['name']}", "risultato": f"{e['hs']}-{e['as']}"}
+                           for e in d.get("played") or [] if e.get("hs") is not None], "risultati delle partite giocate")
+    put("calendario.json", [{"giornata": e.get("round"), "data": time.strftime("%d/%m/%Y %H:%M", time.localtime(e["start"])),
+                             "partita": f"{e['home']['name']} - {e['away']['name']}",
+                             "pronostico": {k: (an["fixtures"].get(str(e["id"])) or {}).get(k) for k in ("p1", "px", "p2", "pick", "lh", "la")}}
+                            for e in sorted(d.get("next") or [], key=lambda e: e["start"]) if e.get("status") == "notstarted"][:40],
+        "prossime partite con il pronostico sintetico (p1/px/p2 = probabilità di 1, X, 2; lh/la = gol attesi)")
+    for e, P in an.get("preds") or []:
+        fname = f"partita-{slug(e['home']['name'])}-{slug(e['away']['name'])}.json"
+        put(fname, {"partita": f"{e['home']['name']} - {e['away']['name']}", "giornata": e.get("round"),
+                    "data": time.strftime("%d/%m/%Y %H:%M", time.localtime(e["start"])), "pronostico": P},
+            f"pronostico completo di {e['home']['name']} - {e['away']['name']} (probabilità, gol attesi, formazioni e loro fonte, "
+            f"statistiche previste per ogni giocatore, rischio giallo, scontro di stili, arbitro, assenti)")
+    teams_players = {}
+    for p in d.get("players") or []:
+        teams_players.setdefault(str(p.get("teamId")), []).append(p)
+    keys = ("minutesPlayed", "appearances", "matchesStarted", "goals", "assists", "expectedGoals", "expectedAssists", "totalShots",
+            "shotsOnTarget", "keyPasses", "fouls", "wasFouled", "yellowCards", "redCards", "rating", "fantamedia")
+    put("giocatori.json", [dict({"nome": p.get("name"), "squadra": name(p.get("teamId")), "ruolo": p.get("pos")},
+                                **{k: p.get(k) for k in keys if p.get(k) is not None})
+                           for p in sorted(d.get("players") or [], key=lambda p: -(p.get("minutesPlayed") or 0))],
+        "statistiche della stagione di tutti i giocatori (ruolo G/D/M/F; rating = media voto Fantacalcio.it; fouls = falli "
+        "fatti, wasFouled = falli subiti)")
+    for tid, t in pub["teams"].items():
+        put(f"squadra-{slug(name(tid))}.json", {"squadra": name(tid), "analisi": t,
+                                                "giocatori": [p.get("name") for p in teams_players.get(tid, [])]},
+            f"analisi di {name(tid)}: statistiche e posizione in lega, stile, allenatore, su chi fa affidamento, forma")
+    put("in-evidenza.json", an["evidenza"], "giocatori in evidenza della prossima giornata (primi 10 per ogni voce)")
+    put("metriche.json", pub["metrics"], "spiegazione delle statistiche di squadra (chiavi usate nei file delle squadre)")
+    if FANTA.get("teams"):
+        put("fanta.json", model.fanta(an["A"], FANTA, d, MATCHES, SQUADS.get("players", {})),
+            "le squadre del fantacalcio dell'utente con i punti attesi dei giocatori")
+    put("storico.json", {"riepilogo": model.history_summary(HISTORY), "partite": list(HISTORY.get("matches", {}).values())[-40:]},
+        "storico dei pronostici dell'app e quanto ci ha azzeccato")
+    (CHAT_DIR / "indice.json").write_text(json.dumps({"aggiornato": time.strftime("%d/%m/%Y %H:%M"), "file": files},
+                                                      ensure_ascii=False, indent=1))
+    CHAT["key"] = an["key"]
+
+
+def claude_bin():
+    """Claude Code installato con l'app di Claude (la versione più recente)."""
+    found = sorted(Path.home().glob("Library/Application Support/Claude/claude-code/*/claude.app/Contents/MacOS/claude"),
+                   key=lambda p: p.stat().st_mtime)
+    return str(found[-1]) if found else shutil.which("claude")
+
+
+async def h_chat(req):
+    """Una domanda a Claude: legge solo i file della cartella chat e risponde. Risposte con il tuo account Claude."""
+    if not STATE["data"]:
+        return not_ready()
+    body = await req.json()
+    q = (body.get("q") or "").strip()[:2000]
+    if not q:
+        raise web.HTTPBadRequest()
+    exe = claude_bin()
+    if not exe:
+        return web.json_response({"error": "Non trovo Claude su questo Mac: serve l'app di Claude."})
+    CHAT["lock"] = CHAT["lock"] or asyncio.Lock()
+    async with CHAT["lock"]:
+        await asyncio.to_thread(chat_files)
+        d = STATE["data"]
+        prompt = CHAT_PROMPT.format(season=(d.get("season") or {}).get("year", ""), today=time.strftime("%d/%m/%Y %H:%M"))
+        args = [exe, "-p", q, "--output-format", "json", "--model", "sonnet", "--tools", "Read,Grep,Glob",
+                "--allowedTools", "Read,Grep,Glob", "--append-system-prompt", prompt, "--strict-mcp-config"]
+        if body.get("session") and re.fullmatch(r"[\w-]{8,64}", body["session"]):
+            args += ["--resume", body["session"]]
+        try:
+            proc = await asyncio.create_subprocess_exec(*args, cwd=str(CHAT_DIR), stdin=asyncio.subprocess.DEVNULL,
+                                                        stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE)
+            out, err = await asyncio.wait_for(proc.communicate(), timeout=180)
+        except asyncio.TimeoutError:
+            proc.kill()
+            return web.json_response({"error": "Claude non ha risposto entro 3 minuti: riprova con una domanda più precisa."})
+    try:
+        res = json.loads(out.decode() or "{}")
+    except ValueError:
+        return web.json_response({"error": (err.decode() or out.decode() or "Risposta non leggibile")[-300:]})
+    text = res.get("result") or ""
+    if res.get("is_error"):
+        if "login" in text.lower() or "logged in" in text.lower():
+            return web.json_response({"error": "login", "detail": text})
+        return web.json_response({"error": text[:300] or "Errore di Claude"})
+    return web.json_response({"answer": text, "session": res.get("session_id")})
+
+
 async def h_predict(req):
     if not STATE["data"]:
         return not_ready()
@@ -1533,6 +1659,7 @@ async def main():
     app.router.add_get("/api/history", h_history)
     app.router.add_get("/api/fanta", h_fanta)
     app.router.add_get("/api/snapshot", h_snapshot)
+    app.router.add_post("/api/chat", h_chat)
     app.router.add_get("/api/version", h_version)
     app.router.add_get("/img/{kind}/{id}", h_img)
     app["img_sem"] = asyncio.Semaphore(3)
