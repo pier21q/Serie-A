@@ -1,8 +1,9 @@
 # Aggiorna il sito di Serie A Live sui computer di GitHub, anche con il Mac spento.
 # Ogni 30 minuti: riscarica tutte le fonti (ESPN, Understat, Fantacalcio.it, Wikipedia), ricalcola statistiche e
 # pronostici, ripubblica il sito nel ramo "sito" (anche se non è cambiato niente) e salva i dati nel ramo "dati".
-# GitHub a volte ritarda o salta le esecuzioni programmate: per questo parte ogni 15 minuti e aggiorna solo se
-# l'ultimo aggiornamento ha più di 25 minuti. Nell'ora e mezza prima di ogni partita invece aggiorna ogni 15
+# GitHub salta gran parte delle esecuzioni programmate (il 28/09 ne ha fatte 4 su 96): per questo una sveglia
+# esterna (cron-job.org) avvia il workflow ogni 15 minuti con l'input auto=1. Sia la sveglia sia il cron di
+# GitHub aggiornano solo se l'ultimo aggiornamento ha più di 25 minuti. Nell'ora e mezza prima di ogni partita invece aggiorna ogni 15
 # minuti, per prendere subito le formazioni ufficiali.
 # Il file originale sta nella cartella dell'app sul Mac (cloud/aggiorna.yml): lo carica "python sito.py codice".
 name: Aggiorna Serie A Live
@@ -11,6 +12,11 @@ on:
   schedule:
     - cron: "4,19,34,49 * * * *"
   workflow_dispatch:
+    inputs:
+      auto:
+        description: "Avvio della sveglia esterna (cron-job.org): aggiorna solo se è l'ora"
+        required: false
+        default: ""
   push:
     branches: [main]
 
@@ -38,6 +44,8 @@ jobs:
           path: dati
       - name: Serve un aggiornamento?
         id: serve
+        env:
+          AUTO: ${{ github.event.inputs.auto }}
         run: |
           python3 - <<'PY'
           import json, os, time
@@ -53,7 +61,9 @@ jobs:
           # nell'ora e mezza prima di una partita si aggiorna ogni 15 minuti: le formazioni ufficiali escono circa
           # un'ora prima, e pronostici e giocatori in evidenza si rifanno con quelle
           lineups = any(e.get("status") == "notstarted" and -300 <= e.get("start", 0) - now <= 95 * 60 for e in nxt)
-          due = os.environ["GITHUB_EVENT_NAME"] != "schedule" or now - at >= 25 * 60 or (lineups and now - at >= 10 * 60)
+          # le esecuzioni programmate e quelle della sveglia esterna seguono il ritmo; push e "Run workflow" aggiornano sempre
+          timed = os.environ["GITHUB_EVENT_NAME"] == "schedule" or bool(os.environ.get("AUTO"))
+          due = not timed or now - at >= 25 * 60 or (lineups and now - at >= 10 * 60)
           print(f"Ultimo aggiornamento {int((now - at) // 60)} minuti fa" + (", partita in arrivo" if lineups else "")
                 + (": si aggiorna" if due else ": niente da fare"))
           open(os.environ["GITHUB_OUTPUT"], "a").write(f"ok={'true' if due else 'false'}\n")
