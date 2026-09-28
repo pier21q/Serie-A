@@ -1064,6 +1064,7 @@ async def site_step():
         STATUS["err_sito"] = out[-300:]
         EXTRA["siteAt"] = now - SITE_EVERY + 180   # dopo un errore (es. token appena rinnovato) si riprova tra 3 minuti
         log(f"Sito non aggiornato: {out[-200:]}")
+        gh_note(f"Sito non aggiornato: {out[-200:]}", "warning")
     save_json(EXTRA_FILE, EXTRA)
 
 
@@ -1213,13 +1214,31 @@ def source_errors():
     return errors
 
 
+def gh_note(msg, level="error"):
+    """Su GitHub Actions il messaggio finisce anche nelle note del run, che si leggono senza accedere a GitHub
+    (i log completi invece solo con l'accesso)."""
+    if CLOUD:
+        msg = str(msg).replace("%", "%25").replace("\r", "%0D").replace("\n", "%0A")
+        print(f"::{level}::{msg}", flush=True)
+
+
 def cloud_state_push():
     """Salva i dati nel ramo "dati" del repository: da lì riparte l'esecuzione successiva. Se nel frattempo
-    qualcuno li ha cambiati non li sovrascrive (la prossima esecuzione riparte da quelli)."""
+    qualcuno li ha cambiati non li sovrascrive (la prossima esecuzione riparte da quelli). Se GitHub non risponde
+    riprova due volte."""
     save_json(CLOUD_FILE, {"at": time.time(), "start": CLOUD_START, "sito": EXTRA.get("siteSig"),
                            "errori": source_errors(), "codice": CODE_VERSION})
-    ok, out = sito.pubblica(DATA_DIR, ["dati"], lease=True)
-    log("Dati salvati su GitHub" if ok else f"Dati non salvati su GitHub: {out[-300:]}")
+    for attempt in (1, 2, 3):
+        ok, out = sito.pubblica(DATA_DIR, ["dati"], lease=True)
+        if ok or "stale info" in out or attempt == 3:
+            break
+        log(f"Dati non salvati su GitHub, riprovo tra 20 secondi: {out[-300:]}")
+        time.sleep(20)
+    if ok:
+        log("Dati salvati su GitHub")
+    else:
+        log(f"Dati non salvati su GitHub: {out[-300:]}")
+        gh_note(f"Dati non salvati su GitHub: {out[-300:]}")
     return ok
 
 
@@ -1238,6 +1257,7 @@ def history_backup():
     else:
         STATUS["err_storico"] = out[-200:]
         log(f"Copia dello storico non salvata: {out[-200:]}")
+        gh_note(f"Copia dello storico non salvata: {out[-200:]}", "warning")
 
 
 async def cloud_main():
@@ -1248,6 +1268,7 @@ async def cloud_main():
         STATE["data"] = load_json(DATA_FILE, None)
         if not STATE["data"]:
             log("Mancano i dati salvati (ramo \"dati\" del repository): niente da aggiornare")
+            gh_note("Mancano i dati salvati (ramo \"dati\" del repository): niente da aggiornare")
             return 1
         reg_seed(STATE["data"])
         refresh_squads(STATE["data"])
@@ -1384,13 +1405,18 @@ async def h_match(req):
 
 CHAT_DIR = DATA_DIR / "chat"   # i dati per Claude, in file che può solo leggere e cercare
 CHAT = {"key": None, "lock": None}
+# al posto delle istruzioni di Claude Code (pensate per programmare): solo queste, così ogni domanda pesa meno
 CHAT_PROMPT = """Sei l'assistente di Serie A Live, l'app di statistiche e pronostici di Serie A dell'utente (stagione {season}).
 Oggi è {today}. Rispondi in italiano, in modo chiaro e breve, per una persona che non è un tecnico.
-Usa SOLO i dati dei file JSON di questa cartella: parti da indice.json per sapere cosa c'è, poi leggi o cerca con Grep
-i file che servono. Non inventare numeri né notizie: se un dato non c'è, dillo. Quando dai un numero di'
-da dove viene (statistiche della stagione, pronostico dell'app, fonte). Probabilità e dati attesi sono stime del
-modello dell'app, non certezze. Per le partite di' se le formazioni sono probabili, stimate o ufficiali.
-Niente tabelle larghe: elenchi brevi o frasi."""
+I dati stanno in file JSON nella cartella {folder}. Parti da {folder}/indice.json per sapere cosa c'è, poi usa
+Read (con il percorso completo) o Grep solo sui file che servono. Per un giocatore usa Grep su giocatori.jsonl con il
+nome in minuscolo e senza accenti (es. "lautaro martinez", o solo il cognome): ogni riga è un giocatore completo.
+Prima di dire che un dato manca, riprova la ricerca con una parte del nome. Usa SOLO quei dati: non inventare numeri né
+notizie, e se un dato non c'è dillo. Quando dai un numero di' da dove viene (statistiche della stagione,
+pronostico dell'app, fonte). Probabilità e dati attesi sono stime del modello dell'app, non certezze. Per le
+partite di' se le formazioni sono probabili, stimate o ufficiali. Niente tabelle larghe: elenchi brevi o frasi."""
+# domande che chiedono di ragionare (non solo di cercare un dato): per queste il modello più forte
+CHAT_DEEP = re.compile(r"perch|convien|consigl|confront|analizz|spieg|schier|meglio|strateg|valut|differenz|rischi", re.I)
 
 
 def slug(s):
@@ -1407,7 +1433,7 @@ def chat_files():
     d, A, pub = STATE["data"], an["A"], an["pub"]
     name = lambda tid: (A["T"].get(str(tid)) or {}).get("team", {}).get("name") or str(tid)
     CHAT_DIR.mkdir(parents=True, exist_ok=True)
-    for f in CHAT_DIR.glob("*.json"):
+    for f in list(CHAT_DIR.glob("*.json")) + list(CHAT_DIR.glob("*.jsonl")):
         f.unlink()
     files = {}
 
@@ -1437,11 +1463,15 @@ def chat_files():
         teams_players.setdefault(str(p.get("teamId")), []).append(p)
     keys = ("minutesPlayed", "appearances", "matchesStarted", "goals", "assists", "expectedGoals", "expectedAssists", "totalShots",
             "shotsOnTarget", "keyPasses", "fouls", "wasFouled", "yellowCards", "redCards", "rating", "fantamedia")
-    put("giocatori.json", [dict({"nome": p.get("name"), "squadra": name(p.get("teamId")), "ruolo": p.get("pos")},
-                                **{k: p.get(k) for k in keys if p.get(k) is not None})
-                           for p in sorted(d.get("players") or [], key=lambda p: -(p.get("minutesPlayed") or 0))],
-        "statistiche della stagione di tutti i giocatori (ruolo G/D/M/F; rating = media voto Fantacalcio.it; fouls = falli "
-        "fatti, wasFouled = falli subiti)")
+    # un giocatore per riga, con il nome senza accenti in "cerca": una ricerca per nome restituisce subito tutte le sue
+    # statistiche, senza leggere il file intero
+    rows = [dict({"cerca": slug(p.get("name")).replace("-", " "), "nome": p.get("name"), "squadra": name(p.get("teamId")),
+                  "ruolo": p.get("pos")}, **{k: _r(p.get(k), 3) for k in keys if p.get(k) is not None})
+            for p in sorted(d.get("players") or [], key=lambda p: -(p.get("minutesPlayed") or 0))]
+    (CHAT_DIR / "giocatori.jsonl").write_text("\n".join(json.dumps(r, ensure_ascii=False) for r in rows) + "\n")
+    files["giocatori.jsonl"] = ("statistiche della stagione di tutti i giocatori, UNO PER RIGA (ruolo G/D/M/F; rating = media "
+                                "voto Fantacalcio.it; fouls = falli fatti, wasFouled = falli subiti). Per un giocatore usa Grep "
+                                "con il nome in minuscolo e senza accenti (campo cerca), NON leggere il file intero")
     for tid, t in pub["teams"].items():
         put(f"squadra-{slug(name(tid))}.json", {"squadra": name(tid), "analisi": t,
                                                 "giocatori": [p.get("name") for p in teams_players.get(tid, [])]},
@@ -1459,7 +1489,10 @@ def chat_files():
 
 
 def claude_bin():
-    """Claude Code installato con l'app di Claude (la versione più recente)."""
+    """Claude Code: quello che si aggiorna da solo (~/.local/bin), altrimenti quello installato con l'app di Claude."""
+    local = Path.home() / ".local" / "bin" / "claude"
+    if local.exists():
+        return str(local)
     found = sorted(Path.home().glob("Library/Application Support/Claude/claude-code/*/claude.app/Contents/MacOS/claude"),
                    key=lambda p: p.stat().st_mtime)
     return str(found[-1]) if found else shutil.which("claude")
@@ -1480,9 +1513,11 @@ async def h_chat(req):
     async with CHAT["lock"]:
         await asyncio.to_thread(chat_files)
         d = STATE["data"]
-        prompt = CHAT_PROMPT.format(season=(d.get("season") or {}).get("year", ""), today=time.strftime("%d/%m/%Y %H:%M"))
-        args = [exe, "-p", q, "--output-format", "json", "--model", "sonnet", "--tools", "Read,Grep,Glob",
-                "--allowedTools", "Read,Grep,Glob", "--append-system-prompt", prompt, "--strict-mcp-config"]
+        prompt = CHAT_PROMPT.format(season=(d.get("season") or {}).get("year", ""), today=time.strftime("%d/%m/%Y %H:%M"),
+                                    folder=CHAT_DIR)
+        model_name = "sonnet" if CHAT_DEEP.search(q) or len(q) > 160 else "haiku"   # difficile se chiede di ragionare o è lunga
+        args = [exe, "-p", q, "--output-format", "json", "--model", model_name, "--tools", "Read,Grep,Glob",
+                "--allowedTools", "Read,Grep,Glob", "--system-prompt", prompt, "--strict-mcp-config"]
         if body.get("session") and re.fullmatch(r"[\w-]{8,64}", body["session"]):
             args += ["--resume", body["session"]]
         try:
@@ -1501,7 +1536,7 @@ async def h_chat(req):
         if "login" in text.lower() or "logged in" in text.lower():
             return web.json_response({"error": "login", "detail": text})
         return web.json_response({"error": text[:300] or "Errore di Claude"})
-    return web.json_response({"answer": text, "session": res.get("session_id")})
+    return web.json_response({"answer": text, "session": res.get("session_id"), "model": model_name})
 
 
 async def h_predict(req):
@@ -1702,7 +1737,12 @@ async def main():
 if __name__ == "__main__":
     try:
         if CLOUD:
-            sys.exit(asyncio.run(cloud_main()))
+            try:
+                code = asyncio.run(cloud_main())
+            except Exception as e:
+                gh_note(f"Aggiornamento interrotto da un errore: {type(e).__name__}: {e}"[:500])
+                raise
+            sys.exit(code)
         asyncio.run(main())
     except KeyboardInterrupt:
         pass
