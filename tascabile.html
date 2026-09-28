@@ -76,6 +76,8 @@ tr:last-child td{border-bottom:0}
 .seg button{font:inherit;font-size:13px;border:1px solid var(--line);background:var(--surface);color:var(--ink2);border-radius:999px;padding:5px 12px;cursor:pointer}
 .seg button[aria-pressed="true"]{background:var(--ink);color:var(--ground);border-color:var(--ink)}
 .evl{gap:6px;margin-top:10px}
+.seg.evg{margin:0 0 12px}.seg.evg button{font-weight:600}
+.seg.evm{margin-top:10px}.seg.evm button{font-size:12px;padding:3px 10px}
 .cardlink.ev{display:flex;align-items:center;gap:10px;padding:10px 14px}
 .ev .rk{width:1.5em;text-align:right;color:var(--muted);font-weight:600;flex:none}
 .ev .evn{flex:1;min-width:0;display:grid}
@@ -675,13 +677,32 @@ function vSquadra(id) {
   </div>`;
 }
 
-let esel = 0;   // voce scelta in "In evidenza"
+let esel = 0, egrp = 'next', emode = 'tot';   // voce, gruppo (prossima giornata o stagione) e totale/a partita in "In evidenza"
 function vEvidenza() {
-  const E = D.evidenza;
-  if (!E || !(E.cats || []).length) return `<h2>In evidenza</h2><p class="lead">I giocatori in evidenza compaiono quando è in programma la prossima giornata.</p>`;
+  const E = D.evidenza, SE = E?.season;
+  const hasNext = !!(E?.cats || []).length, hasSeason = !!(SE?.cats || []).length;
+  if (!hasNext && !hasSeason) return `<h2>In evidenza</h2><p class="lead">I giocatori in evidenza compaiono quando è in programma la prossima giornata.</p>`;
+  const grp = egrp === 'season' && hasSeason || !hasNext ? 'season' : 'next';
+  const tabs = hasNext && hasSeason ? `<div class="seg evg" role="group" aria-label="Classifiche"><button type="button" data-eg="next" aria-pressed="${grp === 'next'}">Prossima giornata</button><button type="button" data-eg="season" aria-pressed="${grp === 'season'}">Stagione</button></div>` : '';
+  if (grp === 'season') {
+    const c = SE.cats[esel] || SE.cats[0], pg = emode === 'pg' || c.avg;
+    const rows = (pg ? c.pg : c.tot) || [];
+    const main = r => pg ? fx(r.pg, 2) : fx(r.tot, c.nd);
+    const side = r => c.avg ? `${r.apps} voti` : `${r.apps} presenze · ${pg ? 'totale ' + fx(r.tot, c.nd) : fx(r.pg, 2) + ' a partita'}`;
+    return `<h2>In evidenza <small>stagione</small></h2>${tabs}
+      <p class="lead">Le classifiche della stagione con i dati reali di ${SE.games} giornate: per ogni voce i primi 10.</p>
+      <div class="seg" role="group" aria-label="Statistica">${SE.cats.map((x, i) => `<button type="button" data-e="${i}" aria-pressed="${x === c}">${esc(x.l)}</button>`).join('')}</div>
+      ${c.avg ? '' : `<div class="seg evm" role="group" aria-label="Totale o media"><button type="button" data-em="tot" aria-pressed="${!pg}">Totale</button><button type="button" data-em="pg" aria-pressed="${pg}">A partita</button></div>`}
+      <p class="small muted">${esc(c.d)}${c.avg ? '' : pg ? ', a partita' : ', in totale'}.</p>
+      <div class="list evl">${rows.map((r, i) => `<a class="card cardlink ev" href="#s${r.team}">
+        <span class="rk num">${i + 1}</span>${crest(r.team, true)}
+        <span class="evn"><b>${esc(r.name)}</b><small>${nm(r.team)} · ${side(r)}</small></span>
+        <span class="evv num">${main(r)}</span></a>`).join('') || '<p class="muted">Nessun dato.</p>'}</div>
+      <p class="small muted">Dati di Understat, ESPN e Fantacalcio.it. Nella media a partita contano solo i giocatori con almeno ${SE.minApps} presenze (fantamedia e media voto: almeno ${SE.minApps} voti). Tocca un giocatore per aprire la sua squadra.</p>`;
+  }
   const c = E.cats[esel] || E.cats[0];
   const val = r => c.u === '%' ? pc(r.v) : fx(r.v, 1);
-  return `<h2>In evidenza <small>${E.round ? E.round + 'ª giornata' : 'prossima giornata'}</small></h2>
+  return `<h2>In evidenza <small>${E.round ? E.round + 'ª giornata' : 'prossima giornata'}</small></h2>${tabs}
     <p class="lead">Chi spicca nelle statistiche previste per le partite della giornata: per ogni voce i primi 10.</p>
     <div class="seg" role="group" aria-label="Statistica">${E.cats.map((x, i) => `<button type="button" data-e="${i}" aria-pressed="${x === c}">${esc(x.l)}</button>`).join('')}</div>
     <p class="small muted">${esc(c.d)}.</p>
@@ -712,6 +733,10 @@ document.addEventListener('click', e => {
   if (b) { fsel = +b.dataset.f; document.getElementById('fanta').innerHTML = vFanta(); }
   const v = e.target.closest('[data-e]');
   if (v) { esel = +v.dataset.e; document.getElementById('evidenza').innerHTML = vEvidenza(); }
+  const g = e.target.closest('[data-eg]');
+  if (g && g.dataset.eg !== egrp) { egrp = g.dataset.eg; esel = 0; document.getElementById('evidenza').innerHTML = vEvidenza(); }
+  const m = e.target.closest('[data-em]');
+  if (m) { emode = m.dataset.em; document.getElementById('evidenza').innerHTML = vEvidenza(); }
 });
 window.addEventListener('hashchange', () => { if (D) show(location.hash.slice(1)); });
 const FONTE = {'statistiche': 'Understat', 'fantacalcio.it': 'Fantacalcio.it', 'sito': 'pubblicazione del sito',

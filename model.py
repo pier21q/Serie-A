@@ -944,11 +944,16 @@ def anchor_team(A, projs, tid, oid, lam_team):
     goals = sum(num(p.get("goals")) or 0 for p in A["players"].values())
     ast_rate = sum(num(p.get("assists")) or 0 for p in A["players"].values()) / goals if goals else .7
     opp_fouls = avg(o["m"].get("foul"), L.get("foul")) if (o.get("n") or 0) else L.get("foul")
+    # chance create: quante ne fa di solito la squadra (somma dei passaggi chiave dei suoi giocatori, Understat)
+    kp_all = sum(num(p.get("keyPasses")) or 0 for p in A["players"].values())
+    team_games = sum(x.get("n") or 0 for x in A["T"].values())
+    kp_team = sum(num(p.get("keyPasses")) or 0 for p in A["players"].values() if str(p.get("teamId")) == str(tid))
     targets = {
         "lamG": lam_team * .97 * share,
         "lamA": lam_team * ast_rate * share,
         "shots": (avg(shots, L.get("shA")) or 0) * rel * share,
         "sot": (avg(t["m"].get("sot"), L.get("sotA")) or 0) * rel * share,
+        "kp": (avg(kp_team / n if n else None, kp_all / team_games if team_games else None) or 0) * rel * share,
         "fouls": (avg(t["m"].get("foul"), L.get("foul")) or 0) * card_context(A, tid, oid)[0] * share,
         "fouled": (avg(t["m"].get("fk"), L.get("fk")) or 0)
                   * clamp(((opp_fouls or 1) / (L.get("foul") or opp_fouls or 1)) ** .6, .7, 1.4) * share,
@@ -994,14 +999,61 @@ EVIDENZA = [("pGoal", "Marcatori", "%", "Probabilità di segnare almeno un gol")
             ("pAssist", "Assist", "%", "Probabilità di fare almeno un assist"),
             ("shots", "Tiri", "n", "Tiri previsti nella partita"),
             ("sot", "Tiri in porta", "n", "Tiri in porta previsti nella partita"),
+            ("kp", "Chance create", "n", "Passaggi che portano un compagno al tiro, previsti nella partita"),
             ("fouls", "Falli commessi", "n", "Falli che dovrebbe commettere"),
             ("fouled", "Falli subiti", "n", "Falli che dovrebbe subire"),
             ("pYellow", "Ammonizione", "%", "Probabilità di essere ammonito")]
 
 
-def evidenza(items, n=10):
+# classifiche della stagione (dati reali): (campo, voce, cifre decimali, spiegazione, solo media)
+EVIDENZA_STAGIONE = [
+    ("goals", "Gol", 0, "Gol segnati", False),
+    ("expectedGoals", "Expected goals (xG)", 1, "Gol attesi dalle occasioni avute: dice quanto è pericoloso, al di là dei gol fatti (Understat)", False),
+    ("assists", "Assist", 0, "Assist", False),
+    ("expectedAssists", "Expected assist (xA)", 1, "Assist attesi dai passaggi che hanno portato al tiro (Understat)", False),
+    ("keyPasses", "Chance create", 0, "Passaggi che hanno portato un compagno al tiro (Understat)", False),
+    ("totalShots", "Tiri", 0, "Tiri, dentro e fuori dallo specchio", False),
+    ("shotsOnTarget", "Tiri in porta", 0, "Tiri nello specchio della porta (ESPN)", False),
+    ("yellowCards", "Ammonizioni", 0, "Cartellini gialli", False),
+    ("fouls", "Falli commessi", 0, "Falli fatti (ESPN)", False),
+    ("wasFouled", "Falli subiti", 0, "Falli subiti (ESPN)", False),
+    ("saves", "Parate", 0, "Parate dei portieri (ESPN)", False),
+    ("fantamedia", "Fantamedia", 2, "Media fantavoto di Fantacalcio.it, con bonus e malus", True),
+    ("rating", "Media voto", 2, "Media voto in pagella di Fantacalcio.it, senza bonus e malus", True),
+]
+
+
+def evidenza_stagione(A, n=10):
+    """Classifiche della stagione con i dati reali: per ogni voce i primi 10 per totale e per media a partita.
+    Nelle medie contano solo i giocatori con almeno il 60% delle presenze possibili (minimo 2), se no un giocatore
+    con una presenza e un giallo sarebbe primo."""
+    games = sorted(x.get("n") or 0 for x in A["T"].values())
+    played = games[len(games) // 2] if games else 0
+    min_apps = max(2, math.ceil(.6 * played))
+    players = list(A["players"].values())
+    cats = []
+    for k, label, nd, desc, avg_only in EVIDENZA_STAGIONE:
+        # le medie voto contano le partite con il voto, le altre le presenze
+        apps_of = (lambda p: num(p.get("ratingPV")) or 0) if avg_only else (lambda p: num(p.get("appearances")) or 0)
+        have = [p for p in players if num(p.get(k)) is not None and apps_of(p) > 0 and (avg_only or num(p[k]) > 0)]
+        row = lambda p, v: {"id": p["id"], "name": (p.get("name") or "").strip(), "pos": p.get("pos"),
+                            "team": str(p.get("teamId")), "v": round(v, 3), "tot": round(num(p[k]), 3),
+                            "pg": round(num(p[k]) / apps_of(p), 3) if not avg_only else round(num(p[k]), 3),
+                            "apps": int(apps_of(p)), "min": round(num(p.get("minutesPlayed")) or 0)}
+        enough = [p for p in have if apps_of(p) >= min_apps]
+        pg = sorted(enough, key=lambda p: (-(num(p[k]) / (1 if avg_only else apps_of(p))), -num(p[k]), p.get("name") or ""))[:n]
+        c = {"k": k, "l": label, "d": desc, "nd": nd, "avg": avg_only,
+             "pg": [row(p, num(p[k]) / (1 if avg_only else apps_of(p))) for p in pg]}
+        if not avg_only:   # a parità di totale prima chi ha giocato meno
+            tot = sorted(have, key=lambda p: (-num(p[k]), apps_of(p), num(p.get("minutesPlayed")) or 0, p.get("name") or ""))[:n]
+            c["tot"] = [row(p, num(p[k])) for p in tot]
+        cats.append(c)
+    return {"games": played, "minApps": min_apps, "cats": cats}
+
+
+def evidenza(items, n=10, A=None):
     """Giocatori in evidenza della giornata: per ogni statistica prevista, i primi 10 fra tutte le partite.
-    items: [(partita, pronostico)]."""
+    items: [(partita, pronostico)]. Con A aggiunge le classifiche della stagione."""
     rows = [(p, e, side) for e, P in items for side in ("home", "away") for p in P["players"][side]]
     P_of = {e["id"]: P for e, P in items}
     cats = []
@@ -1012,8 +1064,9 @@ def evidenza(items, n=10):
              "team": str(e[side]["id"]), "opp": str(e["away" if side == "home" else "home"]["id"]), "home": side == "home",
              "fid": e["id"], "start": e.get("start"), "v": round(p[k], 3),
              "official": P_of[e["id"]]["lineups"][side]["source"] == "ufficiale"} for p, e, side in top]})
-    return {"round": items[0][0].get("round") if items else None, "cats": cats,
-            "sources": sorted({P["lineups"][s]["source"] for _, P in items for s in ("home", "away")})}
+    return {"round": items[0][0].get("round") if items else None, "cats": cats if items else [],
+            "sources": sorted({P["lineups"][s]["source"] for _, P in items for s in ("home", "away")}),
+            "season": evidenza_stagione(A, n) if A else None}
 
 
 def anchor_cards(A, projs, tid, oid, card_f):
@@ -1239,6 +1292,7 @@ def player_projections(A, tid, oid, xi, lay, opp_lay, opp_xi, duels, lam_team, l
             "min": round(mins), "rating": p.get("rating"),
             "shots": r["totalShots"] * f * shot_f ** .7 * ratio_ ** .5 if r["totalShots"] is not None else None,
             "sot": r["shotsOnTarget"] * f * shot_f ** .7 * ratio_ ** .5 if r["shotsOnTarget"] is not None else None,
+            "kp": r["keyPasses"] * f * shot_f ** .7 * ratio_ ** .5 if r["keyPasses"] is not None else None,
             "fouls": exp_fouls,
             "fouled": r["wasFouled"] * f * foul_f if r["wasFouled"] is not None else None,
             "pYellow": 1 - math.exp(-lam_y) if lam_y is not None else None,

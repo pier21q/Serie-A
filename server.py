@@ -552,7 +552,7 @@ def analysis():
             fixtures[str(e["id"])] = model.summary(P)
             if same(e):
                 items.append((e, P))
-        ANALYSIS.update(key=key, A=A, pub=model.public_analysis(A), fixtures=fixtures, evidenza=model.evidenza(items),
+        ANALYSIS.update(key=key, A=A, pub=model.public_analysis(A), fixtures=fixtures, evidenza=model.evidenza(items, A=A),
                         preds=items)
     return ANALYSIS
 
@@ -1476,7 +1476,9 @@ def chat_files():
         put(f"squadra-{slug(name(tid))}.json", {"squadra": name(tid), "analisi": t,
                                                 "giocatori": [p.get("name") for p in teams_players.get(tid, [])]},
             f"analisi di {name(tid)}: statistiche e posizione in lega, stile, allenatore, su chi fa affidamento, forma")
-    put("in-evidenza.json", an["evidenza"], "giocatori in evidenza della prossima giornata (primi 10 per ogni voce)")
+    put("in-evidenza.json", an["evidenza"], "giocatori in evidenza della prossima giornata (primi 10 per ogni statistica "
+        "prevista, kp = chance create) e, in season, le classifiche della stagione con i dati reali (tot = totale, pg = a "
+        "partita, solo con almeno minApps presenze)")
     put("metriche.json", pub["metrics"], "spiegazione delle statistiche di squadra (chiavi usate nei file delle squadre)")
     if FANTA.get("teams"):
         put("fanta.json", model.fanta(an["A"], FANTA, d, MATCHES, SQUADS.get("players", {})),
