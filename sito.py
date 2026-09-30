@@ -25,11 +25,12 @@ ICON = ROOT / "Icona Serie A.png"
 CODICE = ["server.py", "model.py", "fonti.py", "statistiche.py", "sito.py", "tascabile.html", "Icona Serie A.png",
           "requirements.txt"]
 CLOUD_FILES = {"cloud/aggiorna.yml": ".github/workflows/aggiorna.yml", "cloud/README.md": "README.md"}
-# i dati da cui riparte ogni aggiornamento su GitHub: vanno nel ramo "dati"
-DATI = ["history.json", "fanta.json", "cache/data.json", "cache/squads.json", "cache/prior.json", "cache/matches.json",
+# i dati da cui riparte ogni aggiornamento su GitHub: vanno nel ramo "dati". Le rose del fanta no: il fanta sta solo
+# sul Mac (scelta dell'utente del 30/09/2026) e il repository è pubblico
+DATI = ["history.json", "cache/data.json", "cache/squads.json", "cache/prior.json", "cache/matches.json",
         "cache/coaches.json", "cache/espn.json", "cache/fonti.json", "cache/giocatori.json",
         "cache/fantacalcio-statistiche.json", "cache/understat-*.json"]
-DATI_IGNORA = "cache/img/\n*.tmp\nfotografia.json\n"
+DATI_IGNORA = "cache/img/\n*.tmp\nfotografia.json\nfanta.json\n"
 
 HEAD = """<!doctype html>
 <html lang="it"><head>
@@ -197,13 +198,6 @@ def pubblica_dati(data_dir, remote):
             for k in ("usAt", "wikiAt", "rosterAt", "siteAt", "siteSig"):
                 e.pop(k, None)
             extra.write_text(json.dumps(e, ensure_ascii=False))
-        fanta = dest / "fanta.json"
-        if fanta.exists():   # il repository è pubblico: niente soprannomi dei fantallenatori né crediti
-            f = json.loads(fanta.read_text())
-            for t in f.get("teams") or []:
-                t.pop("manager", None)
-                t.pop("credits", None)
-            fanta.write_text(json.dumps(f, ensure_ascii=False))
         (dest / ".gitignore").write_text(DATI_IGNORA)
         git(dest, "init", "-q", "-b", "dati")
         git(dest, "config", "user.name", "Serie A Live")

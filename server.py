@@ -1277,6 +1277,7 @@ async def cloud_main():
         await HTTP["espn"].close()
         await HTTP["web"].close()
     await asyncio.to_thread(history_backup)
+    FANTA_FILE.unlink(missing_ok=True)   # le rose del fanta stanno solo sul Mac: via dal repository pubblico
     return 0 if await asyncio.to_thread(cloud_state_push) else 1
 
 
@@ -1294,7 +1295,7 @@ def _r(x, nd=4):
 
 
 def snapshot():
-    """Dati per l'artefatto: classifica, pronostici completi, analisi delle squadre, fantacalcio, storico."""
+    """Dati per il sito: classifica, pronostici completi, analisi delle squadre, storico. Il fanta no: sta solo sul Mac."""
     d, an = STATE["data"], analysis()
     A = an["A"]
     pub = model.public_analysis(A)
@@ -1334,11 +1335,6 @@ def snapshot():
                                      for t, key in ((e["home"]["id"], "home"), (e["away"]["id"], "away"))
                                      for p in sorted(P["players"][key], key=lambda p: -p["pGoal"])[:2]],
                          "P": _r(P)})
-    fv = model.fanta(A, FANTA, d, MATCHES, SQUADS.get("players", {})) if FANTA.get("teams") else {"teams": []}
-    fanta = [{"league": t["league"], "name": t["name"], "xi": t["xi"],
-              "players": [{k: p.get(k) for k in ("name", "role", "team", "status", "pts", "pGoal", "pYellow", "pCS")}
-                          | {"opp": (p.get("next") or {}).get("opp", {}).get("name"), "home": (p.get("next") or {}).get("home")}
-                          for p in t["players"]]} for t in fv["teams"]]
     hist = sorted(HISTORY.get("matches", {}).values(), key=lambda it: -it["start"])[:30]
     return {
         "generatedAt": time.time(), "statsAt": d.get("fullAt"), "season": d.get("season"), "errors": source_errors(),
@@ -1352,7 +1348,6 @@ def snapshot():
                   "clock": e.get("clock") or e.get("statusText")} for e in d.get("live") or []],
         "results": [{"home": str(e["home"]["id"]), "away": str(e["away"]["id"]), "hs": e["hs"], "as": e["as"],
                      "start": e["start"], "round": e.get("round")} for e in (d.get("played") or [])[:10]],
-        "fanta": fanta, "fantaRules": fv.get("rules"),
         "history": {"summary": model.history_summary(HISTORY),
                     "items": [{"home": str(it["home"]["id"]), "away": str(it["away"]["id"]), "start": it["start"],
                                "pick": (it.get("final") or it.get("latest") or {}).get("pick"), "result": it.get("result"),

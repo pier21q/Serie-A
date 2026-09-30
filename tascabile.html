@@ -85,16 +85,6 @@ tr:last-child td{border-bottom:0}
 .ev .evn small{color:var(--muted);font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .ev .evv{font-family:var(--display);font-weight:700;font-size:20px;flex:none}
 .ev .uff{color:var(--good);font-weight:600}
-.xi{display:grid;gap:8px;margin-top:12px}
-.xrow{display:flex;flex-wrap:wrap;gap:6px;align-items:center}
-.role{display:inline-grid;place-items:center;width:22px;height:22px;border-radius:50%;font-weight:700;font-size:11px;color:#fff;flex:none}
-.role.P{background:#B7791F}.role.D{background:#15803D}.role.C{background:#2A6FD1}.role.A{background:#C0392B}
-.pl{display:inline-flex;gap:6px;align-items:baseline;background:var(--surface2);border-radius:999px;padding:3px 10px;font-size:13px}
-.pl small{color:var(--muted)}
-.st{font-size:11px;font-weight:600;border-radius:999px;padding:1px 8px;white-space:nowrap;background:var(--surface2);color:var(--ink2)}
-.st.ok{background:color-mix(in srgb,var(--good) 16%,var(--surface));color:var(--good)}
-.st.mid{background:color-mix(in srgb,var(--warn) 18%,var(--surface));color:var(--warn)}
-.st.ko{background:color-mix(in srgb,var(--bad) 14%,var(--surface));color:var(--bad)}
 .dims{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:6px 10px;margin-top:10px}
 .dim{font-size:11px;color:var(--muted)}
 .dim span{display:block;height:5px;border-radius:3px;background:var(--surface2);margin-top:3px;position:relative;overflow:hidden}
@@ -191,7 +181,7 @@ a.plain{color:inherit;text-decoration:none}
   <div class="bar1"><div class="logo">Serie A <span>tascabile</span></div><div class="stamp" id="stamp"></div></div>
   <nav id="nav" aria-label="Sezioni">
     <a href="#giornata" data-s="giornata">Giornata</a><a href="#evidenza" data-s="evidenza">In evidenza</a><a href="#classifica" data-s="classifica">Classifica</a>
-    <a href="#fanta" data-s="fanta">Fanta</a><a href="#squadre" data-s="squadre">Squadre</a><a href="#storico" data-s="storico">Storico</a>
+    <a href="#squadre" data-s="squadre">Squadre</a><a href="#storico" data-s="storico">Storico</a>
   </nav>
 </div></header>
 
@@ -199,7 +189,6 @@ a.plain{color:inherit;text-decoration:none}
   <section id="giornata"></section>
   <section id="evidenza" hidden></section>
   <section id="classifica" hidden></section>
-  <section id="fanta" hidden></section>
   <section id="squadre" hidden></section>
   <section id="storico" hidden></section>
   <section id="dettaglio" hidden></section>
@@ -263,30 +252,6 @@ function vClassifica() {
   return `<h2>Classifica</h2><div class="card tw"><table><thead><tr><th class="l">#</th><th class="l">Squadra</th><th>G</th><th>DR</th><th>Pt</th><th>Forma</th></tr></thead><tbody>${rows}</tbody></table>
     ${zones.size ? `<div class="legend">${[...zones].map(z => `<span><i style="background:var(--${{cl: 'home', el: 'away', co: 'accent', rel: 'bad'}[ZONE[z][0]]})"></i>${ZONE[z][1]}</span>`).join('')}</div>` : ''}</div>
     ${D.results.length ? `<h2>Ultimi risultati</h2><div class="card"><table><tbody>${D.results.map(e => `<tr><td class="l">${team(e.home, true)}</td><td class="num"><b>${e.hs}–${e.as}</b></td><td class="l">${team(e.away, true)}</td></tr>`).join('')}</tbody></table></div>` : ''}`;
-}
-
-let fsel = 0;
-function stClass(s) { return /^Titolare$/.test(s) ? 'ok' : /Probabile|stima|dubbio|panchina/.test(s) ? 'mid' : /Infortunato|Squalificato|Indisponibile|Non convocato|non trovato|Senza/.test(s) ? 'ko' : ''; }
-function vFanta() {
-  if (!D.fanta.length) return '<h2>Fanta</h2><p class="lead">Nessuna rosa salvata.</p>';
-  const t = D.fanta[fsel], xi = t.xi, byName = Object.fromEntries(t.players.map(p => [p.name, p]));
-  const line = r => `<div class="xrow"><span class="role ${r}">${r}</span>${xi.ids.map(n => byName[n]).filter(p => p && p.role === r).map(p => `<span class="pl">${esc(p.name)} <small class="num">${fx(p.pts)}</small></span>`).join('')}</div>`;
-  const bench = r => (xi.benchByRole || {})[r] && xi.benchByRole[r].length ? `<div class="xrow"><span class="role ${r}">${r}</span>${xi.benchByRole[r].map((n, i) => `<span class="pl"><small>${i + 1}.</small>${esc(n)}</span>`).join('')}</div>` : '';
-  const R = D.fantaRules || {};
-  return `<h2>Fanta</h2>
-    <div class="seg" role="group" aria-label="Lega">${D.fanta.map((x, i) => `<button type="button" id="lega-${i}" data-f="${i}" aria-pressed="${i === fsel}">${esc(x.league)}</button>`).join('')}</div>
-    <div class="card" style="margin-top:12px"><div class="fx-top"><span>${esc(t.name)}</span><span>punti attesi <b class="num" style="color:var(--ink)">${fx(xi.pts)}</b>${xi.mod ? ` · modificatore +${fx(xi.mod)}` : ''}</span></div>
-      <div class="arch" style="margin-top:6px">Formazione consigliata ${esc(xi.formation)}</div>
-      <div class="xi">${['P', 'D', 'C', 'A'].map(line).join('')}</div>
-      <div class="fx-top" style="margin-top:14px"><span>Panchina, ruolo per ruolo (niente switch)</span></div>
-      <div class="xi">${['P', 'D', 'C', 'A'].map(bench).join('')}</div></div>
-    <h2>Rosa <small>prossima partita</small></h2>
-    <div class="card tw"><table><thead><tr><th class="l">R</th><th class="l">Giocatore</th><th class="l">Contro</th><th class="l">Stato</th><th>Gol</th><th>Punti</th></tr></thead><tbody>
-      ${['P', 'D', 'C', 'A'].map(r => t.players.filter(p => p.role === r).sort((a, b) => (b.pts || 0) - (a.pts || 0)).map(p => `<tr>
-        <td class="l"><span class="role ${r}">${r}</span></td><td class="l">${esc(p.name)}</td><td class="l muted">${p.opp ? (p.home ? 'vs ' : '@ ') + esc(p.opp) : '–'}</td>
-        <td class="l"><span class="st ${stClass(p.status)}">${esc(p.status)}</span></td><td>${r === 'P' ? pc(p.pCS) : pc(p.pGoal)}</td><td><b>${fx(p.pts)}</b></td></tr>`).join('')).join('')}
-    </tbody></table></div>
-    <p class="lead" style="margin-top:10px;font-size:13px">Regole: gol +${R.gol ?? 3}, assist +${R.assist ?? 1}, giallo ${R.ammonizione ?? -0.5}, rosso ${R.espulsione ?? -1}, portiere gol subito ${R.golSubito ?? -1} e porta inviolata +${R.portaInviolata ?? 1}, modificatore di difesa. Per i portieri la colonna Gol mostra la probabilità di porta inviolata.</p>`;
 }
 
 const DIMS = [['possesso', 'Possesso'], ['baricentro', 'Baricentro'], ['pressing', 'Pressing'], ['verticalita', 'Verticale'], ['ampiezza', 'Ampiezza'], ['transizioni', 'Transizioni'], ['fisicita', 'Fisicità'], ['ritmo', 'Ritmo']];
@@ -712,7 +677,7 @@ function vEvidenza() {
       <span class="evv num">${val(r)}</span></a>`).join('')}</div>
     <p class="small muted">Solo i titolari previsti. I numeri tengono conto dei minuti previsti, dell'avversario, di chi marca chi e dell'arbitro, e sommano ai totali realistici di ogni squadra. Si aggiornano con le probabili formazioni e poi con quelle ufficiali, circa un'ora prima di ogni partita: chi ha già la formazione ufficiale è segnato con «ufficiale». Tocca un giocatore per aprire la sua partita.</p>`;
 }
-const VIEWS = {giornata: vGiornata, evidenza: vEvidenza, classifica: vClassifica, fanta: vFanta, squadre: vSquadre, storico: vStorico};
+const VIEWS = {giornata: vGiornata, evidenza: vEvidenza, classifica: vClassifica, squadre: vSquadre, storico: vStorico};
 function show(name) {
   const m = /^([ps])(\d+)$/.exec(name || '');   // #p123 = scheda della partita, #s123 = scheda della squadra
   const view = m ? null : VIEWS[name] ? name : 'giornata';
@@ -729,8 +694,6 @@ function show(name) {
   if (m) window.scrollTo(0, 0);
 }
 document.addEventListener('click', e => {
-  const b = e.target.closest('[data-f]');
-  if (b) { fsel = +b.dataset.f; document.getElementById('fanta').innerHTML = vFanta(); }
   const v = e.target.closest('[data-e]');
   if (v) { esel = +v.dataset.e; document.getElementById('evidenza').innerHTML = vEvidenza(); }
   const g = e.target.closest('[data-eg]');
