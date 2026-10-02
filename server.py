@@ -1198,7 +1198,11 @@ async def refresher():
             targets.append(now + 60)
         sleep = max(20, min(targets) - now)
         STATUS["nextCheck"] = now + sleep
-        await asyncio.sleep(sleep)
+        # si aspetta a passi di 30 secondi guardando l'ora vera: mentre il Mac è in stop il tempo di asyncio si ferma,
+        # e al risveglio l'app aspetterebbe ancora tutto quello che mancava (il 02/10 è rimasta ferma dalle 4:55 alle 9:20)
+        wake = now + sleep
+        while time.time() < wake:
+            await asyncio.sleep(min(30, wake - time.time()))
 
 
 # ---------- aggiornamento su GitHub Actions (--cloud) ----------
