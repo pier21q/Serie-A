@@ -47,8 +47,28 @@ import sito
 import statistiche
 
 ROOT = Path(__file__).resolve().parent
+# leghe: una per processo, scelta con SERIEA_LEGA (di base la Serie A). Fuori dalla Serie A non c'è Fantacalcio.it:
+# niente fanta, voti e designazioni anticipate; le probabili formazioni vengono da OneFootball. Ogni lega ha i suoi dati
+# in una sottocartella e sul sito sta in una sottocartella (la Premier League in /premier/).
+LEGHE = {
+    "serie-a": {"name": "Serie A", "espn": "ita.1", "understat": "Serie_A", "wiki_en": "Serie A", "dir": "",
+                "fantacalcio": True, "onefootball": None, "port": 8765},
+    # calib: correzioni del modello per gli attaccanti tarate su 50 partite vere della lega (la Serie A usa quelle di
+    # model.F_CALIB; in Premier tiri e falli degli attaccanti non vanno ridotti: uscivano sottostimati del 13%)
+    "premier": {"name": "Premier League", "espn": "eng.1", "understat": "EPL", "wiki_en": "Premier League", "dir": "premier",
+                "fantacalcio": False, "onefootball": "premier-league-9", "port": 8766,
+                "calib": {"shots": 1.0, "sot": 1.0, "fouls": 1.0}},
+}
+LEGA_KEY = os.environ.get("SERIEA_LEGA") or "serie-a"
+LEGA = LEGHE[LEGA_KEY]
+model.LEAGUE = LEGA["name"]
+model.F_CALIB = dict(model.F_CALIB, **(LEGA.get("calib") or {}))
+statistiche.UNDERSTAT = statistiche.UNDERSTAT.replace("Serie_A", LEGA["understat"])
+statistiche.UNDERSTAT_REF = statistiche.UNDERSTAT_REF.replace("Serie_A", LEGA["understat"])
+fonti.WIKI_EN_TITLE = "{a}–{b:02d} " + LEGA["wiki_en"]
 # dati salvati e immagini stanno fuori dalla cartella dell'app, che puo' essere sincronizzata con iCloud
-DATA_DIR = Path(os.environ.get("SERIEA_DATA_DIR") or Path.home() / "Library" / "Application Support" / "Serie A Live")
+DATA_BASE = Path(os.environ.get("SERIEA_DATA_DIR") or Path.home() / "Library" / "Application Support" / "Serie A Live")
+DATA_DIR = DATA_BASE / LEGA["dir"] if LEGA["dir"] else DATA_BASE
 CACHE = DATA_DIR / "cache"
 IMGDIR = CACHE / "img"
 IMGDIR.mkdir(parents=True, exist_ok=True)
@@ -64,13 +84,14 @@ FC_STATS_FILE = CACHE / "fantacalcio-statistiche.json"
 HISTORY_FILE = DATA_DIR / "history.json"   # storico dei pronostici: non sta in cache perche' non si puo' ricreare
 FANTA_FILE = DATA_DIR / "fanta.json"       # rose del fantacalcio
 SNAPSHOT_FILE = DATA_DIR / "fotografia.json"   # dati compatti per la versione tascabile (artefatto)
-SITE_DIR = Path(os.environ.get("SERIEA_SITE_DIR") or DATA_DIR / "sito")   # sito su GitHub Pages (repository git locale)
+SITE_ROOT = Path(os.environ.get("SERIEA_SITE_DIR") or DATA_BASE / "sito")   # sito su GitHub Pages (repository git locale)
+SITE_DIR = SITE_ROOT / LEGA["dir"] if LEGA["dir"] else SITE_ROOT          # pagina di questa lega dentro il sito
 SITE_CONF = DATA_DIR / "sito.json"            # {"remote": "https://github.com/<utente>/<repository>.git"}
 CLOUD_FILE = DATA_DIR / "esecuzione.json"     # su GitHub Actions: com'è andato l'ultimo aggiornamento
 
-PORT = int(os.environ.get("SERIEA_PORT", 8765))
-ESPN_SITE = os.environ.get("SERIEA_ESPN", "https://site.api.espn.com/apis/site/v2/sports/soccer/ita.1")
-ESPN_STAND = os.environ.get("SERIEA_ESPN_STAND", "https://site.api.espn.com/apis/v2/sports/soccer/ita.1/standings")
+PORT = int(os.environ.get("SERIEA_PORT") or LEGA["port"])
+ESPN_SITE = os.environ.get("SERIEA_ESPN", f"https://site.api.espn.com/apis/site/v2/sports/soccer/{LEGA['espn']}")
+ESPN_STAND = os.environ.get("SERIEA_ESPN_STAND", f"https://site.api.espn.com/apis/v2/sports/soccer/{LEGA['espn']}/standings")
 UA = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36"
 WIKI_UA = "SerieALive/1.0 (https://github.com/pier21q/Serie-A)"   # come chiede Wikipedia ai programmi
 DATA_VERSION = 4   # 4: statistiche da ESPN, Understat e Fantacalcio.it (non più Sofascore)
@@ -257,7 +278,7 @@ def merge_events(d, evs):
         was = ev.get("status")
         ev.update({k: v for k, v in x.items() if k not in ("home", "away")}, id=eid)
         ev["home"], ev["away"] = (base or x)["home"], (base or x)["away"]
-        if not ev.get("round") and rounds:
+        if not ev.get("round") and rounds and not LEGA["dir"]:   # le altre leghe: number_rounds
             near = min(rounds, key=lambda r: abs(r[0] - ev["start"]))
             ev["round"] = near[1] if abs(near[0] - ev["start"]) < 3 * 86400 else None
         if was in ("notstarted", "inprogress", None) and ev["status"] == "finished" and base is not None:
@@ -280,6 +301,8 @@ async def espn_schedule(d, months):
         j = await espn_get(ESPN_SITE + "/scoreboard", dates=m)
         evs += [x for x in (espn_event(e, teams) for e in j.get("events", [])) if x]
     ended = merge_events(d, evs)
+    if LEGA["dir"]:
+        number_rounds(d)
     d["updatedAt"] = time.time()
     return ended
 
@@ -492,6 +515,89 @@ def summaries_due(d, now):
     return [e for _, e in sorted(due, key=lambda t: t[0])]
 
 
+def number_rounds(d):
+    """Giornate quando ESPN non le dà (leghe senza dati di partenza, come la Premier League): in ordine di data, una
+    giornata finisce quando una delle squadre gioca di nuovo. Le partite che hanno già la giornata la tengono."""
+    evs = sorted({str(e["id"]): e for lst in ("played", "live", "next") for e in d.get(lst) or []}.values(),
+                 key=lambda e: e["start"])
+    teams_in, cur = {}, 0
+    for e in evs:
+        h, a = e["home"]["id"], e["away"]["id"]
+        if not e.get("round"):
+            r = cur or 1
+            if h in teams_in.get(r, set()) or a in teams_in.get(r, set()):
+                r = cur + 1
+            e["round"] = r
+        cur = max(cur, e["round"])
+        teams_in.setdefault(e["round"], set()).update((h, a))
+
+
+def espn_team(t):
+    """Squadra ESPN nel formato dell'app (per le leghe che partono da ESPN l'id è quello ESPN)."""
+    return {"id": int(t["id"]), "name": t.get("shortDisplayName") or t.get("displayName"), "fullName": t.get("displayName"),
+            "code": t.get("abbreviation"), "color": "#" + (t.get("color") or "6C7A72")}
+
+
+def espn_table(j, teams):
+    """Classifica ESPN -> righe nel formato dell'app."""
+    ch = j.get("children") or []
+    rows = []
+    for e in ((ch[0].get("standings") if ch else j.get("standings")) or {}).get("entries") or []:
+        tid = str((e.get("team") or {}).get("id"))
+        if tid not in teams:
+            continue
+        S = {s.get("name"): s.get("value") for s in e.get("stats") or []}
+        n = lambda k: int(S.get(k) or 0)
+        rows.append({"team": teams[tid], "pos": n("rank"), "p": n("gamesPlayed"), "w": n("wins"), "d": n("ties"), "l": n("losses"),
+                     "gf": n("pointsFor"), "ga": n("pointsAgainst"), "pts": n("points"), "zone": (e.get("note") or {}).get("description")})
+    return sorted(rows, key=lambda r: r["pos"])
+
+
+async def espn_bootstrap():
+    """Primo avvio di una lega nuova (es. Premier League), solo con ESPN: squadre, classifica, calendario con le
+    giornate, formazioni e statistiche delle partite giocate, e la stagione scorsa (classifica, risultati, arbitri e
+    cartellini). Poi l'aggiornamento normale aggiunge Understat, allenatori e probabili formazioni."""
+    log(f"Primo avvio della {LEGA['name']}: scarico i dati di base da ESPN (qualche minuto)")
+    sb = await espn_get(ESPN_SITE + "/scoreboard")
+    y = int((((sb.get("leagues") or [{}])[0].get("season") or {}).get("year")) or time.localtime().tm_year)
+    j = await espn_get(ESPN_STAND)
+    ch = j.get("children") or []
+    entries = ((ch[0].get("standings") if ch else j.get("standings")) or {}).get("entries") or []
+    teams = {str(e["team"]["id"]): espn_team(e["team"]) for e in entries if e.get("team")}
+    for tid in teams:
+        ESPNMAP.setdefault("teams", {})[tid] = tid
+    d = {"season": {"id": y, "year": f"{y % 100:02d}/{(y + 1) % 100:02d}"},
+         "standings": {"total": espn_table(j, teams), "home": [], "away": []},
+         "teams": {tid: {"team": t, "stats": {"matches": 0}} for tid, t in teams.items()},
+         "players": [], "played": [], "next": [], "live": [], "updatedAt": time.time()}
+    lt = time.localtime()
+    upto = (lt.tm_year * 12 + lt.tm_mon) + 1
+    months = [f"{yy}{mm:02d}" for yy, mm in [(y, m) for m in range(7, 13)] + [(y + 1, m) for m in range(1, 7)]
+              if yy * 12 + mm <= upto]
+    await espn_schedule(d, months)
+    number_rounds(d)
+    for e in [e for e in d["played"] if e.get("espn")]:
+        await espn_summary(e)
+    # stagione scorsa: classifica (anche delle squadre retrocesse), poi risultati, arbitri e cartellini di ogni partita
+    pj = await espn_get(ESPN_STAND, season=str(y - 1))
+    pch = pj.get("children") or []
+    pteams = {str(e["team"]["id"]): espn_team(e["team"])
+              for e in ((pch[0].get("standings") if pch else pj.get("standings")) or {}).get("entries") or [] if e.get("team")}
+    PRIOR.clear()
+    PRIOR.update(year=f"{(y - 1) % 100:02d}/{y % 100:02d}", sid=y - 1, complete=True,
+                 standings={"total": espn_table(pj, pteams), "home": [], "away": []})
+    while not PRIOR.get("resultsDone"):
+        await espn_prior_results()
+    while prior_ref_pending():
+        await prior_ref_step(40)
+    save_json(MATCH_FILE, MATCHES)
+    save_json(ESPN_FILE, ESPNMAP)
+    save_json(DATA_FILE, d)
+    log(f"{LEGA['name']}: {len(teams)} squadre, {len(d['played'])} partite giocate, {len(d['next'])} da giocare, "
+        f"stagione scorsa {len(PRIOR.get('results') or [])} partite")
+    return d
+
+
 async def espn_prior_results():
     """Risultati della stagione scorsa da ESPN (servono ai precedenti tra stili)."""
     teams = {str(r["team"]["id"]): r["team"] for r in (PRIOR.get("standings") or {}).get("total") or []}
@@ -616,6 +722,50 @@ def fc_side(tid, s):
             out["missing"].append({"id": pid, "name": nm, "type": typ, "reason": reason, "desc": m.get("desc") or label})
     out["cautioned"] = [fc_player(m["name"], cands)[1] for m in s.get("cautioned") or []]
     return out
+
+
+def of_side(tid, s):
+    """Formazione probabile di OneFootball nel formato dell'app (senza percentuali e indisponibili)."""
+    cands = roster_cands(tid)
+    pos, _ = fonti.lines_positions(s["formation"], s["starters"])
+    out = {"formation": s["formation"], "starters": [], "subs": [], "missing": [], "cautioned": []}
+    for p, ps in zip(s["starters"], pos):
+        pid, nm = fc_player(p["name"], cands)
+        out["starters"].append({"id": pid, "name": nm, "pos": ps})
+    return out
+
+
+async def onefootball_step(d, now):
+    """Probabili formazioni da OneFootball, per le leghe senza Fantacalcio.it, nella settimana prima delle partite.
+    Le ufficiali arrivano poi da ESPN circa un'ora prima, e prendono il loro posto."""
+    nxt = [e for e in d.get("next") or [] if e.get("status") == "notstarted" and 0 < e["start"] - now <= 6 * 86400]
+    if not nxt or now - EXTRA.get("ofAt", 0) < FC_NEAR:
+        return
+    EXTRA["ofAt"] = now - FC_NEAR + 900   # se va male, si riprova tra un quarto d'ora
+    save_json(EXTRA_FILE, EXTRA)
+    ids = fonti.parse_of_fixtures(await web_text(fonti.OF_FIXTURES.format(lega=LEGA["onefootball"])))
+    n = 0
+    for mid in ids[:len(nxt) + 4]:
+        try:
+            m = fonti.parse_of_match(await web_text(fonti.OF_MATCH.format(id=mid)))
+        except RuntimeError:
+            continue
+        if not m:
+            continue
+        hid, aid = team_by_name(d, m["home"]), team_by_name(d, m["away"])
+        e = next((e for e in nxt if str(e["home"]["id"]) == hid and str(e["away"]["id"]) == aid), None)
+        x = match_entry(e) if e else None
+        if not x or (x.get("lineups") or {}).get("confirmed"):
+            continue
+        x["lineups"] = {"confirmed": False, "source": "onefootball", "updated": now,
+                        "home": of_side(hid, m["lineups"]["home"]), "away": of_side(aid, m["lineups"]["away"])}
+        n += 1
+    if n:
+        VERSION["matches"] += 1
+        save_json(MATCH_FILE, MATCHES)
+        log(f"Probabili formazioni (OneFootball): {n} partite")
+    EXTRA["ofAt"] = now
+    save_json(EXTRA_FILE, EXTRA)
 
 
 async def fantacalcio_step(d, now):
@@ -746,6 +896,13 @@ async def wiki_en_changes(year):
 
 async def wiki_table(year):
     # Wikipedia respinge i finti browser che arrivano dai computer di GitHub: vuole un programma che dica chi è
+    if LEGA["dir"]:   # fuori dalla Serie A: la tabella «Personnel and kits» della Wikipedia in inglese
+        base = {"action": "parse", "page": fonti.WIKI_EN_TITLE.format(a=year, b=(year + 1) % 100), "format": "json",
+                "formatversion": "2"}
+        get = lambda **p: web_text(fonti.WIKI_EN + "?" + urlencode(dict(base, **p)), headers={"User-Agent": WIKI_UA})
+        secs = json.loads(await get(prop="sections")).get("parse", {}).get("sections") or []
+        sec = next((s["index"] for s in secs if "personnel" in s["line"].lower()), None)
+        return fonti.parse_personale_en(json.loads(await get(prop="text", section=sec))["parse"]["text"]) if sec else {}
     return fonti.parse_allenatori(await web_text(fonti.WIKI.format(a=year, b=year + 1), headers={"User-Agent": WIKI_UA}))
 
 
@@ -943,16 +1100,17 @@ async def sources_step(d, now):
     if not us_file(y - 1).exists():
         save_json(us_file(y - 1), await us_get(y - 1))
     STATUS["usAt"] = time.time()
-    try:
-        rows = statistiche.parse_fc_stats(await web_text(statistiche.FC_STATS))
-        if rows:
-            save_json(FC_STATS_FILE, {"at": time.time(), "players": rows})
-            STATUS["fcStatsAt"] = time.time()
-    except Exception as e:
-        log(f"Errore Fantacalcio.it (statistiche): {e}")
+    if LEGA["fantacalcio"]:
+        try:
+            rows = statistiche.parse_fc_stats(await web_text(statistiche.FC_STATS))
+            if rows:
+                save_json(FC_STATS_FILE, {"at": time.time(), "players": rows})
+                STATUS["fcStatsAt"] = time.time()
+        except Exception as e:
+            log(f"Errore Fantacalcio.it (statistiche): {e}")
     EXTRA["usAt"] = now
     save_json(EXTRA_FILE, EXTRA)
-    log("Statistiche aggiornate da Understat e Fantacalcio.it")
+    log("Statistiche aggiornate da Understat" + (" e Fantacalcio.it" if LEGA["fantacalcio"] else ""))
     return True
 
 
@@ -1116,7 +1274,7 @@ def site_conf():
     """Dove pubblicare il sito. Su GitHub Actions: nel ramo "sito", già scaricato nella cartella del sito.
     Sul Mac: da sito.json, {"remote": ..., "branches": [...]}; con "cloud": true lo pubblica solo GitHub Actions."""
     if CLOUD:
-        return {"branches": ["sito"]} if (SITE_DIR / ".git").exists() else {}
+        return {"branches": ["sito"]} if (SITE_ROOT / ".git").exists() else {}
     c = load_json(SITE_CONF, {}) or {}
     return c if c.get("remote") and not c.get("cloud") else {}
 
@@ -1149,9 +1307,9 @@ async def site_step():
 
     def work():
         if conf.get("remote"):
-            sito.collega(SITE_DIR, conf["remote"])
-        sito.prepara(SITE_DIR, snap, IMGDIR)
-        return sito.pubblica(SITE_DIR, conf.get("branches") or ["main"])
+            sito.collega(SITE_ROOT, conf["remote"])
+        sito.prepara(SITE_DIR, snap, IMGDIR, LEGA["name"])
+        return sito.pubblica(SITE_ROOT, conf.get("branches") or ["main"])
     ok, out = await asyncio.to_thread(work)
     if ok:
         EXTRA["siteSig"] = sig
@@ -1235,8 +1393,9 @@ async def refresher():
                 due["today"] = min(due["today"], now + 300)
         # 2. fonti di riserva: probabili formazioni, indisponibili e arbitri designati (fantacalcio.it), allenatori (Wikipedia)
         if d:
-            for name, step in (("fantacalcio.it", fantacalcio_step), ("designazioni", fc_referees),
-                               ("arbitri", fc_prior_referees), ("Wikipedia", wiki_coaches)):
+            steps = ((("fantacalcio.it", fantacalcio_step), ("designazioni", fc_referees), ("arbitri", fc_prior_referees))
+                     if LEGA["fantacalcio"] else (("OneFootball", onefootball_step),))
+            for name, step in steps + (("Wikipedia", wiki_coaches),):
                 try:
                     await step(d, now)
                     STATUS.pop(f"err_{name}", None)
@@ -1351,7 +1510,8 @@ def history_backup():
     today = time.strftime("%Y-%m-%d")
     if EXTRA.get("storicoDay") == today or not HISTORY_FILE.exists():
         return
-    ok, out = sito.copia_storico(DATA_DIR, HISTORY_FILE, f"Storico dei pronostici del {time.strftime('%d/%m/%Y')}")
+    branch = "storico" + (f"-{LEGA['dir']}" if LEGA["dir"] else "")   # un ramo per lega
+    ok, out = sito.copia_storico(DATA_DIR, HISTORY_FILE, f"Storico dei pronostici del {time.strftime('%d/%m/%Y')}", branch=branch)
     if ok:
         EXTRA["storicoDay"] = today
         save_json(EXTRA_FILE, EXTRA)
@@ -1369,6 +1529,8 @@ async def cloud_main():
     HTTP["web"] = aiohttp.ClientSession(headers={"User-Agent": UA, "Accept-Language": "it-IT,it;q=0.9"})
     try:
         STATE["data"] = load_json(DATA_FILE, None)
+        if not STATE["data"] and LEGA["dir"]:   # lega nuova: si parte da ESPN
+            STATE["data"] = await espn_bootstrap()
         if not STATE["data"]:
             log("Mancano i dati salvati (ramo \"dati\" del repository): niente da aggiornare")
             gh_note("Mancano i dati salvati (ramo \"dati\" del repository): niente da aggiornare")
@@ -1464,7 +1626,10 @@ def snapshot():
                                "result": it.get("result"), "ok": (it.get("eval") or {}).get("pick"), "eval": it.get("eval"),
                                # com'è andata: il pronostico al calcio d'inizio e le statistiche vere
                                "f": it.get("final") if it.get("result") else None, "real": it.get("real")} for it in hist]},
-        "players": players, "xpts": xpts_table(d), "league": {"yellowGame": _r(A["L"].get("yellowGame"), 2)},
+        "players": players, "xpts": xpts_table(d),
+        "league": {"yellowGame": _r(A["L"].get("yellowGame"), 2), "key": LEGA_KEY, "name": LEGA["name"], "dir": LEGA["dir"],
+                   "fantacalcio": LEGA["fantacalcio"]},
+        "leagues": [{"key": k, "name": v["name"], "dir": v["dir"]} for k, v in LEGHE.items()],
     }
 
 
@@ -1839,6 +2004,11 @@ async def main():
             await HTTP["espn"].close()
             await HTTP["web"].close()
             return
+    if not DATA_FILE.exists() and LEGA["dir"] and not offline:   # lega nuova: si parte da ESPN
+        try:
+            await espn_bootstrap()
+        except Exception as e:
+            log(f"Primo avvio non riuscito: {e}")
     if DATA_FILE.exists():
         STATE["data"] = load_json(DATA_FILE, None)
         if STATE["data"]:

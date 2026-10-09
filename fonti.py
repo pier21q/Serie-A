@@ -242,6 +242,78 @@ def parse_cambi_en(page):
     return []
 
 
+def parse_personale_en(page):
+    """Tabella «Personnel and kits» di Wikipedia in inglese (leghe senza la tabella degli allenatori in italiano) ->
+    {squadra: [{"name": allenatore}]}, nello stesso formato di parse_allenatori ma senza le giornate."""
+    for t in re.findall(r'<table class="wikitable.*?</table>', page, re.S):
+        grid = table_grid(t)
+        head = [h.lower() for h in grid[0]] if grid else []
+        it = next((i for i, h in enumerate(head) if h in ("team", "club")), None)
+        im = next((i for i, h in enumerate(head) if "manager" in h or "head coach" in h), None)
+        if it is None or im is None:
+            continue
+        clean = lambda s: re.sub(r"\s*\((?:caretaker|interim)\)", "", s or "", flags=re.I).strip()
+        return {g[it]: [{"name": clean(g[im]), "from": None, "to": None}] for g in grid[1:]
+                if len(g) > max(it, im) and g[it] and clean(g[im])}
+    return {}
+
+
+# ---------- OneFootball (probabili formazioni delle leghe senza Fantacalcio.it) ----------
+
+OF_FIXTURES = "https://onefootball.com/en/competition/{lega}/fixtures"
+OF_MATCH = "https://onefootball.com/en/match/{id}"
+
+
+def parse_of_fixtures(page):
+    """Calendario di una lega su OneFootball -> id delle prossime partite, in ordine."""
+    out = []
+    for m in re.findall(r'href="/en/match/(\d+)"', page):
+        if m not in out:
+            out.append(m)
+    return out
+
+
+def parse_of_match(page):
+    """Pagina di una partita su OneFootball -> {"home", "away", "kind" ("Predicted" o le ufficiali), "lineups":
+    {"home"/"away": {"formation", "starters": [{"name"}]}}} o None. OneFootball dà le righe dall'attacco al portiere,
+    ognuna da sinistra a destra: qui diventano portiere, poi difesa -> attacco, ogni linea da destra a sinistra (come
+    le formazioni ufficiali e quelle di Fantacalcio.it)."""
+    import json as _json
+    m = re.search(r'<script id="__NEXT_DATA__"[^>]*>(.*?)</script>', page, re.S)
+    if not m:
+        return None
+    found = {}
+
+    def walk(x):
+        if isinstance(x, dict):
+            if x.get("$case") == "matchLineup" and "lu" not in found:
+                found["lu"] = x["matchLineup"]
+            for k in ("lineup_type",):
+                if isinstance(x.get(k), dict) and "kind" not in found:
+                    found["kind"] = x[k].get("value")
+            for v in x.values():
+                walk(v)
+        elif isinstance(x, list):
+            for v in x:
+                walk(v)
+    walk(_json.loads(m.group(1)))
+    lu = ((found.get("lu") or {}).get("variant") or {}).get("lineup")
+    if not lu:
+        return None
+    out = {"kind": found.get("kind") or "", "title": (found.get("lu") or {}).get("title"), "lineups": {}}
+    for side, key in (("home", "homeTeam"), ("away", "awayTeam")):
+        tm = lu.get(key) or {}
+        rows = (((tm.get("variant") or {}).get("formation") or {}).get("rows")) or []
+        rows = [[p.get("name") for p in r.get("players") or [] if p.get("name")] for r in rows]
+        if sum(len(r) for r in rows) != 11:
+            return None
+        rows = rows[::-1]   # portiere, difesa, ..., attacco
+        out[side] = tm.get("teamName")
+        out["lineups"][side] = {"formation": "-".join(str(len(r)) for r in rows[1:]),
+                                "starters": [{"name": n} for r in rows for n in r[::-1]]}
+    return out
+
+
 def stesso(a, b):
     """Stessa persona: nomi uguali senza accenti, oppure stesso cognome."""
     n = lambda s: re.sub(r"[^a-z ]", "", unicodedata.normalize("NFKD", s or "").encode("ascii", "ignore").decode().lower()).split()

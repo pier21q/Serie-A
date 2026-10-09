@@ -20,6 +20,10 @@ body{background:var(--ground);color:var(--ink);font-family:var(--body);font-size
 .num{font-variant-numeric:tabular-nums}
 header{position:sticky;top:env(safe-area-inset-top,0px);z-index:5;background:color-mix(in srgb,var(--ground) 90%,transparent);backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);border-bottom:1px solid var(--line)}
 .bar1{display:flex;align-items:baseline;gap:10px;padding-block:12px 6px}
+.logo.long{font-size:24px}.logo.long span{display:none}
+.leghe{display:flex;gap:6px;padding-block:0 4px}.leghe:empty{display:none}
+.leghe a{font-size:12px;font-weight:600;text-decoration:none;color:var(--ink2);border:1px solid var(--line);border-radius:999px;padding:2px 10px}
+.leghe a[aria-current="page"]{background:var(--accent);border-color:var(--accent);color:#fff}
 .logo{font-family:var(--display);font-weight:700;font-size:28px;letter-spacing:.01em;line-height:1}
 .logo span{color:var(--accent)}
 .stamp{margin-left:auto;font-size:12px;color:var(--muted);text-align:right;line-height:1.3}
@@ -189,6 +193,7 @@ a.plain{color:inherit;text-decoration:none}
 
 <header><div class="wrap">
   <div class="bar1"><div class="logo">Serie A <span>tascabile</span></div><div class="stamp" id="stamp"></div></div>
+  <div class="leghe" id="leghe"></div>
   <nav id="nav" aria-label="Sezioni">
     <a href="#giornata" data-s="giornata">Giornata</a><a href="#evidenza" data-s="evidenza">In evidenza</a><a href="#classifica" data-s="classifica">Classifica</a>
     <a href="#squadre" data-s="squadre">Squadre</a><a href="#storico" data-s="storico">Storico</a><a href="#cerca" data-s="cerca">Cerca</a>
@@ -210,7 +215,7 @@ a.plain{color:inherit;text-decoration:none}
 
 <script id="dati" type="application/json">__DATI__</script>
 <script>
-let D = null, T = {};   // dati: dentro la pagina (anteprima) oppure nel file dati.json pubblicato accanto
+let D = null, T = {}, LG = {}, LGN = 'Serie A';   // dati: dentro la pagina (anteprima) oppure nel file dati.json pubblicato accanto
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const pc = v => v == null ? '–' : Math.round(v * 100) + '%';
 const fx = (v, d = 1) => v == null ? '–' : Number(v).toLocaleString('it-IT', {minimumFractionDigits: d, maximumFractionDigits: d});
@@ -294,7 +299,7 @@ function vSquadre() {
 function vStorico() {
   const s = D.history.summary || {n: 0};
   const tiles = s.n ? `<div class="tiles">${[['Partite', s.n], ['Esito 1X2', pc(s.pick)], ['Risultato esatto', pc(s.score)], ['Over/Under', pc(s.over25)], ['Gol/No gol', pc(s.btts)]].map(([k, v]) => `<div class="tile"><small>${k}</small><b class="num">${v}</b></div>`).join('')}</div>`
-    : '<p class="lead">Lo storico parte dalla 6ª giornata: il server salva l\'ultimo pronostico prima di ogni calcio d\'inizio e lo confronta con il risultato.</p>';
+    : '<p class="lead">Lo storico si riempie partita dopo partita: il server salva l\'ultimo pronostico prima di ogni calcio d\'inizio e lo confronta con il risultato.</p>';
   const items = D.history.items.filter(i => i.pick);
   // affidabilità: per fasce di fiducia, quante volte l'esito indicato è uscito davvero
   const cal = (s.cal || []).length ? `<div class="card" style="margin-top:10px"><h3>Quanto fidarsi</h3>
@@ -456,7 +461,7 @@ function clashCard(P, h, a) {
     <div class="legend"><span><i style="background:var(--home)"></i>${nm(h)}</span><span><i style="background:var(--away)"></i>${nm(a)}</span><span>posizione tra le ${D.N} squadre (0-100)</span></div>
     <ul class="keys" style="margin-top:12px">${items || '<li class="muted">Nessuno scontro di stili marcato: le due squadre non si ostacolano né si favoriscono in modo netto.</li>'}</ul>
     ${h2h ? `<h4>Precedenti</h4><div class="small">${h2h}</div>` : ''}
-    <p class="small muted">Lo scontro di stili sposta i gol attesi al massimo del 6% per squadra e il ritmo della partita dell'8%; i cartellini attesi salgono fino al 20% nelle partite più intense.${st.matches ? ` I precedenti tra stili si basano su ${st.matches} partite di Serie A.` : ''}</p></div>`;
+    <p class="small muted">Lo scontro di stili sposta i gol attesi al massimo del 6% per squadra e il ritmo della partita dell'8%; i cartellini attesi salgono fino al 20% nelle partite più intense.${st.matches ? ` I precedenti tra stili si basano su ${st.matches} partite di ${LGN}.` : ''}</p></div>`;
 }
 function adjCard(P, h, a) {
   const block = (id, base, fin) => {
@@ -506,7 +511,7 @@ const refTone = r => { if (!r || !r.games || r.factor == null) return ''; const 
 function refCard(P) {
   const r = P.referee, lg = (D.league || {}).yellowGame;
   if (!r || !r.name) return `<div class="card"><h3>Arbitro</h3><p class="small muted" style="margin:0">Non ancora designato: di solito le designazioni escono 2-3 giorni prima della partita.</p></div>`;
-  if (!r.games) return `<div class="card"><h3>Arbitro</h3><p class="small" style="margin:0"><b>${esc(r.name)}</b> · nessuna sua partita di Serie A nei dati (forse è al debutto): effetto neutro sui cartellini.</p></div>`;
+  if (!r.games) return `<div class="card"><h3>Arbitro</h3><p class="small" style="margin:0"><b>${esc(r.name)}</b> · nessuna sua partita di ${LGN} nei dati (forse è al debutto): effetto neutro sui cartellini.</p></div>`;
   const eff = Math.round((r.factor - 1) * 100);
   return `<div class="card"><h3>Arbitro <small class="muted">${refTone(r)}</small></h3>
     <div class="facts">
@@ -625,7 +630,7 @@ function vPartita(id) {
     ${refCard(P)}${lineupCard(P, 'home', h)}${lineupCard(P, 'away', a)}
     ${absentCard(P, h, a)}${scorersCard(P, h, a)}${yellowCard(P, h, a)}${heatCard(P, h, a)}
     ${radarCard(h, a)}${mirrorCard(h, a)}${swCard(h, a)}
-    <p class="small muted">Come funziona: per ogni squadra si stima la forza offensiva (gol segnati e xG) e difensiva (gol subiti, tiri in porta e palloni concessi vicino all'area) rispetto alla media della Serie A, partendo dalla stagione scorsa e dando sempre più peso a quella in corso. Poi si corregge per casa e trasferta, forma, accoppiamenti tra forze e debolezze, scontro di stili e assenze. I gol attesi alimentano un modello di Poisson con correzione Dixon-Coles.</p>
+    <p class="small muted">Come funziona: per ogni squadra si stima la forza offensiva (gol segnati e xG) e difensiva (gol subiti, tiri in porta e palloni concessi vicino all'area) rispetto alla media della ${LGN}, partendo dalla stagione scorsa e dando sempre più peso a quella in corso. Poi si corregge per casa e trasferta, forma, accoppiamenti tra forze e debolezze, scontro di stili e assenze. I gol attesi alimentano un modello di Poisson con correzione Dixon-Coles.</p>
   </div>`;
 }
 
@@ -671,7 +676,7 @@ function coachCard(id) {
   return `<div class="card"><h3>Allenatore</h3><div class="arch" style="font-size:20px">${esc(c.name)}</div>
     <div class="facts">
       ${fm[0] ? `<div class="fact"><small>Modulo più usato</small><b>${esc(fm[0].f)}</b></div>` : ''}
-      ${n ? `<div class="fact"><small>${n} partite in Serie A (ultime 2 stagioni)</small><b>${r.w}V ${r.d}N ${r.l}P</b></div>
+      ${n ? `<div class="fact"><small>${n} partite in ${LGN} (ultime 2 stagioni)</small><b>${r.w}V ${r.d}N ${r.l}P</b></div>
         <div class="fact"><small>Gol fatti / subiti</small><b class="num">${fx(r.gf / n, 1)} / ${fx(r.ga / n, 1)}</b></div>
         <div class="fact"><small>Over 2,5</small><b>${pc(r.over / n)}</b></div>
         <div class="fact"><small>Porta inviolata</small><b>${pc(r.cs / n)}</b></div>` : ''}
@@ -739,7 +744,7 @@ function vSquadra(id) {
     <div class="card"><h3>Profilo statistico</h3>
       <p class="small muted">La barra indica la posizione tra le ${D.N} squadre: più è lunga, meglio è. Le voci di "Stile" non sono né buone né cattive.</p>
       ${cats.map(c => `<h4>${esc(c)}</h4>${D.metrics.filter(M => M.c === c).map(M => pbar(f, M)).join('')}`).join('')}
-      <p class="small muted">Nel pronostico la forza di ${nm(id)} combina questa stagione (${f.n} partite)${rt.prior ? ` con la base ${rt.prior === 'stagione scorsa' ? 'della stagione ' + esc(D.priorYear || 'scorsa') : 'da ' + esc(rt.prior)}, che pesa il ${pc(rt.priorWeight)}` : ''}. Attacco ${fx(rt.att, 2)}, difesa ${fx(rt.de, 2)} (1 = media della Serie A; in difesa più basso è meglio).</p></div>
+      <p class="small muted">Nel pronostico la forza di ${nm(id)} combina questa stagione (${f.n} partite)${rt.prior ? ` con la base ${rt.prior === 'stagione scorsa' ? 'della stagione ' + esc(D.priorYear || 'scorsa') : 'da ' + esc(rt.prior)}, che pesa il ${pc(rt.priorWeight)}` : ''}. Attacco ${fx(rt.att, 2)}, difesa ${fx(rt.de, 2)} (1 = media della ${LGN}; in difesa più basso è meglio).</p></div>
     ${squadCard(id)}
     <div class="card"><h3>Ultime partite</h3><table><tbody>${played.map(e => `<tr><td class="l">${team(e.home, true)}</td><td class="num"><b>${e.hs}–${e.as}</b></td><td class="l">${team(e.away, true)}</td></tr>`).join('') || '<tr><td class="l muted">—</td></tr>'}</tbody></table></div>
     ${nx.length ? `<div class="card"><h3>Prossime partite</h3>${nx.slice(0, 4).map(x => `<a class="rowlink" href="#p${x.id}"><span>${team(x.home, true)}</span><span class="muted">${when(x.start)}</span><span>${team(x.away, true)}</span></a>`).join('')}</div>` : ''}
@@ -862,7 +867,7 @@ function vEvidenza() {
         <span class="rk num">${i + 1}</span>${crest(r.team, true)}
         <span class="evn"><b>${esc(r.name)}</b><small>${nm(r.team)} · ${side(r)}</small></span>
         <span class="evv num">${main(r)}</span></a>`).join('') || '<p class="muted">Nessun dato.</p>'}</div>
-      <p class="small muted">Dati di Understat, ESPN e Fantacalcio.it. Nella media a partita contano solo i giocatori con almeno ${SE.minApps} presenze (fantamedia e media voto: almeno ${SE.minApps} voti). Tocca un giocatore per aprire la sua scheda.</p>`;
+      <p class="small muted">Dati di Understat, ESPN${LG.fantacalcio === false ? '' : ' e Fantacalcio.it'}. Nella media a partita contano solo i giocatori con almeno ${SE.minApps} presenze ${LG.fantacalcio === false ? '' : `(fantamedia e media voto: almeno ${SE.minApps} voti)`}. Tocca un giocatore per aprire la sua scheda.</p>`;
   }
   const c = E.cats[esel] || E.cats[0];
   const val = r => c.u === '%' ? pc(r.v) : fx(r.v, 1);
@@ -879,7 +884,7 @@ function vEvidenza() {
 const VIEWS = {giornata: vGiornata, evidenza: vEvidenza, classifica: vClassifica, squadre: vSquadre, storico: vStorico, cerca: vCerca};
 function show(name) {
   // #p123 = partita, #s123 = squadra, #g123 = giocatore, #r123 = com'è andata una partita dello storico
-  const m = /^([psgr])(-?\d+)$/.exec(name || '');
+  const m = /^([psgr])(e?-?\d+)$/.exec(name || '');   // le partite nuove di ESPN hanno id come e401875056
   const view = m ? null : VIEWS[name] ? name : 'giornata';
   for (const k of Object.keys(VIEWS)) {
     const el = document.getElementById(k);
@@ -929,12 +934,18 @@ async function boot() {
     return;
   }
   T = D.teams;
+  // lega di questa pagina e collegamenti alle altre (la Serie A in cima al sito, le altre in una sottocartella)
+  LG = D.league || {name: 'Serie A', dir: ''}; LGN = LG.name || 'Serie A';
+  document.querySelector('.logo').innerHTML = `${esc(LGN)} <span>tascabile</span>`;
+  document.querySelector('.logo').classList.toggle('long', LGN.length > 10);
+  const up = LG.dir ? '../' : '';
+  document.getElementById('leghe').innerHTML = (D.leagues || []).length > 1 ? D.leagues.map(l => `<a href="${up + (l.dir ? l.dir + '/' : '') || './'}" aria-current="${l.dir === LG.dir ? 'page' : 'false'}">${esc(l.name)}</a>`).join('') : '';
   D.players = D.players || [];
   PL = Object.fromEntries(D.players.map(p => [String(p.id), p]));
   LOGOS = new Set((D.logos || []).map(String));
   MK = Object.fromEntries((D.metrics || []).map(x => [x.k, x]));
   stamp();
-  document.getElementById('foot').textContent = `Versione tascabile di Serie A Live, aggiornata in automatico ogni 30 minuti. Risultati, classifica, formazioni e statistiche delle partite da ESPN; xG da Understat; voti e probabili formazioni da Fantacalcio.it. I pronostici sono stime statistiche, non certezze.`;
+  document.getElementById('foot').textContent = `Versione tascabile di ${LGN}, aggiornata in automatico ogni 30 minuti. Risultati, classifica, formazioni e statistiche delle partite da ESPN; xG da Understat; ${LG.fantacalcio === false ? 'probabili formazioni da OneFootball; allenatori da Wikipedia' : 'voti, probabili formazioni e designazioni arbitrali da Fantacalcio.it'}. I pronostici sono stime statistiche, non certezze.`;
   show(location.hash.slice(1) || 'giornata');
 }
 boot();

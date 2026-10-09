@@ -1,4 +1,5 @@
-# Aggiorna il sito di Serie A Live sui computer di GitHub, anche con il Mac spento.
+# Aggiorna il sito di Serie A Live sui computer di GitHub, anche con il Mac spento: prima la Serie A (in cima al sito),
+# poi la Premier League (in /premier/, dati nella cartella premier del ramo "dati").
 # Ogni 30 minuti: riscarica tutte le fonti (ESPN, Understat, Fantacalcio.it, Wikipedia), ricalcola statistiche e
 # pronostici, ripubblica il sito nel ramo "sito" (anche se non è cambiato niente) e salva i dati nel ramo "dati".
 # GitHub salta gran parte delle esecuzioni programmate (il 28/09 ne ha fatte 4 su 96): per questo una sveglia
@@ -54,10 +55,12 @@ jobs:
               at = json.load(open("dati/esecuzione.json"))["at"]
           except Exception:
               at = 0
-          try:
-              nxt = json.load(open("dati/cache/data.json")).get("next") or []
-          except Exception:
-              nxt = []
+          nxt = []
+          for f in ("dati/cache/data.json", "dati/premier/cache/data.json"):   # tutte le leghe
+              try:
+                  nxt += json.load(open(f)).get("next") or []
+              except Exception:
+                  pass
           # nell'ora e mezza prima di una partita si aggiorna ogni 15 minuti: le formazioni ufficiali escono circa
           # un'ora prima, e pronostici e giocatori in evidenza si rifanno con quelle
           lineups = any(e.get("status") == "notstarted" and -300 <= e.get("start", 0) - now <= 95 * 60 for e in nxt)
@@ -94,7 +97,10 @@ jobs:
         run: |
           git config --global user.name "Serie A Live"
           git config --global user.email "serie-a-live@users.noreply.github.com"
-          python -u app/server.py --cloud
+          ok=0
+          python -u app/server.py --cloud || ok=1
+          SERIEA_LEGA=premier python -u app/server.py --cloud || ok=1
+          exit $ok
       - name: Tieni attiva la programmazione
         # GitHub sospende le programmazioni dei repository fermi da 60 giorni: una volta al giorno la riattiva
         if: always()

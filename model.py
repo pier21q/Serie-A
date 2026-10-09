@@ -20,6 +20,7 @@ K_PRIOR_NEW = 6        # con un allenatore nuovo la stagione scorsa pesa meno
 SOFT_CAP = .10         # tetto complessivo di forma, accoppiamenti tattici, stili e ritmo sui gol attesi
 GOAL_SHARE_CAP, ASSIST_SHARE_CAP = .40, .30   # quota massima dei gol e degli assist dei titolari per un giocatore
 # taratura degli attaccanti titolari sulle partite reali (confronto del 28/09/2026 su 50 partite)
+LEAGUE = "Serie A"   # nome della lega nei testi: lo imposta server.py (SERIEA_LEGA)
 F_CALIB = {"shots": .9, "sot": .87, "fouls": .85, "fouled": .88, "lamG": .85, "lamA": .65}
 STYLE_EFF_CAP, TEMPO_CAP, CARDS_CAP = .06, .08, .2   # tetti degli effetti dello scontro di stili
 EVID_K, EVID_CAP = 30, .05                            # precedenti tra stili: peso del campione e tetto
@@ -401,7 +402,7 @@ def role_text(name, prof):
     if up:
         parts = [f"{low(r['f'])} ({'gol' if r['gIdx'] >= r['aIdx'] else 'assist'} ×{max(r['gIdx'], r['aIdx']):.1f})".replace(".", ",")
                  for r in sorted(up, key=lambda r: -max(r["gIdx"], r["aIdx"]))[:2]]
-        txt += " Rendono più della media del loro ruolo in Serie A: " + " e ".join(parts) + "."
+        txt += f" Rendono più della media del loro ruolo in {LEAGUE}: " + " e ".join(parts) + "."
     if prof["n"] < 8:
         txt += f" Pochi dati ({prof['n']} partit{'a' if prof['n'] == 1 else 'e'}): pesa poco nel pronostico."
     return txt
@@ -1036,6 +1037,8 @@ def evidenza_stagione(A, n=10):
         # le medie voto contano le partite con il voto, le altre le presenze
         apps_of = (lambda p: num(p.get("ratingPV")) or 0) if avg_only else (lambda p: num(p.get("appearances")) or 0)
         have = [p for p in players if num(p.get(k)) is not None and apps_of(p) > 0 and (avg_only or num(p[k]) > 0)]
+        if not have:   # voce senza dati in questa lega (es. fantamedia fuori dalla Serie A)
+            continue
         row = lambda p, v: {"id": p["id"], "name": (p.get("name") or "").strip(), "pos": p.get("pos"),
                             "team": str(p.get("teamId")), "v": round(v, 3), "tot": round(num(p[k]), 3),
                             "pg": round(num(p[k]) / apps_of(p), 3) if not avg_only else round(num(p[k]), 3),
@@ -1538,7 +1541,7 @@ def predict(A, hid, aid, ev=None, extra=None):
         miss = {m["id"] for m in (side or {}).get("missing") or [] if m.get("id") and m.get("type") != "doubtful"}
         if side and len(side.get("starters") or []) >= 11:
             xis[key], src[key] = side, "ufficiale" if confirmed else (
-                "probabile (Fantacalcio.it)" if (lu or {}).get("source") == "fantacalcio" else "probabile")
+                {"fantacalcio": "probabile (Fantacalcio.it)", "onefootball": "probabile (OneFootball)"}.get((lu or {}).get("source"), "probabile"))
         else:
             xis[key], src[key] = estimate_xi(A, tid, miss)
     ref = (extra or {}).get("referee")
@@ -1874,7 +1877,7 @@ def fanta(A, F, data, matches, squads):
                         pr = _single_projection(A, dict(p, pos=p.get("pos") or {"P": "G", "D": "D", "C": "M", "A": "F"}.get(entry.get("role"))),
                                                 tid, str(opp["id"]), lam_team, lam_opp, ref_f, 45 if st == "In dubbio" else 12)
                 else:
-                    st, note = "Giocatore non trovato", "nome o squadra non riconosciuti nelle statistiche di Serie A"
+                    st, note = "Giocatore non trovato", f"nome o squadra non riconosciuti nelle statistiche di {LEAGUE}"
                 pr = pr or {}
                 row.update(status=st, note=note, min=pr.get("min"), pGoal=pr.get("pGoal"), pAssist=pr.get("pAssist"),
                            pYellow=pr.get("pYellow"), pCS=cs if entry.get("role") in ("P", "D") else None,

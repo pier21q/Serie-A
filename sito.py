@@ -86,16 +86,21 @@ def loghi(site, snap, img_dir):
     return have
 
 
-def prepara(site, snap, img_dir=None):
-    """Scrive nella cartella del sito la pagina, i dati, l'icona e il manifest (per la schermata Home)."""
+def prepara(site, snap, img_dir=None, league="Serie A"):
+    """Scrive nella cartella del sito la pagina, i dati, l'icona e il manifest (per la schermata Home). Ogni lega ha
+    la sua cartella (la Serie A in cima al sito, la Premier League in /premier/)."""
     site.mkdir(parents=True, exist_ok=True)
     if img_dir:
         snap = dict(snap, logos=loghi(site, snap, img_dir))
+    short = league if len(league) <= 12 else league.split()[0]   # nome sotto l'icona della schermata Home
     page = (ROOT / "tascabile.html").read_text().replace("__DATI__", "null")
+    page = page.replace("<title>Serie A Tascabile</title>", f"<title>{league} Tascabile</title>")
     page = re.sub(r'\s*<div class="icona">.*?</div>', "", page, count=1, flags=re.S)   # sul sito l'icona c'è già
-    (site / "index.html").write_text(HEAD + page + TAIL)
+    head = HEAD.replace('content="Serie A">', f'content="{short}">')
+    (site / "index.html").write_text(head + page + TAIL)
     (site / "dati.json").write_text(json.dumps(snap, ensure_ascii=False))
-    (site / "manifest.webmanifest").write_text(json.dumps(MANIFEST, ensure_ascii=False, indent=1))
+    manifest = dict(MANIFEST, name=f"{league} Tascabile", short_name=short)
+    (site / "manifest.webmanifest").write_text(json.dumps(manifest, ensure_ascii=False, indent=1))
     (site / ".nojekyll").write_text("")
     (site / "robots.txt").write_text("User-agent: *\nDisallow: /\n")
     for size in (180, 192, 512):
