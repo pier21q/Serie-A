@@ -23,6 +23,7 @@ Avvio:  python server.py            (apre la pagina nel browser)
                                      dati nel ramo "dati", poi esce)
 """
 import asyncio
+import difflib
 import json
 import os
 import re
@@ -58,10 +59,10 @@ ROOT = Path(__file__).resolve().parent
 NO_F_CALIB = {"shots": 1.0, "sot": 1.0, "fouls": 1.0, "fouled": 1.0, "lamG": 1.0, "lamA": 1.0}
 LEGHE = {
     "serie-a": {"name": "Serie A", "espn": "ita.1", "understat": "Serie_A", "wiki_en": "Serie A", "dir": "",
-                "fantacalcio": True, "onefootball": None, "port": 8765,
+                "fantacalcio": True, "onefootball": None, "of_comp": "serie-a-13", "port": 8765,
                 "calib": NO_F_CALIB, "roles": {"lamG": {"D": .90}}},
     "premier": {"name": "Premier League", "espn": "eng.1", "understat": "EPL", "wiki_en": "Premier League", "dir": "premier",
-                "fantacalcio": False, "onefootball": "premier-league-9", "port": 8766,
+                "fantacalcio": False, "onefootball": "premier-league-9", "of_comp": "premier-league-9", "port": 8766,
                 "calib": NO_F_CALIB, "roles": {"lamG": {"D": .80}, "lamY": {"F": 1.15}}},
 }
 LEGA_KEY = os.environ.get("SERIEA_LEGA") or "serie-a"
@@ -143,6 +144,11 @@ IMG_MISSING = set()
 HTTP = {"espn": None, "web": None}   # ESPN vuole l'identificazione standard di aiohttp; "web" per gli altri siti
 
 
+def errtxt(e):
+    """Testo di un errore: alcune eccezioni (es. una richiesta scaduta) non hanno messaggio, allora il loro tipo."""
+    return str(e) or type(e).__name__
+
+
 def log(msg):
     # sul Mac le leghe scrivono nella stessa finestra: le altre si riconoscono dal nome
     print(f"[{time.strftime('%d/%m %H:%M:%S')}] " + (f"[{LEGA['name']}] " if LEGA["dir"] else "") + str(msg), flush=True)
@@ -196,15 +202,39 @@ DEPTH = {"G": 0, "CD": 1, "CD-L": 1, "CD-R": 1, "RB": 1, "LB": 1, "RWB": 1.5, "L
          "SS": 3.8, "CF-L": 3.8, "CF-R": 3.8, "CF": 4, "F": 4, "RF": 4, "LF": 4}
 
 
+def tok_seq(n):
+    """Parole di un nome, normalizzate e in ordine (senza «jr», «junior»)."""
+    s = unicodedata.normalize("NFD", (n or "").translate(model.TRANSLIT)).encode("ascii", "ignore").decode().lower()
+    s = re.sub(r"[^a-z ]+", " ", s)
+    for a, b in ALIASES.items():
+        s = s.replace(a, b)
+    out = [w for w in s.split() if w not in STOP]
+    # in fondo: «jr», «junior» e le iniziali di Fantacalcio.it («Martinez L.»)
+    while len(out) > 1 and (out[-1] in ("jr", "junior", "ii", "iii") or len(out[-1]) == 1):
+        out.pop()
+    return out
+
+
 def tokens(*names):
     out = set()
     for n in names:
-        s = unicodedata.normalize("NFD", (n or "").translate(model.TRANSLIT)).encode("ascii", "ignore").decode().lower()
-        s = re.sub(r"[^a-z ]+", " ", s)
-        for a, b in ALIASES.items():
-            s = s.replace(a, b)
-        out |= set(s.split()) - STOP
+        out |= set(tok_seq(n))
     return out
+
+
+def same_person(a, b):
+    """Possono essere la stessa persona: una parte del cognome in comune («Matìas Soulè Malvano» e «Matías Soulé»),
+    anche scritto attaccato («Del Prato» e «Delprato») o con una piccola differenza («Halal» e «Halhal»). Il nome di
+    battesimo da solo non basta: «Lewis Hall» non è «Lewis Miley». Un nome di una parola sola («Gabriel», «Rodri», come
+    li scrive Understat) può essere una parola qualsiasi dell'altro."""
+    x, y = tok_seq(a), tok_seq(b)
+    if not x or not y:
+        return False
+    if len(x) == 1 or len(y) == 1:
+        return bool(set(x) & set(y))
+    sx, sy = x[1:], y[1:]
+    return (bool(set(sx) & set(sy)) or "".join(sx) == "".join(sy)
+            or difflib.SequenceMatcher(None, x[-1], y[-1]).ratio() >= .85)
 
 
 def map_team(et, teams, store="teams"):
@@ -361,21 +391,27 @@ def lateral(c):
 
 def reg_score(name, x, jersey=None):
     tk, pt = tokens(name), tokens(x.get("name"))
-    if not tk or not pt:
+    if not tk or not pt or not same_person(name, x.get("name")):   # prima bastava il nome di battesimo
         return 0.0
-    last = max(tk, key=len)
-    sc = 3.0 * len(tk & pt) + (2.0 if last in pt else 0)
+    sa, sb = tok_seq(name), tok_seq(x.get("name"))
+    # cognome uguale, anche scritto attaccato («Dasilva» e «Da Silva») o con una piccola differenza («Halal»)
+    sur = (sa[-1] in pt or "".join(sa[1:]) == "".join(sb[1:])
+           or difflib.SequenceMatcher(None, sa[-1], sb[-1]).ratio() >= .85)
+    sc = 3.0 * len(tk & pt) + (2.0 if sur else 0)
     if jersey and str(x.get("num") or "") == str(jersey):
         sc += 2.5
     return sc
 
 
-def reg_find(name, team_ids, jersey=None, need=4.0):
-    """Giocatore dell'anagrafica con questo nome (nelle squadre indicate, o in tutte se None)."""
+def reg_find(name, team_ids, jersey=None, need=4.0, espn=None):
+    """Giocatore dell'anagrafica con questo nome (nelle squadre indicate, o in tutte se None). Con espn (id ESPN di chi
+    si cerca) salta chi ha già un altro id ESPN: per ESPN due id diversi sono sempre due persone diverse."""
     teams = {str(t) for t in team_ids if t} if team_ids else None
     best, bs = None, 0.0
     for cid, x in REG["info"].items():
         if teams is not None and str(x.get("teamId")) not in teams:
+            continue
+        if espn and x.get("espnId") and str(x["espnId"]) != str(espn):
             continue
         sc = reg_score(name, x, jersey)
         if sc > bs:
@@ -388,9 +424,9 @@ def canon_espn(eid, name, team_id, jersey=None, code=None, move=True):
     eid = str(eid)
     cid = REG["espn"].get(eid)
     if cid is None:
-        cid = reg_find(name, [team_id], jersey) if team_id else None
+        cid = reg_find(name, [team_id], jersey, espn=eid) if team_id else None
         if cid is None:
-            cid = reg_find(name, None, None, need=8.0)   # arrivato da un'altra squadra
+            cid = reg_find(name, None, None, need=8.0, espn=eid)   # arrivato da un'altra squadra
         if cid is None:
             cid = str(-int(eid))
             REG["info"][cid] = {"name": name, "teamId": str(team_id) if team_id and move else None, "num": jersey,
@@ -675,7 +711,7 @@ def update_history():
         if model.update_history(HISTORY, analysis()["A"], STATE["data"], MATCHES, ids=REG["espn"]):
             save_json(HISTORY_FILE, HISTORY)
     except Exception as e:
-        log(f"Storico pronostici non aggiornato: {e}")
+        log(f"Storico pronostici non aggiornato: {errtxt(e)}")
 
 
 # ---------- fonti di riserva (fantacalcio.it, Wikipedia, ESPN) ----------
@@ -740,6 +776,49 @@ def of_side(tid, s):
         pid, nm = fc_player(p["name"], cands)
         out["starters"].append({"id": pid, "name": nm, "pos": ps})
     return out
+
+
+PHOTO_EVERY = 86400   # rose di OneFootball per le foto: una volta al giorno (20 pagine)
+
+
+def of_team(d, slug):
+    """Squadra della lega da un indirizzo di OneFootball («manchester-city-209»), solo se il nome corrisponde bene
+    (le pagine citano anche squadre di altre competizioni: «west-ham-united» non è il Manchester United)."""
+    words = tokens(" ".join(w for w in slug.split("-") if not w.isdigit()))
+    tid = team_by_name(d, " ".join(words))
+    if not tid or not words:
+        return None
+    t = next((r["team"] for r in d["standings"]["total"] if str(r["team"]["id"]) == tid), {})
+    have = tokens(t.get("name"), t.get("fullName"), t.get("shortName"))
+    return tid if len(words & have) / len(words) >= .5 else None
+
+
+async def of_photos_step(d, now):
+    """Foto dei giocatori (solo per la pagina del Mac): dalle rose di OneFootball, una volta al giorno. A ogni
+    giocatore dell'anagrafica va l'id OneFootball di chi ha lo stesso cognome nella stessa squadra."""
+    if CLOUD or not LEGA.get("of_comp") or now - EXTRA.get("photoAt", 0) < PHOTO_EVERY:
+        return
+    EXTRA["photoAt"] = now - PHOTO_EVERY + 6 * 3600   # se va male, si riprova tra 6 ore
+    save_json(EXTRA_FILE, EXTRA)
+    teams = {}
+    for slug in fonti.parse_of_teams(await web_text(fonti.OF_TABLE.format(lega=LEGA["of_comp"]))):
+        tid = of_team(d, slug)
+        if tid and tid not in teams:
+            teams[tid] = slug
+    n = 0
+    for tid, slug in teams.items():
+        squad = fonti.parse_of_squad(await web_text(fonti.OF_SQUAD.format(team=slug)))
+        mine = [(cid, x) for cid, x in REG["info"].items() if str(x.get("teamId")) == tid]
+        for name, ofid in squad:
+            best = max(((reg_score(name, x), cid) for cid, x in mine), default=(0, None))
+            if best[0] >= 4 and REG["info"][best[1]].get("ofId") != ofid:
+                REG["info"][best[1]]["ofId"] = ofid
+                IMG_MISSING.discard(f"player-{best[1]}")
+                n += 1
+    save_json(REG_FILE, REG)
+    EXTRA["photoAt"] = now
+    save_json(EXTRA_FILE, EXTRA)
+    log(f"Foto dei giocatori (OneFootball): {len(teams)} squadre, {n} giocatori collegati")
 
 
 async def onefootball_step(d, now):
@@ -928,8 +1007,8 @@ async def wiki_coaches(d, now):
         EXTRA["wikiEn"] = await wiki_en_changes(y)
         STATUS.pop("err_Wikipedia inglese", None)
     except Exception as e:
-        STATUS["err_Wikipedia inglese"] = str(e)[:200]
-        log(f"Errore Wikipedia inglese: {e}")
+        STATUS["err_Wikipedia inglese"] = errtxt(e)[:200]
+        log(f"Errore Wikipedia inglese: {errtxt(e)}")
     en = EXTRA.get("wikiEn") or []
     n = 0
     for team, ten in cur.items():
@@ -1114,7 +1193,7 @@ async def sources_step(d, now):
                 save_json(FC_STATS_FILE, {"at": time.time(), "players": rows})
                 STATUS["fcStatsAt"] = time.time()
         except Exception as e:
-            log(f"Errore Fantacalcio.it (statistiche): {e}")
+            log(f"Errore Fantacalcio.it (statistiche): {errtxt(e)}")
     EXTRA["usAt"] = now
     save_json(EXTRA_FILE, EXTRA)
     log("Statistiche aggiornate da Understat" + (" e Fantacalcio.it" if LEGA["fantacalcio"] else ""))
@@ -1162,6 +1241,59 @@ def reg_seed(d):
         REG["info"].setdefault(str(pid), {"name": x.get("name"), "teamId": str(x.get("teamId")), "pos": x.get("pos"),
                                           "num": x.get("num")})
     save_json(REG_FILE, REG)
+
+
+def repair_registry(d):
+    """Separa i giocatori che l'anagrafica aveva unito per errore quando bastava il nome di battesimo (es. Lewis Hall
+    e Lewis Miley, Gabriel Magalhães e Gabriel Jesus): un id ESPN per persona. Poi riscarica le formazioni delle
+    partite con quei giocatori e ricalcola le statistiche. Non fa niente se non trova errori."""
+    names = {}
+    boxes = [x.get("box") for x in MATCHES.values()] + [v.get("box") for v in (PRIOR.get("refCards") or {}).values()]
+    for b in boxes:
+        for eid, p in ((b or {}).get("players") or {}).items():
+            if p.get("name"):
+                names.setdefault(str(eid), p["name"])
+    groups = {}
+    for eid, cid in REG["espn"].items():
+        if eid in names:
+            groups.setdefault(str(cid), []).append(eid)
+    fixed = set()
+    for cid, eids in groups.items():   # due id ESPN nella stessa persona: per ESPN sono sempre due persone
+        if len(eids) < 2:
+            continue
+        info = (REG["info"].get(cid) or {}).get("name")
+        keep = max(eids, key=lambda e: (tokens(names[e]) == tokens(info), same_person(names[e], info)))
+        for e in eids:
+            if e != keep:
+                new = str(-int(e))
+                REG["espn"][e] = new
+                REG["info"][new] = {"name": names[e], "teamId": None, "espnId": e}
+                fixed.add(cid)
+                log(f"Anagrafica: {names[e]} separato da {names[keep]} (erano uniti per errore)")
+    # Understat: i collegamenti fatti con la regola vecchia si rifanno (canon_us li ricalcola alla prossima statistica)
+    us_names = {}
+    for y in (season_year(d), season_year(d) - 1):
+        for p in ((statistiche.understat_parse(load_json(us_file(y), {})) or {}).get("players") or []) if us_file(y).exists() else []:
+            us_names[str(p.get("usId"))] = p.get("name")
+    for uid, cid in list(REG["us"].items()):
+        if uid in us_names and (str(cid) in fixed or not same_person(us_names[uid], (REG["info"].get(str(cid)) or {}).get("name"))):
+            del REG["us"][uid]
+            fixed.add(str(cid))
+    if not fixed:
+        return
+    # formazioni salvate con l'id sbagliato: si riscaricano da ESPN; statistiche di questa stagione e della scorsa da rifare
+    for x in MATCHES.values():
+        lu = x.get("lineups") or {}
+        ids = {str(p.get("id")) for s in ("home", "away") for k in ("starters", "subs") for p in ((lu.get(s) or {}).get(k) or [])}
+        if ids & fixed:
+            x.pop("final", None)
+            x["espnAt"] = 0
+    PRIOR["statsV"] = 1
+    d["v"] = None
+    save_json(REG_FILE, REG)
+    save_json(MATCH_FILE, MATCHES)
+    save_json(PRIOR_FILE, PRIOR)
+    VERSION["matches"] += 1
 
 
 def canon_us(u, team_of_title):
@@ -1395,35 +1527,35 @@ async def refresher():
                         log(f"Live: {score or 'nessuna partita in corso'}")
                     STATUS["_hadLive"] = bool(score)
             except Exception as e:
-                STATUS.update(espnError=str(e)[:200])
-                log(f"Errore ESPN: {e}")
+                STATUS.update(espnError=errtxt(e)[:200])
+                log(f"Errore ESPN: {errtxt(e)}")
                 due["today"] = min(due["today"], now + 300)
         # 2. fonti di riserva: probabili formazioni, indisponibili e arbitri designati (fantacalcio.it), allenatori (Wikipedia)
         if d:
             steps = ((("fantacalcio.it", fantacalcio_step), ("designazioni", fc_referees), ("arbitri", fc_prior_referees))
                      if LEGA["fantacalcio"] else (("OneFootball", onefootball_step),))
-            for name, step in steps + (("Wikipedia", wiki_coaches),):
+            for name, step in steps + (("Wikipedia", wiki_coaches), ("foto", of_photos_step)):
                 try:
                     await step(d, now)
                     STATUS.pop(f"err_{name}", None)
                 except Exception as e:
-                    STATUS[f"err_{name}"] = str(e)[:200]
-                    log(f"Errore {name}: {e}")
+                    STATUS[f"err_{name}"] = errtxt(e)[:200]
+                    log(f"Errore {name}: {errtxt(e)}")
         # 3. statistiche: Understat e Fantacalcio.it, poi il ricalcolo con le partite ESPN
         if d:
             try:
                 await sources_step(d, now)
                 STATUS.pop("err_statistiche", None)
             except Exception as e:
-                STATUS["err_statistiche"] = str(e)[:200]
-                log(f"Errore statistiche (Understat): {e}")
+                STATUS["err_statistiche"] = errtxt(e)[:200]
+                log(f"Errore statistiche (Understat): {errtxt(e)}")
             if stats_signature(d) != sig:
                 try:
                     rebuild_stats(d)
                     sig = stats_signature(d)
                 except Exception as e:
-                    STATUS["err_statistiche"] = str(e)[:200]
-                    log(f"Errore nel calcolo delle statistiche: {e}")
+                    STATUS["err_statistiche"] = errtxt(e)[:200]
+                    log(f"Errore nel calcolo delle statistiche: {errtxt(e)}")
         if d:
             STATE["data"] = d
             save_json(DATA_FILE, d)
@@ -1431,12 +1563,12 @@ async def refresher():
             try:
                 save_json(SNAPSHOT_FILE, snapshot())
             except Exception as e:
-                log(f"Fotografia per la versione tascabile non salvata: {e}")
+                log(f"Fotografia per la versione tascabile non salvata: {errtxt(e)}")
             try:
                 await site_step()
             except Exception as e:
-                STATUS["err_sito"] = str(e)[:200]
-                log(f"Errore sito: {e}")
+                STATUS["err_sito"] = errtxt(e)[:200]
+                log(f"Errore sito: {errtxt(e)}")
         if CLOUD:
             return   # su GitHub un giro solo: il prossimo lo fa l'esecuzione programmata tra 30 minuti
         # 4. quando ricontrollare
@@ -1543,6 +1675,7 @@ async def cloud_main():
             gh_note("Mancano i dati salvati (ramo \"dati\" del repository): niente da aggiornare")
             return 1
         reg_seed(STATE["data"])
+        repair_registry(STATE["data"])
         refresh_squads(STATE["data"])
         await refresher()
     finally:
@@ -1902,9 +2035,11 @@ def img_url(kind, iid):
     if kind == "team":
         rev = {str(v): k for k, v in (ESPNMAP.get("teams") or {}).items()}
         return f"https://a.espncdn.com/i/teamlogos/soccer/500/{rev[iid]}.png" if iid in rev else None
-    if kind == "player":
-        eid = (REG["info"].get(iid) or {}).get("espnId")
-        return f"https://a.espncdn.com/i/headshots/soccer/players/full/{eid}.png" if eid else None
+    if kind == "player":   # prima la foto di OneFootball (ESPN non ha quella di molti giocatori, in Premier quasi nessuna)
+        x = REG["info"].get(iid) or {}
+        if x.get("ofId"):
+            return fonti.OF_PHOTO.format(id=x["ofId"])
+        return f"https://a.espncdn.com/i/headshots/soccer/players/full/{x['espnId']}.png" if x.get("espnId") else None
     return None
 
 
@@ -2017,11 +2152,12 @@ async def main():
         try:
             await espn_bootstrap()
         except Exception as e:
-            log(f"Primo avvio non riuscito: {e}")
+            log(f"Primo avvio non riuscito: {errtxt(e)}")
     if DATA_FILE.exists():
         STATE["data"] = load_json(DATA_FILE, None)
         if STATE["data"]:
             reg_seed(STATE["data"])
+            repair_registry(STATE["data"])
             refresh_squads(STATE["data"])
             STATUS["statsAt"] = STATE["data"].get("fullAt")
             log("Caricati gli ultimi dati salvati")

@@ -9,6 +9,7 @@
 Qui ci sono solo le funzioni che leggono le pagine: le richieste le fa server.py.
 """
 import html
+import json
 import re
 import unicodedata
 from datetime import datetime, timezone
@@ -262,6 +263,31 @@ def parse_personale_en(page):
 
 OF_FIXTURES = "https://onefootball.com/en/competition/{lega}/fixtures"
 OF_MATCH = "https://onefootball.com/en/match/{id}"
+
+
+OF_TABLE = "https://onefootball.com/en/competition/{lega}/table"
+OF_SQUAD = "https://onefootball.com/en/team/{team}/squad"
+OF_PHOTO = "https://images.onefootball.com/players/180/{id}.jpg"
+
+
+def parse_of_teams(page):
+    """Classifica di una lega su OneFootball -> indirizzi delle squadre ("arsenal-2"), anche di altre competizioni
+    citate nella pagina: si tengono solo quelle che corrispondono alle squadre della lega."""
+    out = []
+    for t in re.findall(r'href="/en/team/([a-z0-9-]+-\d+)"', page):
+        if t not in out:
+            out.append(t)
+    return out
+
+
+def parse_of_squad(page):
+    """Rosa di una squadra su OneFootball -> [(nome, id OneFootball)]: la foto è OF_PHOTO con quell'id."""
+    out = []
+    for name, pid in re.findall(r'"@type":"Person","@id":"[^"]*","name":"([^"]+)","url":"https://onefootball\.com/en/player/[a-z0-9-]+-(\d+)"', page):
+        name = html.unescape(json.loads(f'"{name}"') if "\\u" in name else name)
+        if (name, pid) not in out:
+            out.append((name, pid))
+    return out
 
 
 def parse_of_fixtures(page):
