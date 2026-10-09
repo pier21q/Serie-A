@@ -78,6 +78,16 @@ tr:last-child td{border-bottom:0}
 .evl{gap:6px;margin-top:10px}
 .seg.evg{margin:0 0 12px}.seg.evg button{font-weight:600}
 .seg.evm{margin-top:10px}.seg.evm button{font-size:12px;padding:3px 10px}
+.search{width:100%;font:inherit;font-size:16px;padding:10px 14px;border:1px solid var(--line);border-radius:12px;background:var(--surface);color:var(--ink)}
+.search:focus{outline:2px solid var(--accent);outline-offset:1px}
+.cmp{font-size:13px}.cmp td{white-space:nowrap;padding-inline:3px}.cmp th{padding-inline:3px}
+.cmp td small{color:var(--muted);font-size:11px}
+.pos-luck{font-weight:600}.pos-luck.up{color:var(--good)}.pos-luck.dn{color:var(--bad)}
+.cal{display:grid;grid-template-columns:auto 1fr auto;gap:6px 10px;align-items:center;font-size:13px}
+.cal .tr{height:8px;border-radius:4px;background:var(--surface2);position:relative;overflow:hidden}
+.cal .tr i{position:absolute;inset:0 auto 0 0;background:var(--accent);border-radius:4px}
+.cal .tr u{position:absolute;top:-2px;bottom:-2px;width:2px;background:var(--ink)}
+a.plain{color:inherit;text-decoration:none}
 .cardlink.ev{display:flex;align-items:center;gap:10px;padding:10px 14px}
 .ev .rk{width:1.5em;text-align:right;color:var(--muted);font-weight:600;flex:none}
 .ev .evn{flex:1;min-width:0;display:grid}
@@ -181,7 +191,7 @@ a.plain{color:inherit;text-decoration:none}
   <div class="bar1"><div class="logo">Serie A <span>tascabile</span></div><div class="stamp" id="stamp"></div></div>
   <nav id="nav" aria-label="Sezioni">
     <a href="#giornata" data-s="giornata">Giornata</a><a href="#evidenza" data-s="evidenza">In evidenza</a><a href="#classifica" data-s="classifica">Classifica</a>
-    <a href="#squadre" data-s="squadre">Squadre</a><a href="#storico" data-s="storico">Storico</a>
+    <a href="#squadre" data-s="squadre">Squadre</a><a href="#storico" data-s="storico">Storico</a><a href="#cerca" data-s="cerca">Cerca</a>
   </nav>
 </div></header>
 
@@ -191,6 +201,7 @@ a.plain{color:inherit;text-decoration:none}
   <section id="classifica" hidden></section>
   <section id="squadre" hidden></section>
   <section id="storico" hidden></section>
+  <section id="cerca" hidden></section>
   <section id="dettaglio" hidden></section>
   <footer id="foot"></footer>
   <div class="icona"><img src="icona.png" alt="Icona di Serie A Tascabile per la schermata Home" width="56" height="56">
@@ -228,7 +239,7 @@ function vGiornata() {
   const rounds = Object.keys(byRound).sort((a, b) => (+a || 99) - (+b || 99)).slice(0, 2);
   return live + rounds.map(r => `<h2>${r === 'altre' ? 'Prossime partite' : r + 'ª giornata'} <small>pronostici</small></h2>
     <div class="list">${byRound[r].map(f => `<a class="card cardlink" href="#p${f.id}">
-      <div class="fx-top"><span>${when(f.start)}</span><span>${esc(f.lineups === 'ufficiale' ? 'Formazioni ufficiali' : f.lineups && f.lineups.startsWith('probabile') ? 'Formazioni probabili' : 'Formazioni stimate')}${f.referee ? ' · arbitro ' + esc(f.referee) : ''}</span></div>
+      <div class="fx-top"><span>${when(f.start)}</span><span>${esc(f.lineups === 'ufficiale' ? 'Formazioni ufficiali' : f.lineups && f.lineups.startsWith('probabile') ? 'Formazioni probabili' : 'Formazioni stimate')}${f.referee ? ' · arbitro ' + esc(f.referee) + (refTone(f.P && f.P.referee) ? ' (' + refTone(f.P.referee) + ')' : '') : ''}</span></div>
       <div class="fx-teams">
         <div class="side">${team(f.home)}${dots((T[f.home] || {}).form)}</div>
         <div class="pick"><div class="sc num">${f.pick.score.i}–${f.pick.score.j}</div><small>${esc(f.pick.label)}</small></div>
@@ -251,7 +262,21 @@ function vClassifica() {
       <td>${r.p}</td><td>${r.gf - r.ga > 0 ? '+' : ''}${r.gf - r.ga}</td><td><b>${r.pts}</b></td><td>${dots((T[r.team] || {}).form)}</td></tr>`; }).join('');
   return `<h2>Classifica</h2><div class="card tw"><table><thead><tr><th class="l">#</th><th class="l">Squadra</th><th>G</th><th>DR</th><th>Pt</th><th>Forma</th></tr></thead><tbody>${rows}</tbody></table>
     ${zones.size ? `<div class="legend">${[...zones].map(z => `<span><i style="background:var(--${{cl: 'home', el: 'away', co: 'accent', rel: 'bad'}[ZONE[z][0]]})"></i>${ZONE[z][1]}</span>`).join('')}</div>` : ''}</div>
+    ${xptsCard()}
     ${D.results.length ? `<h2>Ultimi risultati</h2><div class="card"><table><tbody>${D.results.map(e => `<tr><td class="l">${team(e.home, true)}</td><td class="num"><b>${e.hs}–${e.as}</b></td><td class="l">${team(e.away, true)}</td></tr>`).join('')}</tbody></table></div>` : ''}`;
+}
+
+function xptsCard() {
+  const X = D.xpts || {}, rows = Object.entries(X).sort((a, b) => b[1].xpts - a[1].xpts);
+  if (!rows.length) return '';
+  const real = Object.fromEntries(D.standings.map(r => [r.team, r]));
+  return `<h2>Classifica attesa <small>punti attesi (xPts)</small></h2>
+    <div class="card tw"><table><thead><tr><th class="l">#</th><th class="l">Squadra</th><th>Pt</th><th>xPt</th><th>Diff.</th><th>xG</th><th>xGA</th></tr></thead><tbody>
+    ${rows.map(([id, x], i) => { const pts = (real[id] || {}).pts ?? x.pts, df = pts - x.xpts;
+      return `<tr><td class="l">${i + 1}</td><td class="l"><a class="plain" href="#s${id}">${team(id, true)}</a></td><td>${pts}</td><td><b>${fx(x.xpts, 1)}</b></td>
+        <td><span class="pos-luck ${df >= 1.5 ? 'up' : df <= -1.5 ? 'dn' : ''}">${df > 0 ? '+' : ''}${fx(df, 1)}</span></td><td>${fx(x.xg, 1)}</td><td>${fx(x.xga, 1)}</td></tr>`; }).join('')}
+    </tbody></table>
+    <p class="small muted">I punti che ogni squadra avrebbe fatto in media con le occasioni create e concesse in ogni partita (Understat). Diff. positiva in verde: ha più punti di quanti ne meriterebbero le occasioni (è stata fortunata o molto cinica); negativa in rosso: ne ha meno. Con poche giornate le differenze contano poco.</p></div>`;
 }
 
 const DIMS = [['possesso', 'Possesso'], ['baricentro', 'Baricentro'], ['pressing', 'Pressing'], ['verticalita', 'Verticale'], ['ampiezza', 'Ampiezza'], ['transizioni', 'Transizioni'], ['fisicita', 'Fisicità'], ['ritmo', 'Ritmo']];
@@ -271,9 +296,73 @@ function vStorico() {
   const tiles = s.n ? `<div class="tiles">${[['Partite', s.n], ['Esito 1X2', pc(s.pick)], ['Risultato esatto', pc(s.score)], ['Over/Under', pc(s.over25)], ['Gol/No gol', pc(s.btts)]].map(([k, v]) => `<div class="tile"><small>${k}</small><b class="num">${v}</b></div>`).join('')}</div>`
     : '<p class="lead">Lo storico parte dalla 6ª giornata: il server salva l\'ultimo pronostico prima di ogni calcio d\'inizio e lo confronta con il risultato.</p>';
   const items = D.history.items.filter(i => i.pick);
-  return `<h2>Storico pronostici</h2>${tiles}${items.length ? `<div class="card tw" style="margin-top:10px"><table><tbody>${items.map(i => `<tr>
-      <td class="l">${team(i.home, true)}</td><td class="l">${team(i.away, true)}</td><td class="l muted">${esc(i.pick.label)} ${i.pick.score.i}–${i.pick.score.j}</td>
-      <td class="num">${i.result ? `<b>${i.result.hs}–${i.result.as}</b>` : '<span class="muted">da giocare</span>'}</td><td>${i.ok == null ? '' : i.ok ? '<span class="ok">✓</span>' : '<span class="ko">✗</span>'}</td></tr>`).join('')}</tbody></table></div>` : ''}`;
+  // affidabilità: per fasce di fiducia, quante volte l'esito indicato è uscito davvero
+  const cal = (s.cal || []).length ? `<div class="card" style="margin-top:10px"><h3>Quanto fidarsi</h3>
+    <div class="cal">${s.cal.map(c => `<span>fiducia ${Math.round(c.lo * 100)}–${Math.round(c.hi * 100)}%</span>
+      <span class="tr" role="img" aria-label="azzeccate ${pc(c.hit)}, attese ${pc(c.p)}"><i style="width:${c.hit * 100}%"></i><u style="left:${c.p * 100}%"></u></span>
+      <span class="num"><b>${pc(c.hit)}</b> <small class="muted">su ${c.n}</small></span>`).join('')}</div>
+    <p class="small muted">Per ogni fascia di fiducia del pronostico (la probabilità che dava all'esito indicato), la barra mostra quante volte ci ha preso; la tacca nera è quante volte avrebbe dovuto prenderci. Se barra e tacca coincidono, le percentuali sono affidabili. Servono parecchie partite perché il confronto conti.</p></div>` : '';
+  const P = s.players;
+  const plc = P ? `<div class="card" style="margin-top:10px"><h3>Giocatori: previsto e vero <small class="muted">titolari, ${P.n} partite</small></h3>
+    <div class="facts">${[['Gialli', 'y', 1], ['Tiri', 'shots', 0], ['Falli', 'fouls', 0], ['Marcatori', 'goals', 1]].map(([l, k, d]) =>
+      `<div class="fact"><small>${l} previsti · veri</small><b class="num">${fx(P[k][0], d)} · ${P[k][1]}</b></div>`).join('')}</div>
+    <p class="small muted">Somma delle previsioni sui titolari al calcio d'inizio contro quello che è successo davvero (ESPN). Gialli e marcatori: somma delle probabilità contro quanti titolari hanno preso un giallo o segnato.</p></div>` : '';
+  const row = i => {
+    const inner = `<span class="evn"><b>${nm(i.home)} – ${nm(i.away)}</b><small>${day(i.start)} · pronostico ${esc(i.pick.label)} ${i.pick.score.i}–${i.pick.score.j}</small></span>
+      <span class="evv num">${i.result ? `${i.result.hs}–${i.result.as}` : '<small class="muted" style="font:500 12px var(--body)">da giocare</small>'}</span>
+      <span style="width:1.2em;text-align:center">${i.ok == null ? '' : i.ok ? '<b class="ok">✓</b>' : '<b class="ko">✗</b>'}</span>`;
+    return i.f ? `<a class="card cardlink ev" href="#r${i.id}">${inner}</a>` : `<div class="card ev" style="display:flex;align-items:center;gap:10px;padding:10px 14px">${inner}</div>`;
+  };
+  return `<h2>Storico pronostici</h2>${tiles}${cal}${plc}${items.length ? `<div class="list evl" style="margin-top:10px">${items.map(row).join('')}</div>
+      <p class="small muted">Tocca una partita giocata per vedere com'è andata rispetto al pronostico.</p>` : ''}`;
+}
+
+/* com'è andata: il pronostico al calcio d'inizio contro la partita vera */
+function vRivedi(id) {
+  const it = (D.history.items || []).find(i => String(i.id) === String(id));
+  if (!it || !it.f || !it.result) return back('storico', 'Storico') + '<p class="lead" style="margin-top:14px">Questa partita non è ancora nello storico.</p>';
+  const f = it.f, r = it.result, ev = it.eval || {}, real = it.real || {}, rp = real.players || {}, h = it.home, a = it.away;
+  const out = r.hs > r.as ? '1' : r.hs === r.as ? 'X' : '2';
+  const yn = (ok, txt) => `<b class="${ok ? 'ok' : 'ko'}">${txt}</b>`;
+  const side = key => {
+    const rows = ((f.pl || {})[key] || []);
+    if (!rows.length) return '';
+    const tot = {sh: [0, 0], fo: [0, 0], y: [0, 0]};
+    const tr = rows.map(([pid, name, mins, sh, sot, fo, py, pg]) => {
+      const x = rp[String(pid)];
+      if (x) { tot.sh[0] += sh || 0; tot.sh[1] += x[2]; tot.fo[0] += fo || 0; tot.fo[1] += x[4]; tot.y[0] += py || 0; tot.y[1] += Math.min(x[5], 1); }
+      return `<tr><td class="l"><a class="plain" href="#g${pid}"><b>${esc(name)}</b></a></td>
+        <td>${x ? x[1] + "'" : '<small>no</small>'}</td>
+        <td>${fx(sh, 1)} <small>· ${x ? x[2] : '–'}</small></td><td>${fx(fo, 1)} <small>· ${x ? x[4] : '–'}</small></td>
+        <td>${pc(py)} <small>· ${x ? (x[5] ? '<b class="ko">sì</b>' : 'no') : '–'}</small></td>
+        <td>${pc(pg)} <small>· ${x ? (x[6] ? `<b class="ok">${x[6]}</b>` : '0') : '–'}</small></td></tr>`;
+    }).join('');
+    return `<div class="card"><div style="margin-bottom:6px">${team(it[key], true)}</div>
+      <div class="tw"><table class="cmp"><thead><tr><th class="l">Titolare</th><th>Min</th><th>Tiri</th><th>Falli</th><th>Giallo</th><th>Gol</th></tr></thead><tbody>${tr}</tbody></table></div>
+      ${Object.keys(rp).length ? `<p class="small muted">Questi titolari: tiri previsti ${fx(tot.sh[0], 1)}, veri ${tot.sh[1]} · falli ${fx(tot.fo[0], 1)} e ${tot.fo[1]} · gialli attesi ${fx(tot.y[0], 1)}, presi ${tot.y[1]}.</p>` : ''}</div>`;
+  };
+  const tm = real.team || {};
+  const yReal = tm.home && tm.away ? (tm.home.yellowCards || 0) + (tm.away.yellowCards || 0) : null;
+  return `${back('storico', 'Storico')}
+  <article class="card" style="margin-top:10px">
+    <div class="fx-top"><span>${when(it.start)}${it.round ? ' · ' + it.round + 'ª giornata' : ''}</span><span>${f.ref ? 'arbitro ' + esc(f.ref) : ''}</span></div>
+    <div class="fx-teams"><a class="side" href="#s${h}">${team(h)}</a><div class="pick"><div class="sc num">${r.hs}–${r.as}</div><small>risultato finale</small></div><a class="side r" href="#s${a}">${team(a)}</a></div>
+    <div class="bars" role="img" aria-label="Pronostico: 1 ${pc(f.p1)}, X ${pc(f.px)}, 2 ${pc(f.p2)}"><i class="h" style="width:${f.p1 * 100}%"></i><i class="x" style="width:${f.px * 100}%"></i><i class="a" style="width:${f.p2 * 100}%"></i></div>
+    <div class="bl num"><span>${out === '1' ? '<b>1 · ' + pc(f.p1) + '</b>' : '1 · ' + pc(f.p1)}</span><span>${out === 'X' ? '<b>X · ' + pc(f.px) + '</b>' : 'X · ' + pc(f.px)}</span><span>${out === '2' ? '<b>2 · ' + pc(f.p2) + '</b>' : '2 · ' + pc(f.p2)}</span></div>
+    <div class="facts">
+      <div class="fact"><small>Esito indicato</small><b>${esc(f.pick.label)}</b><small>${ev.pick != null ? yn(ev.pick, ev.pick ? 'azzeccato' : 'sbagliato') : ''}</small></div>
+      <div class="fact"><small>Risultato indicato</small><b class="num">${f.pick.score.i}–${f.pick.score.j}</b><small>${ev.score != null ? yn(ev.score, ev.score ? 'esatto' : 'non esatto') : ''}</small></div>
+      <div class="fact"><small>Gol attesi · veri</small><b class="num">${fx(f.lh, 1)}–${fx(f.la, 1)}</b><small>veri ${r.hs}–${r.as}</small></div>
+      <div class="fact"><small>Over 2,5 previsto</small><b>${pc(f.over25)}</b><small>${ev.over25 != null ? yn(ev.over25, r.hs + r.as > 2 ? 'è finita over' : 'è finita under') : ''}</small></div>
+      <div class="fact"><small>Gol/Gol previsto</small><b>${pc(f.btts)}</b><small>${ev.btts != null ? yn(ev.btts, r.hs && r.as ? 'hanno segnato entrambe' : 'non hanno segnato entrambe') : ''}</small></div>
+      ${f.cards ? `<div class="fact"><small>Gialli attesi · veri</small><b class="num">${fx(f.cards[0] + f.cards[1], 1)}</b><small>${yReal != null ? 'veri ' + yReal : 'veri in arrivo'}</small></div>` : ''}
+    </div>
+  </article>
+  <div class="stack">
+    ${f.pl ? side('home') + side('away') : '<p class="small muted">Per questa partita lo storico ha solo il pronostico, senza le previsioni dei giocatori.</p>'}
+    ${f.pl && !Object.keys(rp).length ? '<p class="small muted">Le statistiche dei giocatori arrivano da ESPN poco dopo la fine della partita.</p>' : ''}
+    <p class="small muted">In ogni cella prima il previsto al calcio d'inizio (con le formazioni ${f.lineups === 'ufficiale' ? 'ufficiali' : 'di quel momento'}), dopo il punto quello che è successo davvero (ESPN). Min: minuti giocati davvero. Giallo: probabilità prevista e se l'ha preso. Gol: probabilità di segnare e gol fatti.</p>
+  </div>`;
 }
 
 /* ---------- schede complete: partita e squadra (come sul computer) ---------- */
@@ -394,7 +483,7 @@ function lineupCard(P, key, id) {
   const f1 = (v, d = 1) => v == null ? '–' : fx(v, d);
   return `<div class="card"><div class="fx-top" style="align-items:center">${team(id, true)}<span class="st ${c}">${l}${lu.formation ? ' · ' + esc(lu.formation) : ''}</span></div>
     <div class="tw" style="margin-top:8px"><table class="lu"><thead><tr><th class="l">Giocatore</th><th>Min</th><th>Tiri</th><th>Falli f.</th><th>Falli s.</th><th>Amm.</th><th>Gol</th><th>Assist</th><th class="l">Duello diretto</th></tr></thead><tbody>
-    ${ps.map(p => `<tr><td class="l"><b>${esc(p.name)}</b><span class="rl">${esc(p.role || '')}${lu.pct && lu.pct[p.id] != null ? ' · ' + lu.pct[p.id] + '% di giocare' : ''}</span></td><td>${p.min}</td>
+    ${ps.map(p => `<tr><td class="l">${p.id > 0 ? `<a class="plain" href="#g${p.id}"><b>${esc(p.name)}</b></a>` : `<b>${esc(p.name)}</b>`}<span class="rl">${esc(p.role || '')}${lu.pct && lu.pct[p.id] != null ? ' · ' + lu.pct[p.id] + '% di giocare' : ''}</span></td><td>${p.min}</td>
       <td>${p.pos === 'G' ? (p.saves == null ? '–' : f1(p.saves) + ' par.') : f1(p.shots)}</td><td>${f1(p.fouls)}</td><td>${f1(p.fouled)}</td><td>${pc(p.pYellow)}</td>
       <td>${p.pos === 'G' ? '–' : pc(p.pGoal)}</td><td>${p.pos === 'G' ? '–' : pc(p.pAssist)}</td>
       <td class="l">${p.opp ? `${esc(p.opp.name)} <span class="muted">${esc(p.opp.role || '')}</span>` : '–'}</td></tr>`).join('')}
@@ -410,11 +499,24 @@ function absentCard(P, h, a) {
       ${miss.map(m => `<li><span class="st ${m.why === 'In dubbio' ? 'mid' : 'ko'}">${esc(m.why)}</span><div><b>${esc(m.name)}</b>${m.desc ? `<small>${esc(m.desc)}</small>` : ''}</div></li>`).join('')}
       ${heavy.map(x => `<li><span class="st">${esc(x.why)}</span><div><b>${esc(x.name)}</b></div></li>`).join('')}</ul>` : '<p class="small muted">Nessuna assenza nota</p>'}</div>`;
   };
-  const r = P.referee;
-  return `<div class="card"><h3>Indisponibili e arbitro</h3><div class="two">${colx(h, 'home')}${colx(a, 'away')}</div>
-    <h4>Arbitro</h4>${r && !r.games ? `<p class="small"><b>${esc(r.name)}</b> · nessuna sua partita nei dati, effetto neutro sui cartellini</p>`
-      : r ? `<p class="small"><b>${esc(r.name)}</b> · ${fx(r.ypg, 2)} gialli a partita in ${r.games} gare · ${r.red ?? 0} rossi · effetto sui cartellini attesi ${r.factor >= 1 ? '+' : ''}${fx((r.factor - 1) * 100, 0)}%</p>`
-      : '<p class="small muted">Non ancora designato (di solito lo è 2 giorni prima della partita)</p>'}</div>`;
+  return `<div class="card"><h3>Indisponibili</h3><div class="two">${colx(h, 'home')}${colx(a, 'away')}</div></div>`;
+}
+// quanto è severo l'arbitro rispetto alla media: dal suo effetto sui gialli attesi
+const refTone = r => { if (!r || !r.games || r.factor == null) return ''; const e = Math.round((r.factor - 1) * 100); return e >= 10 ? 'severo' : e <= -10 ? 'permissivo' : 'nella media'; };
+function refCard(P) {
+  const r = P.referee, lg = (D.league || {}).yellowGame;
+  if (!r || !r.name) return `<div class="card"><h3>Arbitro</h3><p class="small muted" style="margin:0">Non ancora designato: di solito le designazioni escono 2-3 giorni prima della partita.</p></div>`;
+  if (!r.games) return `<div class="card"><h3>Arbitro</h3><p class="small" style="margin:0"><b>${esc(r.name)}</b> · nessuna sua partita di Serie A nei dati (forse è al debutto): effetto neutro sui cartellini.</p></div>`;
+  const eff = Math.round((r.factor - 1) * 100);
+  return `<div class="card"><h3>Arbitro <small class="muted">${refTone(r)}</small></h3>
+    <div class="facts">
+      <div class="fact"><small>Arbitro</small><b>${esc(r.name)}</b></div>
+      <div class="fact"><small>Gialli a partita</small><b class="num">${fx(r.ypg, 2)}</b>${r.base || lg ? `<small>media di tutti gli arbitri ${fx(r.base || lg, 2)}</small>` : ''}</div>
+      <div class="fact"><small>Partite nei dati</small><b class="num">${r.games}</b><small>scorsa stagione e questa</small></div>
+      <div class="fact"><small>Rossi</small><b class="num">${r.red ?? 0}</b></div>
+      <div class="fact"><small>Effetto sui gialli attesi</small><b class="num">${eff >= 0 ? '+' : ''}${eff}%</b></div>
+    </div>
+    <p class="small muted">Con poche partite il suo dato pesa meno e resta vicino alla media. Il rischio giallo di ogni giocatore e i gialli attesi della partita ne tengono già conto. Designazione da Fantacalcio.it, poi confermata da ESPN il giorno della partita.</p></div>`;
 }
 function scorersCard(P, h, a) {
   const list = (key, c) => P.players[key].filter(p => p.pos !== 'G').sort((x, y) => y.pGoal - x.pGoal).slice(0, 4)
@@ -518,7 +620,7 @@ function vPartita(id) {
   <div class="stack">
     <div class="card narr"><h3>Andamento previsto</h3>${narrative(P, h, a)}</div>
     ${clashCard(P, h, a)}${adjCard(P, h, a)}${keysCard(P, h)}
-    ${lineupCard(P, 'home', h)}${lineupCard(P, 'away', a)}
+    ${refCard(P)}${lineupCard(P, 'home', h)}${lineupCard(P, 'away', a)}
     ${absentCard(P, h, a)}${scorersCard(P, h, a)}${yellowCard(P, h, a)}${heatCard(P, h, a)}
     ${radarCard(h, a)}${mirrorCard(h, a)}${swCard(h, a)}
     <p class="small muted">Come funziona: per ogni squadra si stima la forza offensiva (gol segnati e xG) e difensiva (gol subiti, tiri in porta e palloni concessi vicino all'area) rispetto alla media della Serie A, partendo dalla stagione scorsa e dando sempre più peso a quella in corso. Poi si corregge per casa e trasferta, forma, accoppiamenti tra forze e debolezze, scontro di stili e assenze. I gol attesi alimentano un modello di Poisson con correzione Dixon-Coles.</p>
@@ -642,6 +744,101 @@ function vSquadra(id) {
   </div>`;
 }
 
+/* scheda del giocatore */
+let PL = {};   // giocatori per id (statistiche della stagione)
+const POSN = {G: 'Portiere', D: 'Difensore', M: 'Centrocampista', F: 'Attaccante'};
+const POSP = {G: 'portieri', D: 'difensori', M: 'centrocampisti', F: 'attaccanti'};
+const backAny = `<a class="back" href="#cerca" onclick="if (history.length > 1) { history.back(); return false; }">‹ Indietro</a>`;
+// la prossima partita della sua squadra: se è tra i titolari previsti le sue previsioni, se no panchina o assenza
+function nextOf(id, tid) {
+  const f = D.fixtures.filter(f => f.P && (f.home === tid || f.away === tid)).sort((a, b) => a.start - b.start)[0];
+  if (!f) return null;
+  const k = f.home === tid ? 'home' : 'away', lu = f.P.lineups[k] || {}, same = x => String(x.id) === String(id);
+  return {f, k, p: f.P.players[k].find(same), sub: (lu.subs || []).find(same), miss: (lu.missing || []).find(same),
+          pct: lu.pct ? lu.pct[id] : null};
+}
+// squadra di un giocatore che non ha ancora minuti in stagione: dalle formazioni previste
+function teamFromFixtures(id) {
+  for (const f of D.fixtures) for (const k of ['home', 'away'])
+    if (f.P && f.P.players[k].some(x => String(x.id) === String(id))) return {tid: String(f[k]), name: f.P.players[k].find(x => String(x.id) === String(id)).name};
+  return null;
+}
+const P90 = [['xg', 'xG', 2], ['g', 'Gol', 2], ['xa', 'xA', 2], ['kp', 'Chance create', 1], ['sh', 'Tiri', 1], ['sot', 'Tiri in porta', 1],
+  ['fo', 'Falli fatti', 1], ['fd', 'Falli subiti', 1], ['yc', 'Gialli', 2]];
+function vGiocatore(id) {
+  const p = PL[String(id)], alt = p ? null : teamFromFixtures(id);
+  if (!p && !alt) return backAny + '<p class="lead" style="margin-top:14px">Questo giocatore non è nella fotografia attuale.</p>';
+  const tid = p ? p.t : alt.tid, name = p ? p.n : alt.name, nx = nextOf(id, tid);
+  const pos = (p ? p.pos : nx && nx.p && nx.p.pos) || 'M';
+  let season = '<p class="small muted">Nessun minuto giocato in questa stagione.</p>';
+  if (p) {
+    const tiles = [['Presenze', `${p.ap ?? '–'}`, p.st != null ? `${p.st} da titolare` : ''], ['Minuti', fx(p.min, 0), ''],
+      ['Gol', fx(p.g, 0), `xG ${fx(p.xg, 1)}`], ['Assist', fx(p.a, 0), `xA ${fx(p.xa, 1)}`], ['Chance create', fx(p.kp, 0), ''],
+      ['Tiri', fx(p.sh, 0), `${fx(p.sot, 0)} in porta`], ['Falli fatti', fx(p.fo, 0), `subiti ${fx(p.fd, 0)}`],
+      ['Ammonizioni', fx(p.yc, 0), p.rc ? `${p.rc} espulsioni` : ''], ...(pos === 'G' ? [['Parate', fx(p.sv, 0), '']] : []),
+      ...(p.mv != null ? [['Media voto', fx(p.mv, 2), p.fm != null ? `fantamedia ${fx(p.fm, 2)}` : '']] : [])];
+    // per 90 minuti, con la posizione tra i giocatori dello stesso ruolo che hanno giocato abbastanza
+    const maxMin = Math.max(...D.players.map(x => x.min || 0)), minQ = Math.max(180, .3 * maxMin);
+    const peers = D.players.filter(x => x.pos === pos && (x.min || 0) >= minQ);
+    const r90 = (x, k) => x.min ? (x[k] || 0) / x.min * 90 : null;
+    const rows = P90.filter(([k]) => p[k] != null && !(pos === 'G' && k !== 'yc')).map(([k, l, d]) => {
+      const v = r90(p, k), enough = (p.min || 0) >= minQ;
+      const rank = enough ? peers.filter(x => r90(x, k) > v).length + 1 : null;
+      return `<tr><td class="l">${l}</td><td><b>${fx(v, d)}</b></td><td class="l muted">${rank ? `${rank}° su ${peers.length} ${POSP[pos]}` : ''}</td></tr>`;
+    }).join('');
+    season = `<div class="facts">${tiles.map(([k, v, s]) => `<div class="fact"><small>${k}</small><b class="num">${v}</b>${s ? `<small>${s}</small>` : ''}</div>`).join('')}</div>
+      ${rows ? `<h4>Ogni 90 minuti</h4><div class="tw"><table><tbody>${rows}</tbody></table></div>
+      <p class="small muted">${(p.min || 0) >= minQ ? `Posizione tra i ${POSP[pos]} con almeno ${Math.round(minQ)} minuti giocati.` : `Ha giocato meno di ${Math.round(minQ)} minuti: niente confronto con gli altri ${POSP[pos]}.`} Dati di Understat, ESPN${p.mv != null ? ' e Fantacalcio.it' : ''}.</p>` : ''}`;
+  }
+  let next = '';
+  if (nx && !nx.p) {
+    const {f, k, sub, miss, pct} = nx, opp = k === 'home' ? f.away : f.home, conf = f.P.lineups.confirmed, src = srcLabel(conf ? 'ufficiale' : f.P.lineups[k].source)[1];
+    const why = miss ? `<span class="st ko">${esc(miss.why || 'Indisponibile')}</span>${miss.desc ? ` <span class="muted">${esc(miss.desc)}</span>` : ''}`
+      : sub ? `In panchina${pct ? ` (${pct}% di giocare secondo Fantacalcio.it)` : ''}` : 'Non è tra i titolari previsti';
+    next = `<div class="card"><h3>Prossima partita</h3>
+      <a class="cardlink" href="#p${f.id}"><div class="fx-top"><span>${when(f.start)}</span><span>${k === 'home' ? 'in casa' : 'in trasferta'}</span></div>
+        <div style="display:flex;align-items:center;gap:8px;margin-top:6px">contro ${team(opp, true)}</div></a>
+      <p class="small">${why} <span class="muted">· ${esc(src.toLowerCase())}</span></p>
+      <a class="more" style="display:block;text-decoration:none" href="#p${f.id}">Pronostico della partita ›</a></div>`;
+  } else if (nx) {
+    const {f, k, p: q} = nx, opp = k === 'home' ? f.away : f.home, conf = f.P.lineups.confirmed;
+    const st = [['Minuti previsti', fx(q.min, 0)], ...(pos === 'G' ? [['Parate', fx(q.saves, 1)]] : [['Probabilità di segnare', pc(q.pGoal)], ['Probabilità di assist', pc(q.pAssist)],
+      ['Tiri', fx(q.shots, 1)], ['Tiri in porta', fx(q.sot, 1)], ['Chance create', fx(q.kp, 1)]]), ['Falli fatti', fx(q.fouls, 1)], ['Falli subiti', fx(q.fouled, 1)], ['Rischio giallo', pc(q.pYellow)]];
+    next = `<div class="card"><h3>Prossima partita <small class="muted">${conf ? 'formazione ufficiale' : 'titolare previsto'}</small></h3>
+      <a class="cardlink" href="#p${f.id}"><div class="fx-top"><span>${when(f.start)}</span><span>${k === 'home' ? 'in casa' : 'in trasferta'}</span></div>
+        <div style="display:flex;align-items:center;gap:8px;margin-top:6px">contro ${team(opp, true)}</div></a>
+      ${q.role ? `<p class="small muted">Ruolo in campo: ${esc(q.role)}</p>` : ''}
+      <div class="facts">${st.map(([l, v]) => `<div class="fact"><small>${l}</small><b class="num">${v}</b></div>`).join('')}</div>
+      ${q.opp ? `<p class="small">Duello diretto: <b>${esc(q.opp.name)}</b> <span class="muted">${esc(q.opp.role || '')}</span></p>` : ''}
+      <a class="more" style="display:block;text-decoration:none" href="#p${f.id}">Pronostico della partita ›</a></div>`;
+  } else if (p) {
+    next = `<div class="card"><h3>Prossima partita</h3><p class="small muted">Non è tra i titolari previsti delle prossime partite (formazioni probabili o stimate: può cambiare).</p></div>`;
+  }
+  return `${backAny}
+    <article class="card" style="margin-top:10px"><div class="fx-top"><span>${POSN[pos] || ''}</span><a class="plain" href="#s${tid}">${team(tid, true)}</a></div>
+      <h2 style="margin:8px 0 0">${esc(name)}</h2></article>
+    <div class="stack">${next}<div class="card"><h3>Stagione</h3>${season}</div></div>`;
+}
+
+/* ricerca di giocatori e squadre */
+let CQ = '';
+const norm = s => String(s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
+function cercaRes() {
+  const q = norm(CQ).trim();
+  if (q.length < 2) return '<p class="small muted">Scrivi almeno due lettere del nome, del cognome o della squadra.</p>';
+  const teams = D.standings.filter(r => norm((T[r.team] || {}).name).includes(q));
+  const tids = new Set(teams.map(r => r.team));
+  const pls = (D.players || []).filter(p => norm(p.n).includes(q) || tids.has(p.t)).sort((a, b) => (norm(b.n).includes(q) - norm(a.n).includes(q)) || (b.min || 0) - (a.min || 0)).slice(0, 40);
+  if (!teams.length && !pls.length) return '<p class="small muted">Nessun giocatore o squadra trovati.</p>';
+  return `<div class="list evl">${teams.map(r => `<a class="card cardlink ev" href="#s${r.team}">${crest(r.team)}<span class="evn"><b>${nm(r.team)}</b><small>${r.pos}ª in classifica · ${r.pts} punti</small></span><span class="muted">›</span></a>`).join('')}
+    ${pls.map(p => `<a class="card cardlink ev" href="#g${p.id}">${crest(p.t, true)}<span class="evn"><b>${esc(p.n)}</b><small>${nm(p.t)} · ${POSN[p.pos] || ''} · ${p.ap ?? 0} presenze${p.g ? ` · ${fx(p.g, 0)} gol` : ''}${p.a ? ` · ${fx(p.a, 0)} assist` : ''}</small></span><span class="muted">›</span></a>`).join('')}</div>`;
+}
+function vCerca() {
+  return `<h2>Cerca</h2><input id="q" class="search" type="search" placeholder="Giocatore o squadra" value="${esc(CQ)}" autocomplete="off" aria-label="Cerca un giocatore o una squadra">
+    <div id="qres" style="margin-top:10px">${cercaRes()}</div>`;
+}
+document.addEventListener('input', e => { if (e.target.id === 'q') { CQ = e.target.value; document.getElementById('qres').innerHTML = cercaRes(); } });
+
 let esel = 0, egrp = 'next', emode = 'tot';   // voce, gruppo (prossima giornata o stagione) e totale/a partita in "In evidenza"
 function vEvidenza() {
   const E = D.evidenza, SE = E?.season;
@@ -659,11 +856,11 @@ function vEvidenza() {
       <div class="seg" role="group" aria-label="Statistica">${SE.cats.map((x, i) => `<button type="button" data-e="${i}" aria-pressed="${x === c}">${esc(x.l)}</button>`).join('')}</div>
       ${c.avg ? '' : `<div class="seg evm" role="group" aria-label="Totale o media"><button type="button" data-em="tot" aria-pressed="${!pg}">Totale</button><button type="button" data-em="pg" aria-pressed="${pg}">A partita</button></div>`}
       <p class="small muted">${esc(c.d)}${c.avg ? '' : pg ? ', a partita' : ', in totale'}.</p>
-      <div class="list evl">${rows.map((r, i) => `<a class="card cardlink ev" href="#s${r.team}">
+      <div class="list evl">${rows.map((r, i) => `<a class="card cardlink ev" href="#g${r.id}">
         <span class="rk num">${i + 1}</span>${crest(r.team, true)}
         <span class="evn"><b>${esc(r.name)}</b><small>${nm(r.team)} · ${side(r)}</small></span>
         <span class="evv num">${main(r)}</span></a>`).join('') || '<p class="muted">Nessun dato.</p>'}</div>
-      <p class="small muted">Dati di Understat, ESPN e Fantacalcio.it. Nella media a partita contano solo i giocatori con almeno ${SE.minApps} presenze (fantamedia e media voto: almeno ${SE.minApps} voti). Tocca un giocatore per aprire la sua squadra.</p>`;
+      <p class="small muted">Dati di Understat, ESPN e Fantacalcio.it. Nella media a partita contano solo i giocatori con almeno ${SE.minApps} presenze (fantamedia e media voto: almeno ${SE.minApps} voti). Tocca un giocatore per aprire la sua scheda.</p>`;
   }
   const c = E.cats[esel] || E.cats[0];
   const val = r => c.u === '%' ? pc(r.v) : fx(r.v, 1);
@@ -671,15 +868,16 @@ function vEvidenza() {
     <p class="lead">Chi spicca nelle statistiche previste per le partite della giornata: per ogni voce i primi 10.</p>
     <div class="seg" role="group" aria-label="Statistica">${E.cats.map((x, i) => `<button type="button" data-e="${i}" aria-pressed="${x === c}">${esc(x.l)}</button>`).join('')}</div>
     <p class="small muted">${esc(c.d)}.</p>
-    <div class="list evl">${c.rows.map((r, i) => `<a class="card cardlink ev" href="#p${r.fid}">
+    <div class="list evl">${c.rows.map((r, i) => `<a class="card cardlink ev" href="#g${r.id}">
       <span class="rk num">${i + 1}</span>${crest(r.team, true)}
       <span class="evn"><b>${esc(r.name)}</b><small>${nm(r.team)} ${r.home ? 'vs' : '@'} ${nm(r.opp)} · ${day(r.start)}${r.official ? ' · <span class="uff">ufficiale</span>' : ''}</small></span>
       <span class="evv num">${val(r)}</span></a>`).join('')}</div>
-    <p class="small muted">Solo i titolari previsti. I numeri tengono conto dei minuti previsti, dell'avversario, di chi marca chi e dell'arbitro, e sommano ai totali realistici di ogni squadra. Si aggiornano con le probabili formazioni e poi con quelle ufficiali, circa un'ora prima di ogni partita: chi ha già la formazione ufficiale è segnato con «ufficiale». Tocca un giocatore per aprire la sua partita.</p>`;
+    <p class="small muted">Solo i titolari previsti. I numeri tengono conto dei minuti previsti, dell'avversario, di chi marca chi e dell'arbitro, e sommano ai totali realistici di ogni squadra. Si aggiornano con le probabili formazioni e poi con quelle ufficiali, circa un'ora prima di ogni partita: chi ha già la formazione ufficiale è segnato con «ufficiale». Tocca un giocatore per aprire la sua scheda, con le previsioni per la partita.</p>`;
 }
-const VIEWS = {giornata: vGiornata, evidenza: vEvidenza, classifica: vClassifica, squadre: vSquadre, storico: vStorico};
+const VIEWS = {giornata: vGiornata, evidenza: vEvidenza, classifica: vClassifica, squadre: vSquadre, storico: vStorico, cerca: vCerca};
 function show(name) {
-  const m = /^([ps])(\d+)$/.exec(name || '');   // #p123 = scheda della partita, #s123 = scheda della squadra
+  // #p123 = partita, #s123 = squadra, #g123 = giocatore, #r123 = com'è andata una partita dello storico
+  const m = /^([psgr])(-?\d+)$/.exec(name || '');
   const view = m ? null : VIEWS[name] ? name : 'giornata';
   for (const k of Object.keys(VIEWS)) {
     const el = document.getElementById(k);
@@ -688,10 +886,11 @@ function show(name) {
   }
   const det = document.getElementById('dettaglio');
   det.hidden = !m;
-  det.innerHTML = m ? (m[1] === 'p' ? vPartita(m[2]) : vSquadra(m[2])) : '';
-  const cur = m ? (m[1] === 'p' ? 'giornata' : 'squadre') : view;
+  det.innerHTML = m ? {p: vPartita, s: vSquadra, g: vGiocatore, r: vRivedi}[m[1]](m[2]) : '';
+  const cur = m ? {p: 'giornata', s: 'squadre', g: '', r: 'storico'}[m[1]] : view;
   document.querySelectorAll('#nav a').forEach(a => a.setAttribute('aria-current', a.dataset.s === cur ? 'page' : 'false'));
   if (m) window.scrollTo(0, 0);
+  if (view === 'cerca') { const q = document.getElementById('q'); if (q) q.focus(); }
 }
 document.addEventListener('click', e => {
   const v = e.target.closest('[data-e]');
@@ -728,6 +927,8 @@ async function boot() {
     return;
   }
   T = D.teams;
+  D.players = D.players || [];
+  PL = Object.fromEntries(D.players.map(p => [String(p.id), p]));
   LOGOS = new Set((D.logos || []).map(String));
   MK = Object.fromEntries((D.metrics || []).map(x => [x.k, x]));
   stamp();

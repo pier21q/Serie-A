@@ -1432,7 +1432,8 @@ def referee_factor(A, ref):
     if not ref or not ref.get("games"):
         return 1.0, None
     ypg = ((ref.get("yellow") or 0) + (ref.get("yellowRed") or 0)) / ref["games"]
-    rel = ypg / A["L"]["yellowGame"] if A["L"]["yellowGame"] else 1
+    base = ref.get("base") or A["L"]["yellowGame"]   # media delle stesse partite da cui viene il suo dato
+    rel = ypg / base if base else 1
     w = ref["games"] / (ref["games"] + 10)
     return clamp(w * rel + (1 - w), .75, 1.3), ypg
 
@@ -1597,8 +1598,9 @@ def summary(P):
 
 # ---------- storico dei pronostici ----------
 
-def update_history(H, A, data, matches, now=None):
-    """Salva l'ultimo pronostico prima del calcio d'inizio e lo confronta con il risultato."""
+def update_history(H, A, data, matches, now=None, ids=None):
+    """Salva l'ultimo pronostico prima del calcio d'inizio e lo confronta con il risultato. ids: id ESPN dei giocatori
+    -> id dell'anagrafica (quelli delle formazioni), per agganciare le statistiche vere alle previsioni."""
     now = now or time.time()
     items = H.setdefault("matches", {})
     changed = False
@@ -1611,7 +1613,8 @@ def update_history(H, A, data, matches, now=None):
         it = items.setdefault(str(e["id"]), {"id": e["id"], "round": e.get("round"), "start": e["start"],
                                             "home": e["home"], "away": e["away"]})
         it["start"] = e["start"]
-        it["latest"] = dict(summary(P), at=now)
+        it["latest"] = dict(summary(P), at=now, pl=history_players(P), cards=[round(P["cards"]["home"], 2),
+                            round(P["cards"]["away"], 2)], ref=(P.get("referee") or {}).get("name"))
         changed = True
     for eid, it in items.items():
         if "final" not in it and it.get("latest") and now >= it["start"]:
@@ -1623,7 +1626,32 @@ def update_history(H, A, data, matches, now=None):
             it["result"] = {"hs": e["hs"], "as": e["as"]}
             it["eval"] = evaluate(it["final"], e["hs"], e["as"])
             changed = True
+    # le statistiche vere dei giocatori (ESPN) arrivano poco dopo il risultato
+    for eid, it in items.items():
+        box = (matches.get(eid) or {}).get("box")
+        if it.get("result") and "real" not in it and box and box.get("players"):
+            it["real"] = history_real(box, ids)
+            changed = True
     return changed
+
+
+def history_players(P):
+    """Le previsioni dei titolari da salvare nello storico, per confrontarle poi con la partita vera:
+    [id, nome, minuti, tiri, tiri in porta, falli, prob. di giallo, prob. di gol, chance create]."""
+    r = lambda v, n=2: round(v, n) if v is not None else None
+    return {side: [[p["id"], p.get("name"), p.get("min"), r(p.get("shots")), r(p.get("sot")), r(p.get("fouls")),
+                    r(p.get("pYellow"), 3), r(p.get("pGoal"), 3), r(p.get("kp"))] for p in P["players"][side]]
+            for side in ("home", "away")}
+
+
+def history_real(box, ids=None):
+    """Le statistiche vere della partita (ESPN): per giocatore [squadra, minuti, tiri, tiri in porta, falli, gialli,
+    gol, assist, titolare], più i totali delle squadre."""
+    g = lambda p, k: p.get(k) or 0
+    return {"players": {str((ids or {}).get(str(pid), pid)): [p.get("side"), g(p, "min"), g(p, "shots"), g(p, "sot"), g(p, "fouls"), g(p, "yc"),
+                                   g(p, "goals"), g(p, "assists"), bool(p.get("start"))] for pid, p in box["players"].items()},
+            "team": {s: {k: (box.get(s) or {}).get(k) for k in ("shots", "shotsOnTarget", "fouls", "yellowCards")}
+                     for s in ("home", "away")}}
 
 
 def evaluate(f, hs, as_):
@@ -1648,8 +1676,31 @@ def history_summary(H):
     s = lambda k: sum(1 for it in done if it["eval"][k]) / n
     base = {"1": .44, "X": .27, "2": .29}  # frequenze storiche della Serie A
     base_brier = sum(sum((base[k] - (1 if k == it["eval"]["outcome"] else 0)) ** 2 for k in base) for it in done) / n
+    # affidabilità: quando il pronostico dava il suo esito al 50-60%, quante volte ci ha preso davvero
+    cal = []
+    for lo, hi in ((0, .45), (.45, .55), (.55, .65), (.65, 1.01)):
+        g = [it for it in done if lo <= (it["final"]["pick"].get("p") or 0) < hi]
+        if g:
+            cal.append({"lo": lo, "hi": min(hi, 1), "n": len(g), "p": sum(it["final"]["pick"]["p"] for it in g) / len(g),
+                        "hit": sum(1 for it in g if it["eval"]["pick"]) / len(g)})
+    # giocatori: totali previsti per i titolari contro quelli veri (gialli, tiri, falli, gol)
+    pl = {"n": 0, "y": [0.0, 0], "shots": [0.0, 0], "fouls": [0.0, 0], "goals": [0.0, 0]}
+    for it in done:
+        real = (it.get("real") or {}).get("players") or {}
+        rows = [p for side in ("home", "away") for p in ((it["final"].get("pl") or {}).get(side) or [])]
+        if not real or not rows:
+            continue
+        pl["n"] += 1
+        for p in rows:
+            r = real.get(str(p[0]))
+            if not r:
+                continue
+            for k, pi, ri in (("y", 6, 5), ("shots", 3, 2), ("fouls", 5, 4), ("goals", 7, 6)):
+                pl[k][0] += p[pi] or 0
+                pl[k][1] += min(r[ri], 1) if k in ("y", "goals") else r[ri]
     return {"n": n, "pick": s("pick"), "score": s("score"), "over25": s("over25"), "btts": s("btts"),
-            "brier": sum(it["eval"]["brier"] for it in done) / n, "baseBrier": base_brier}
+            "brier": sum(it["eval"]["brier"] for it in done) / n, "baseBrier": base_brier, "cal": cal,
+            "players": pl if pl["n"] else None}
 
 
 # ---------- fantacalcio ----------

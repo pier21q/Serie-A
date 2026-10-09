@@ -559,7 +559,7 @@ def analysis():
 
 def update_history():
     try:
-        if model.update_history(HISTORY, analysis()["A"], STATE["data"], MATCHES):
+        if model.update_history(HISTORY, analysis()["A"], STATE["data"], MATCHES, ids=REG["espn"]):
             save_json(HISTORY_FILE, HISTORY)
     except Exception as e:
         log(f"Storico pronostici non aggiornato: {e}")
@@ -808,7 +808,11 @@ def ref_stats(name):
     for rn, c in rows:
         if rn and c and same_ref(rn, name):
             g, y, r = g + 1, y + c["y"], r + c["r"]
-    return {"name": name, "yellow": y, "red": r, "yellowRed": 0, "games": g, "source": "espn"} if g else {"name": name}
+    # termine di paragone: i gialli a partita di tutte le partite da cui vengono i dati degli arbitri (scorsa stagione e
+    # questa). Con la media di quest'anno sembravano tutti severi: la stagione scorsa ne aveva di più (3,59 contro 3,22)
+    cards = [c["y"] for _, c in rows if c]
+    base = round(sum(cards) / len(cards), 3) if cards else None
+    return {"name": name, "yellow": y, "red": r, "yellowRed": 0, "games": g, "source": "espn", "base": base} if g else {"name": name}
 
 
 def apply_ref_stats(d):
@@ -1430,6 +1434,13 @@ def snapshot():
                                      for p in sorted(P["players"][key], key=lambda p: -p["pGoal"])[:2]],
                          "P": _r(P)})
     hist = sorted(HISTORY.get("matches", {}).values(), key=lambda it: -it["start"])[:30]
+    # tutti i giocatori con le statistiche della stagione: scheda del giocatore e ricerca
+    players = [_r({"id": p["id"], "n": p.get("name"), "t": str(p.get("teamId")), "pos": p.get("pos"), "ap": p.get("appearances"),
+                   "st": p.get("matchesStarted"), "min": p.get("minutesPlayed"), "g": p.get("goals"), "a": p.get("assists"),
+                   "xg": p.get("expectedGoals"), "xa": p.get("expectedAssists"), "kp": p.get("keyPasses"), "sh": p.get("totalShots"),
+                   "sot": p.get("shotsOnTarget"), "fo": p.get("fouls"), "fd": p.get("wasFouled"), "yc": p.get("yellowCards"),
+                   "rc": p.get("redCards"), "sv": p.get("saves"), "mv": p.get("rating"), "fm": p.get("fantamedia"),
+                   "pv": p.get("ratingPV")}, 2) for p in d.get("players") or [] if (p.get("minutesPlayed") or 0) > 0]
     return {
         "generatedAt": time.time(), "statsAt": d.get("fullAt"), "season": d.get("season"), "errors": source_errors(),
         "standings": [{"team": str(r["team"]["id"]), "pos": r["pos"], "p": r["p"], "w": r["w"], "d": r["d"], "l": r["l"],
@@ -1443,10 +1454,27 @@ def snapshot():
         "results": [{"home": str(e["home"]["id"]), "away": str(e["away"]["id"]), "hs": e["hs"], "as": e["as"],
                      "start": e["start"], "round": e.get("round")} for e in (d.get("played") or [])[:10]],
         "history": {"summary": model.history_summary(HISTORY),
-                    "items": [{"home": str(it["home"]["id"]), "away": str(it["away"]["id"]), "start": it["start"],
-                               "pick": (it.get("final") or it.get("latest") or {}).get("pick"), "result": it.get("result"),
-                               "ok": (it.get("eval") or {}).get("pick")} for it in hist]},
+                    "items": [{"id": it["id"], "round": it.get("round"), "home": str(it["home"]["id"]), "away": str(it["away"]["id"]),
+                               "start": it["start"], "pick": (it.get("final") or it.get("latest") or {}).get("pick"),
+                               "result": it.get("result"), "ok": (it.get("eval") or {}).get("pick"), "eval": it.get("eval"),
+                               # com'è andata: il pronostico al calcio d'inizio e le statistiche vere
+                               "f": it.get("final") if it.get("result") else None, "real": it.get("real")} for it in hist]},
+        "players": players, "xpts": xpts_table(d), "league": {"yellowGame": _r(A["L"].get("yellowGame"), 2)},
     }
+
+
+def xpts_table(d):
+    """Punti attesi (xPts) di ogni squadra da Understat: quanti punti avrebbe fatto, in media, con le occasioni create e
+    concesse in ogni partita. {squadra: {partite, punti, xPts, xG, xGA}}."""
+    u = load_json(us_file(season_year(d)), {}) or {}
+    out = {}
+    for t in (u.get("teams") or {}).values():
+        tid = team_by_name(d, t.get("title"))
+        hs = t.get("history") or []
+        if tid and hs:
+            out[tid] = _r({"n": len(hs), "pts": sum(h.get("pts") or 0 for h in hs), "xpts": sum(model.num(h.get("xpts")) or 0 for h in hs),
+                           "xg": sum(model.num(h.get("xG")) or 0 for h in hs), "xga": sum(model.num(h.get("xGA")) or 0 for h in hs)}, 2)
+    return out
 
 
 # ---------- server web ----------
