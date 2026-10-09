@@ -50,19 +50,25 @@ ROOT = Path(__file__).resolve().parent
 # leghe: una per processo, scelta con SERIEA_LEGA (di base la Serie A). Fuori dalla Serie A non c'è Fantacalcio.it:
 # niente fanta, voti e designazioni anticipate; le probabili formazioni vengono da OneFootball. Ogni lega ha i suoi dati
 # in una sottocartella e sul sito sta in una sottocartella (la Premier League in /premier/).
+# Taratura (09/10/2026), con un controllo su 50 partite per lega che toglie ogni volta la partita dalle statistiche
+# dei giocatori, confrontato con le quote reali dei ruoli su 430 partite (questa stagione e la scorsa). Si corregge
+# solo dove le due misure vanno nella stessa direzione: gol dei difensori sovrastimati in entrambe le leghe, gialli
+# degli attaccanti della Premier sottostimati. La vecchia correzione fissa degli attaccanti (model.F_CALIB) era nata
+# da un controllo che includeva la partita stessa: tolta.
+NO_F_CALIB = {"shots": 1.0, "sot": 1.0, "fouls": 1.0, "fouled": 1.0, "lamG": 1.0, "lamA": 1.0}
 LEGHE = {
     "serie-a": {"name": "Serie A", "espn": "ita.1", "understat": "Serie_A", "wiki_en": "Serie A", "dir": "",
-                "fantacalcio": True, "onefootball": None, "port": 8765},
-    # calib: correzioni del modello per gli attaccanti tarate su 50 partite vere della lega (la Serie A usa quelle di
-    # model.F_CALIB; in Premier tiri e falli degli attaccanti non vanno ridotti: uscivano sottostimati del 13%)
+                "fantacalcio": True, "onefootball": None, "port": 8765,
+                "calib": NO_F_CALIB, "roles": {"lamG": {"D": .90}}},
     "premier": {"name": "Premier League", "espn": "eng.1", "understat": "EPL", "wiki_en": "Premier League", "dir": "premier",
                 "fantacalcio": False, "onefootball": "premier-league-9", "port": 8766,
-                "calib": {"shots": 1.0, "sot": 1.0, "fouls": 1.0}},
+                "calib": NO_F_CALIB, "roles": {"lamG": {"D": .80}, "lamY": {"F": 1.15}}},
 }
 LEGA_KEY = os.environ.get("SERIEA_LEGA") or "serie-a"
 LEGA = LEGHE[LEGA_KEY]
 model.LEAGUE = LEGA["name"]
 model.F_CALIB = dict(model.F_CALIB, **(LEGA.get("calib") or {}))
+model.ROLE_CALIB = LEGA.get("roles") or {}
 statistiche.UNDERSTAT = statistiche.UNDERSTAT.replace("Serie_A", LEGA["understat"])
 statistiche.UNDERSTAT_REF = statistiche.UNDERSTAT_REF.replace("Serie_A", LEGA["understat"])
 fonti.WIKI_EN_TITLE = "{a}–{b:02d} " + LEGA["wiki_en"]
@@ -138,7 +144,8 @@ HTTP = {"espn": None, "web": None}   # ESPN vuole l'identificazione standard di 
 
 
 def log(msg):
-    print(f"[{time.strftime('%d/%m %H:%M:%S')}] {msg}", flush=True)
+    # sul Mac le leghe scrivono nella stessa finestra: le altre si riconoscono dal nome
+    print(f"[{time.strftime('%d/%m %H:%M:%S')}] " + (f"[{LEGA['name']}] " if LEGA["dir"] else "") + str(msg), flush=True)
 
 
 def load_json(path, default):
@@ -1666,6 +1673,8 @@ async def h_data(_):
               for eid, x in MATCHES.items() if not x.get("final")}
     return web.json_response({**STATE["data"], "analysis": an["pub"], "fixtures": an["fixtures"], "extras": extras,
                               "evidenza": an["evidenza"],
+                              "league": {"key": LEGA_KEY, "name": LEGA["name"], "fantacalcio": LEGA["fantacalcio"]},
+                              "leagues": [{"key": k, "name": v["name"], "port": v["port"]} for k, v in LEGHE.items()],
                               "fantaTeams": len(FANTA.get("teams", [])), "status": status_public(), "now": time.time()})
 
 
@@ -1693,7 +1702,7 @@ async def h_match(req):
 CHAT_DIR = DATA_DIR / "chat"   # i dati per Claude, in file che può solo leggere e cercare
 CHAT = {"key": None, "lock": None}
 # al posto delle istruzioni di Claude Code (pensate per programmare): solo queste, così ogni domanda pesa meno
-CHAT_PROMPT = """Sei l'assistente di Serie A Live, l'app di statistiche e pronostici di Serie A dell'utente (stagione {season}).
+CHAT_PROMPT = """Sei l'assistente di Serie A Live, l'app di statistiche e pronostici dell'utente; qui parli della {league} (stagione {season}).
 Oggi è {today}. Rispondi in italiano, in modo chiaro e breve, per una persona che non è un tecnico.
 I dati stanno in file JSON nella cartella {folder}. Parti da {folder}/indice.json per sapere cosa c'è, poi usa
 Read (con il percorso completo) o Grep solo sui file che servono. Per un giocatore usa Grep su giocatori.jsonl con il
@@ -1802,7 +1811,7 @@ async def h_chat(req):
     async with CHAT["lock"]:
         await asyncio.to_thread(chat_files)
         d = STATE["data"]
-        prompt = CHAT_PROMPT.format(season=(d.get("season") or {}).get("year", ""), today=time.strftime("%d/%m/%Y %H:%M"),
+        prompt = CHAT_PROMPT.format(league=LEGA["name"], season=(d.get("season") or {}).get("year", ""), today=time.strftime("%d/%m/%Y %H:%M"),
                                     folder=CHAT_DIR)
         model_name = "sonnet" if CHAT_DEEP.search(q) or len(q) > 160 else "haiku"   # difficile se chiede di ragionare o è lunga
         args = [exe, "-p", q, "--output-format", "json", "--model", model_name, "--tools", "Read,Grep,Glob",
@@ -2016,7 +2025,7 @@ async def main():
             refresh_squads(STATE["data"])
             STATUS["statsAt"] = STATE["data"].get("fullAt")
             log("Caricati gli ultimi dati salvati")
-    print(f"Serie A Live pronto su {url}  (chiudi questa finestra o premi Ctrl+C per fermarlo)", flush=True)
+    print(f"{LEGA['name']} pronta su {url}  (chiudi questa finestra o premi Ctrl+C per fermarla)", flush=True)
     asyncio.ensure_future(prefetch_logos())
     if "--no-open" not in sys.argv:
         webbrowser.open(url)

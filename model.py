@@ -21,6 +21,9 @@ SOFT_CAP = .10         # tetto complessivo di forma, accoppiamenti tattici, stil
 GOAL_SHARE_CAP, ASSIST_SHARE_CAP = .40, .30   # quota massima dei gol e degli assist dei titolari per un giocatore
 # taratura degli attaccanti titolari sulle partite reali (confronto del 28/09/2026 su 50 partite)
 LEAGUE = "Serie A"   # nome della lega nei testi: lo imposta server.py (SERIEA_LEGA)
+# correzioni per ruolo: quota reale di ogni ruolo tra i titolari (430 partite ESPN della lega) diviso quella del
+# modello, {statistica: {ruolo: fattore}}; le imposta server.py per ogni lega. Le squadre restano sui loro totali.
+ROLE_CALIB = {}
 F_CALIB = {"shots": .9, "sot": .87, "fouls": .85, "fouled": .88, "lamG": .85, "lamA": .65}
 STYLE_EFF_CAP, TEMPO_CAP, CARDS_CAP = .06, .08, .2   # tetti degli effetti dello scontro di stili
 EVID_K, EVID_CAP = 30, .05                            # precedenti tra stili: peso del campione e tetto
@@ -699,6 +702,14 @@ def build(data, prior=None, matches=None, now=None, coaches=None, role_rows=None
     L["sotA"] = L["sotA"] or 4.5
     L["bcA"] = L["bcA"] or 2.3
     L["yellowGame"] = 2 * (L["yellow"] or 2.1)
+    L["shares"] = league_shares(matches, prior)   # quote reali dei titolari e tiri a partita, dalle partite ESPN
+    # tiri e tiri in porta a partita di una squadra in questa stagione (ESPN, come quelli dei giocatori), con la
+    # stagione scorsa come base nelle prime giornate
+    for key, k in (("teamShots", "shots"), ("teamSot", "shotsOnTarget")):
+        tot = sum(g(x["s"], k) or 0 for x in T.values())
+        games = sum(g(x["s"], "matches") or 0 for x in T.values() if g(x["s"], k))
+        base = (L["shares"] or {}).get(key)
+        L[key] = (tot + (base or 0) * 60) / (games + 60) if games and base else (tot / games if games else base)
 
     # inizio di questa stagione: serve a capire se l'allenatore c'era già l'anno scorso
     pres = [e["start"] for e in (prior or {}).get("results") or [] if e.get("start")]
@@ -927,6 +938,41 @@ def card_context(A, tid, oid):
     return poss_f * fk_f, poss, poss_f, fk_f
 
 
+def league_shares(matches, prior):
+    """Quanto fanno davvero i titolari rispetto a tutta la squadra (minuti, tiri, tiri in porta, falli, falli subiti,
+    gialli, gol, assist) e quanti tiri fa una squadra a partita, dalle partite ESPN di questa stagione e della scorsa
+    (le stesse fonti delle statistiche dei giocatori). Cambia da lega a lega: in Serie A i cambi incidono di più che in
+    Premier (titolari: 83% dei tiri e 81% dei gialli contro 86% e 86%)."""
+    tot, n = {}, 0
+    boxes = [x.get("box") for x in (matches or {}).values()]
+    boxes += [v.get("box") for v in ((prior or {}).get("refCards") or {}).values()]
+    for b in boxes:
+        if not b or not b.get("players"):
+            continue
+        n += 1
+        for side in ("home", "away"):
+            for k in ("shots", "shotsOnTarget"):
+                tot["team_" + k] = tot.get("team_" + k, 0) + ((b.get(side) or {}).get(k) or 0)
+        for p in b["players"].values():
+            who = "st" if p.get("start") else "sub"
+            for k in ("min", "shots", "sot", "fouls", "fouled", "yc", "goals", "assists"):
+                tot[f"{who}_{k}"] = tot.get(f"{who}_{k}", 0) + (p.get(k) or 0)
+    if n < 30:
+        return {}
+    share = {k: tot.get(f"st_{k}", 0) / (tot.get(f"st_{k}", 0) + tot.get(f"sub_{k}", 0))
+             for k in ("min", "shots", "sot", "fouls", "fouled", "yc", "goals", "assists") if tot.get(f"st_{k}")}
+    return {"n": n, "share": share, "teamShots": tot.get("team_shots", 0) / (2 * n), "teamSot": tot.get("team_shotsOnTarget", 0) / (2 * n)}
+
+
+def start_share(A, projs, key, default=.88):
+    """Quota della statistica che fanno i titolari in questa partita: quella reale della lega, più alta o più bassa se
+    i titolari previsti giocano più o meno minuti dei titolari di solito."""
+    S = (A["L"].get("shares") or {}).get("share") or {}
+    if key not in S or "min" not in S:
+        return min(default, sum(p["min"] for p in projs) / 990)
+    return clamp(S[key] * sum(p["min"] for p in projs) / (990 * S["min"]), .55, .97)
+
+
 def anchor_team(A, projs, tid, oid, lam_team):
     """I numeri previsti dei titolari sommano a quelli realistici della squadra in questa partita, e i giocatori
     se li dividono secondo i loro numeri per 90' e i minuti previsti:
@@ -936,12 +982,22 @@ def anchor_team(A, projs, tid, oid, lam_team):
       - falli subiti: la sua media, con i falli che fa l'avversario.
     Le medie di squadra nelle prime giornate sono avvicinate a quelle della lega."""
     L, t, o = A["L"], A["T"][tid], A["T"][oid]
-    share = min(.88, sum(p["min"] for p in projs) / 990)   # con 5 cambi i titolari giocano circa l'88% dei minuti
-    rel = clamp(lam_team / (t["xgBase"] or L["mu"]), .5, 2) ** .6   # più o meno attacco del solito
+    # quota dei titolari: quella reale della lega per ogni statistica (prima era l'88% per tutto)
+    sh = {k: start_share(A, projs, k) for k in ("shots", "sot", "fouls", "fouled", "goals", "assists")}
+    # più o meno attacco del solito: gol attesi contro gli xG di base, centrato sul rapporto gol/xG della lega (senza,
+    # valeva 0,93 in media e toglieva il 4% dei tiri a tutti)
+    k_xg = L["mu"] / L["xg"] if L.get("xg") and L.get("mu") else 1.0
+    rel = clamp(lam_team / ((t["xgBase"] or L["mu"]) * k_xg), .5, 2) ** .6
     n = t.get("n") or 0
     avg = lambda v, lg: (n * v + 5 * lg) / (n + 5) if v is not None and lg else lg
     s = t.get("s") or {}
     shots = s["shots"] / s["matches"] if s.get("shots") and s.get("matches") else None
+    sot = s["shotsOnTarget"] / s["matches"] if s.get("shotsOnTarget") and s.get("matches") else t["m"].get("sot")
+    SH = L.get("shares") or {}
+    # medie di lega con le stesse fonti dei tiri dei giocatori (ESPN); i «tiri concessi» venivano da un'altra fonte
+    # (di questa stagione: da un anno all'altro cambiano, in Serie A da 12,3 a 14,6 tiri a squadra)
+    lg_shots = L.get("teamShots") or SH.get("teamShots") or L.get("shA")
+    lg_sot = L.get("teamSot") or SH.get("teamSot") or L.get("sotA")
     goals = sum(num(p.get("goals")) or 0 for p in A["players"].values())
     ast_rate = sum(num(p.get("assists")) or 0 for p in A["players"].values()) / goals if goals else .7
     opp_fouls = avg(o["m"].get("foul"), L.get("foul")) if (o.get("n") or 0) else L.get("foul")
@@ -950,14 +1006,14 @@ def anchor_team(A, projs, tid, oid, lam_team):
     team_games = sum(x.get("n") or 0 for x in A["T"].values())
     kp_team = sum(num(p.get("keyPasses")) or 0 for p in A["players"].values() if str(p.get("teamId")) == str(tid))
     targets = {
-        "lamG": lam_team * .97 * share,
-        "lamA": lam_team * ast_rate * share,
-        "shots": (avg(shots, L.get("shA")) or 0) * rel * share,
-        "sot": (avg(t["m"].get("sot"), L.get("sotA")) or 0) * rel * share,
-        "kp": (avg(kp_team / n if n else None, kp_all / team_games if team_games else None) or 0) * rel * share,
-        "fouls": (avg(t["m"].get("foul"), L.get("foul")) or 0) * card_context(A, tid, oid)[0] * share,
+        "lamG": lam_team * .97 * sh["goals"],
+        "lamA": lam_team * ast_rate * sh["assists"],
+        "shots": (avg(shots, lg_shots) or 0) * rel * sh["shots"],
+        "sot": (avg(sot, lg_sot) or 0) * rel * sh["sot"],
+        "kp": (avg(kp_team / n if n else None, kp_all / team_games if team_games else None) or 0) * rel * sh["shots"],
+        "fouls": (avg(t["m"].get("foul"), L.get("foul")) or 0) * card_context(A, tid, oid)[0] * sh["fouls"],
         "fouled": (avg(t["m"].get("fk"), L.get("fk")) or 0)
-                  * clamp(((opp_fouls or 1) / (L.get("foul") or opp_fouls or 1)) ** .6, .7, 1.4) * share,
+                  * clamp(((opp_fouls or 1) / (L.get("foul") or opp_fouls or 1)) ** .6, .7, 1.4) * sh["fouled"],
     }
     # falli subiti: le punizioni a favore contano anche falli non attribuiti ai giocatori, si usa il rapporto reale
     pl_fouled = sum(num(p.get("wasFouled")) or 0 for p in A["players"].values())
@@ -966,9 +1022,9 @@ def anchor_team(A, projs, tid, oid, lam_team):
         targets["fouled"] *= clamp(pl_fouled / tm_fk, .6, 1)
     for k, target in targets.items():
         have = [p for p in projs if p.get(k)]
-        for p in have:   # taratura sulle partite reali: gli attaccanti uscivano sovrastimati
-            if p.get("pos") == "F":
-                p[k] *= F_CALIB.get(k, 1)
+        rc = ROLE_CALIB.get("shots" if k == "sot" else k) or {}
+        for p in have:   # taratura sulle partite reali, per ruolo
+            p[k] *= rc.get(p.get("pos") or "M", 1.0) * (F_CALIB.get(k, 1) if p.get("pos") == "F" else 1)
         tot = sum(p[k] for p in have)
         if not tot or not target:
             continue
@@ -1077,6 +1133,8 @@ def anchor_cards(A, projs, tid, oid, card_f):
     l'arbitro e l'intensità della partita): i singoli giocatori si dividono quel totale."""
     L, t = A["L"], A["T"][tid]
     have = [p for p in projs if p.get("lamY")]
+    for p in have:   # quota reale dei gialli per ruolo nella lega
+        p["lamY"] *= (ROLE_CALIB.get("lamY") or {}).get(p.get("pos") or "M", 1.0)
     tot = sum(p["lamY"] for p in have)
     cards = [x["m"]["card"] for x in A["T"].values() if x["m"].get("card") is not None]
     if not tot or not cards or t["m"].get("card") is None:
@@ -1084,11 +1142,14 @@ def anchor_cards(A, projs, tid, oid, card_f):
     lg_card, n = sum(cards) / len(cards), t.get("n") or 0
     rel = (n * t["m"]["card"] + 6 * lg_card) / (n + 6) / lg_card   # cartellini della squadra rispetto alla media
     exp_team = (L.get("yellowGame") or 3.4) / 2 * rel * card_context(A, tid, oid)[0] * card_f
-    share = sum(p["min"] for p in have) / 990   # il resto dei minuti lo giocano i cambi
-    s = (exp_team * share / tot) ** .75
+    share = start_share(A, projs, "yc")   # i gialli che prendono davvero i titolari nella lega (81-86%)
+    # i titolari si dividono tutto il loro totale (prima solo in parte, con esponente 0,75: i gialli uscivano
+    # sottostimati del 6% in Serie A e del 12% in Premier); arbitro e scontro di stili sono già in exp_team
+    s = exp_team * share / tot
     for p in have:
         p["lamY"] *= s
         p["pYellow"] = 1 - math.exp(-p["lamY"])
+    return exp_team * (1 - share)   # gialli attesi dei cambi
 
 
 def parse_formation(f, n_outfield=10):
@@ -1552,12 +1613,12 @@ def predict(A, hid, aid, ev=None, extra=None):
     card_f = ref_f * (1 + clash["cards"])   # arbitro e scontro di stili
     proj_h = player_projections(A, hid, aid, xis["h"], lay_h, lay_a, xis["a"], duels, lh, la, card_f)
     proj_a = player_projections(A, aid, hid, xis["a"], lay_a, lay_h, xis["h"], duels, la, lh, card_f)
-    anchor_cards(A, proj_h, hid, aid, card_f)
-    anchor_cards(A, proj_a, aid, hid, card_f)
+    subs_h = anchor_cards(A, proj_h, hid, aid, card_f)
+    subs_a = anchor_cards(A, proj_a, aid, hid, card_f)
     anchor_team(A, proj_h, hid, aid, lh)
     anchor_team(A, proj_a, aid, hid, la)
-    cards_h = sum(p["lamY"] or 0 for p in proj_h) + .15
-    cards_a = sum(p["lamY"] or 0 for p in proj_a) + .15
+    cards_h = sum(p["lamY"] or 0 for p in proj_h) + (subs_h if subs_h is not None else .15)
+    cards_a = sum(p["lamY"] or 0 for p in proj_a) + (subs_a if subs_a is not None else .15)
     for p in proj_h + proj_a:
         p.pop("lamY", None)
     lu_out = {"h": side_out_cautioned(xis["h"]), "a": side_out_cautioned(xis["a"])}

@@ -37,7 +37,7 @@ HEAD = """<!doctype html>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <meta name="robots" content="noindex,nofollow">
-<meta name="theme-color" content="#1B7A4B">
+<meta name="theme-color" content="#0F1B2D">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-title" content="Serie A">
@@ -49,7 +49,7 @@ HEAD = """<!doctype html>
 """
 TAIL = "\n</body></html>\n"
 MANIFEST = {"name": "Serie A Tascabile", "short_name": "Serie A", "start_url": "./", "scope": "./", "display": "standalone",
-            "background_color": "#F2F5F0", "theme_color": "#1B7A4B",
+            "background_color": "#F3F5F9", "theme_color": "#0F1B2D",
             "icons": [{"src": "icona-192.png", "sizes": "192x192", "type": "image/png"},
                       {"src": "icona-512.png", "sizes": "512x512", "type": "image/png"}]}
 
