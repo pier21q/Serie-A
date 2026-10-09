@@ -803,16 +803,21 @@ def ref_stats(name):
     """Statistiche di un arbitro dalle partite di questa stagione e della scorsa: cartellini da ESPN, arbitro da ESPN
     o, per la scorsa stagione, da fantacalcio.it."""
     g = y = r = 0
-    rows = [((x.get("referee") or {}).get("name"), x.get("cards")) for x in MATCHES.values()]
-    rows += [(v.get("ref"), v.get("cards")) for v in (PRIOR.get("refCards") or {}).values()]
-    for rn, c in rows:
+    rows = [((x.get("referee") or {}).get("name"), x.get("cards"), "cur") for x in MATCHES.values()]
+    rows += [(v.get("ref"), v.get("cards"), "prev") for v in (PRIOR.get("refCards") or {}).values()]
+    split = {"prev": [0, 0], "cur": [0, 0]}   # [partite, gialli] della scorsa stagione e di questa
+    for rn, c, season in rows:
         if rn and c and same_ref(rn, name):
             g, y, r = g + 1, y + c["y"], r + c["r"]
+            split[season][0] += 1
+            split[season][1] += c["y"]
+    rows = [(rn, c) for rn, c, _ in rows]
     # termine di paragone: i gialli a partita di tutte le partite da cui vengono i dati degli arbitri (scorsa stagione e
     # questa). Con la media di quest'anno sembravano tutti severi: la stagione scorsa ne aveva di più (3,59 contro 3,22)
     cards = [c["y"] for _, c in rows if c]
     base = round(sum(cards) / len(cards), 3) if cards else None
-    return {"name": name, "yellow": y, "red": r, "yellowRed": 0, "games": g, "source": "espn", "base": base} if g else {"name": name}
+    return {"name": name, "yellow": y, "red": r, "yellowRed": 0, "games": g, "source": "espn", "base": base,
+            "seasons": split} if g else {"name": name}
 
 
 def apply_ref_stats(d):

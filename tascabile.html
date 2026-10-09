@@ -512,7 +512,9 @@ function refCard(P) {
     <div class="facts">
       <div class="fact"><small>Arbitro</small><b>${esc(r.name)}</b></div>
       <div class="fact"><small>Gialli a partita</small><b class="num">${fx(r.ypg, 2)}</b>${r.base || lg ? `<small>media di tutti gli arbitri ${fx(r.base || lg, 2)}</small>` : ''}</div>
-      <div class="fact"><small>Partite nei dati</small><b class="num">${r.games}</b><small>scorsa stagione e questa</small></div>
+      ${r.seasons ? [['Stagione scorsa', r.seasons.prev], ['Questa stagione', r.seasons.cur]].map(([l, [g, y]]) =>
+        `<div class="fact"><small>${l}</small><b class="num">${g ? fx(y / g, 2) : '–'}</b><small>${g ? `gialli a partita in ${g} ${g === 1 ? 'partita' : 'partite'}` : 'nessuna partita'}</small></div>`).join('')
+        : `<div class="fact"><small>Partite nei dati</small><b class="num">${r.games}</b><small>scorsa stagione e questa</small></div>`}
       <div class="fact"><small>Rossi</small><b class="num">${r.red ?? 0}</b></div>
       <div class="fact"><small>Effetto sui gialli attesi</small><b class="num">${eff >= 0 ? '+' : ''}${eff}%</b></div>
     </div>
