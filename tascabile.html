@@ -703,7 +703,8 @@ document.addEventListener('click', e => {
 });
 window.addEventListener('hashchange', () => { if (D) show(location.hash.slice(1)); });
 const FONTE = {'statistiche': 'Understat', 'fantacalcio.it': 'Fantacalcio.it', 'sito': 'pubblicazione del sito',
-               'storico': 'copia dello storico'};
+               'storico': 'copia dello storico', 'designazioni': 'designazioni arbitrali (Fantacalcio.it)',
+               'arbitri': 'arbitri della scorsa stagione (Fantacalcio.it)'};
 function stamp() {
   // il sito si ripubblica ogni 30 minuti anche senza novità: se l'ora è vecchia, gli aggiornamenti si sono fermati
   const errs = Object.keys(D.errors || {}).map(k => FONTE[k] || k);

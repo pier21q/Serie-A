@@ -649,6 +649,89 @@ async def fantacalcio_step(d, now):
     save_json(EXTRA_FILE, EXTRA)
 
 
+def ref_full_name(surname):
+    """Cognome dell'arbitro (fantacalcio.it) -> nome completo con cui compare nelle partite ESPN, per collegarlo ai
+    suoi cartellini. Se nessuno o più arbitri hanno quel cognome resta il cognome."""
+    tk = tokens(surname)
+    names = [(x.get("referee") or {}).get("name") for x in MATCHES.values()]
+    names += [v.get("ref") for v in (PRIOR.get("refCards") or {}).values()]
+    hits = {frozenset(tokens(n)): n for n in names if n and tk and tk < tokens(n)}
+    return next(iter(hits.values())) if len(hits) == 1 else surname
+
+
+async def fc_prior_referees(d, now):
+    """Una volta sola, 10 giornate a ogni giro: l'arbitro di ogni partita della scorsa stagione da fantacalcio.it.
+    ESPN lo riporta solo in poche partite (30 su 380 nel 2025/26) ma ha tutti i cartellini: insieme danno la
+    severità di ogni arbitro su una stagione intera, invece che sulle 1-4 partite di quest'anno."""
+    rc = PRIOR.get("refCards") or {}
+    y = re.fullmatch(r"(\d\d)/(\d\d)", PRIOR.get("year") or "")
+    done = PRIOR.setdefault("refFc", {}).setdefault("rounds", [])
+    if not y or not rc or len(done) >= 38 or in_window(d, now):
+        return
+    season = f"20{y.group(1)}-{y.group(2)}"
+    same = lambda a, b: bool(tokens(a) & tokens(b))
+
+    async def page(rnd, mid):
+        try:
+            return fonti.parse_partita_fc(await web_text(fonti.FC_PARTITA.format(giornata=rnd, stagione=season, id=mid)))
+        except RuntimeError:
+            return None
+
+    n = 0
+    for rnd in [r for r in range(1, 39) if r not in done][:10]:
+        first = fonti.parse_id_partita_fc(await web_text(fonti.FC_CALENDARIO.format(giornata=f"{rnd}/{season}")), rnd, season)
+        found = []
+        if first:   # gli id delle 10 partite della giornata sono consecutivi: si va avanti e indietro finché ci sono
+            for step in (1, -1):
+                mid = first if step == 1 else first - 1
+                while len(found) < 10 and (p := await page(rnd, mid)):
+                    found.append(p)
+                    mid += step
+        for home, away, ref in found:
+            x = next((x for x in PRIOR.get("results") or [] if same(home, x["home"]["name"]) and same(away, x["away"]["name"])), None)
+            e = rc.get(str((x or {}).get("espn")))
+            if ref and e is not None and not e.get("ref"):
+                e["ref"] = ref
+                n += 1
+        if found:   # se la pagina è cambiata e non si trova niente, si riprova al giro dopo
+            done.append(rnd)
+    save_json(PRIOR_FILE, PRIOR)
+    if n:
+        log(f"Arbitri della scorsa stagione (fantacalcio.it): {n} partite, giornate fatte {len(done)}/38")
+
+
+async def fc_referees(d, now):
+    """Arbitri designati da fantacalcio.it (pagina di ogni partita): escono 2-3 giorni prima, mentre ESPN li mette
+    solo il giorno della partita. Si cercano per le partite dei prossimi 4 giorni che non hanno ancora l'arbitro."""
+    todo = [e for e in d.get("next") or [] if e.get("status") == "notstarted" and 0 < e["start"] - now <= 4 * 86400
+            and not ((MATCHES.get(str(e["id"])) or {}).get("referee") or {}).get("name") and e.get("round")]
+    if not todo or now - EXTRA.get("refAt", 0) < NEWS_EVERY:
+        return
+    EXTRA["refAt"] = now
+    save_json(EXTRA_FILE, EXTRA)
+    n = 0
+    for rnd in sorted({e["round"] for e in todo}):
+        links = fonti.parse_calendario_fc(await web_text(fonti.FC_CALENDARIO.format(giornata=rnd)))
+        for e in (e for e in todo if e["round"] == rnd):
+            hid, aid = str(e["home"]["id"]), str(e["away"]["id"])
+            url = next((u for sl, u in links for i in range(1, sl.count("-") + 1)
+                        if team_by_name(d, " ".join(sl.split("-")[:i])) == hid
+                        and team_by_name(d, " ".join(sl.split("-")[i:])) == aid), None)
+            if not url:
+                continue
+            ref = fonti.parse_arbitro_fc(await web_text(url))
+            if not ref:   # le designazioni escono tutte insieme: se manca in una partita, manca in tutte
+                break
+            name = ref_full_name(ref)
+            match_entry(e)["referee"] = {"name": name}
+            n += 1
+            log(f"Arbitro designato (fantacalcio.it): {name} per {e['home']['name']} - {e['away']['name']}")
+    if n:
+        apply_ref_stats(d)
+        VERSION["matches"] += 1
+        save_json(MATCH_FILE, MATCHES)
+
+
 async def wiki_en_changes(year):
     """Cambi di allenatore della stagione da Wikipedia in inglese (sezione «Managerial changes»)."""
     base = {"action": "parse", "page": fonti.WIKI_EN_TITLE.format(a=year, b=(year + 1) % 100), "format": "json",
@@ -710,14 +793,20 @@ async def wiki_coaches(d, now):
         save_json(EXTRA_FILE, EXTRA)
 
 
+def same_ref(a, b):
+    """Stesso arbitro: un nome contiene l'altro (fantacalcio.it dà solo il cognome, ESPN nome e cognome)."""
+    ta, tb = tokens(a), tokens(b)
+    return bool(ta and tb) and (ta <= tb or tb <= ta)
+
+
 def ref_stats(name):
-    """Statistiche di un arbitro dalle partite ESPN di questa stagione e della scorsa."""
-    tk = tokens(name)
+    """Statistiche di un arbitro dalle partite di questa stagione e della scorsa: cartellini da ESPN, arbitro da ESPN
+    o, per la scorsa stagione, da fantacalcio.it."""
     g = y = r = 0
     rows = [((x.get("referee") or {}).get("name"), x.get("cards")) for x in MATCHES.values()]
     rows += [(v.get("ref"), v.get("cards")) for v in (PRIOR.get("refCards") or {}).values()]
     for rn, c in rows:
-        if rn and c and tokens(rn) == tk:
+        if rn and c and same_ref(rn, name):
             g, y, r = g + 1, y + c["y"], r + c["r"]
     return {"name": name, "yellow": y, "red": r, "yellowRed": 0, "games": g, "source": "espn"} if g else {"name": name}
 
@@ -1135,9 +1224,10 @@ async def refresher():
                 STATUS.update(espnError=str(e)[:200])
                 log(f"Errore ESPN: {e}")
                 due["today"] = min(due["today"], now + 300)
-        # 2. fonti di riserva: probabili formazioni e indisponibili (fantacalcio.it), allenatori (Wikipedia)
+        # 2. fonti di riserva: probabili formazioni, indisponibili e arbitri designati (fantacalcio.it), allenatori (Wikipedia)
         if d:
-            for name, step in (("fantacalcio.it", fantacalcio_step), ("Wikipedia", wiki_coaches)):
+            for name, step in (("fantacalcio.it", fantacalcio_step), ("designazioni", fc_referees),
+                               ("arbitri", fc_prior_referees), ("Wikipedia", wiki_coaches)):
                 try:
                     await step(d, now)
                     STATUS.pop(f"err_{name}", None)

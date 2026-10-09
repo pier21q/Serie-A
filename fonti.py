@@ -1,6 +1,7 @@
 """Fonti per i dati di ogni partita e per gli allenatori.
 
-- fantacalcio.it: probabili formazioni con le percentuali, squalificati, diffidati, infortunati, in dubbio
+- fantacalcio.it: probabili formazioni con le percentuali, squalificati, diffidati, infortunati, in dubbio; arbitro
+  designato (2-3 giorni prima, mentre ESPN lo mette solo il giorno della partita)
 - Wikipedia: allenatori della stagione (e di quella scorsa, per sapere chi è nuovo); in inglese i cambi di
   allenatore con le date, spesso aggiornati prima (Fantacalcio.it, Lega Serie A ed ESPN arrivano dopo o non li hanno)
 - ESPN: precedenti tra le squadre, arbitro designato e cartellini delle partite (per le statistiche degli arbitri)
@@ -13,6 +14,9 @@ import unicodedata
 from datetime import datetime, timezone
 
 FC_PROBABILI = "https://www.fantacalcio.it/probabili-formazioni-serie-a"
+FC_CALENDARIO = "https://www.fantacalcio.it/serie-a/calendario/{giornata}"   # con i link alle pagine delle partite
+# pagina di una partita: conta l'id, e la giornata deve essere giusta; il nome delle squadre nell'indirizzo no
+FC_PARTITA = "https://www.fantacalcio.it/serie-a/calendario/{giornata}/{stagione}/casa-ospite/{id}"
 WIKI = "https://it.wikipedia.org/wiki/Serie_A_{a}-{b}"
 WIKI_EN = "https://en.wikipedia.org/w/api.php"
 WIKI_EN_TITLE = "{a}–{b:02d} Serie A"   # "2026–27 Serie A"
@@ -28,6 +32,35 @@ def _text(s):
 
 
 # ---------- fantacalcio.it ----------
+
+def parse_calendario_fc(page):
+    """Pagina di una giornata su fantacalcio.it -> [("casa-ospite", indirizzo della pagina della partita)]."""
+    out = {}
+    for m in re.finditer(r'href="(?:https://www\.fantacalcio\.it)?(/serie-a/calendario/\d+/[\d-]+/([a-z0-9-]+)/\d+)"', page):
+        out.setdefault(m.group(2), "https://www.fantacalcio.it" + m.group(1))
+    return list(out.items())
+
+
+def parse_arbitro_fc(page):
+    """Pagina di una partita su fantacalcio.it -> cognome dell'arbitro designato, se c'è già."""
+    m = re.search(r'<div class="referee">(.*?)</div>', page, re.S)
+    name = _text(m.group(1)) if m else ""
+    return name or None
+
+
+def parse_partita_fc(page):
+    """Pagina di una partita su fantacalcio.it -> (casa, ospite, cognome dell'arbitro); None se la partita non c'è
+    (fantacalcio.it risponde comunque, con una pagina «404 pagina non trovata»)."""
+    m = re.search(r"<title>\s*Riepilogo match ([^<-]+?)-([^<-]+?) \d+ giornata", page)
+    return (m.group(1).strip(), m.group(2).strip(), parse_arbitro_fc(page)) if m else None
+
+
+def parse_id_partita_fc(page, giornata, stagione):
+    """Pagina di una giornata passata su fantacalcio.it: mostra una sola partita -> il suo id (le altre 9 della
+    giornata hanno gli id vicini)."""
+    m = re.search(rf"/serie-a/calendario/{giornata}/{stagione}/[a-z0-9-]+/(\d+)", page)
+    return int(m.group(1)) if m else None
+
 
 def _pills(block):
     out = []
