@@ -772,7 +772,8 @@ function teamFromFixtures(id) {
   return null;
 }
 const P90 = [['xg', 'xG', 2], ['g', 'Gol', 2], ['xa', 'xA', 2], ['kp', 'Chance create', 1], ['sh', 'Tiri', 1], ['sot', 'Tiri in porta', 1],
-  ['fo', 'Falli fatti', 1], ['fd', 'Falli subiti', 1], ['yc', 'Gialli', 2]];
+  ['fo', 'Falli fatti', 1], ['fd', 'Falli subiti', 1], ['yc', 'Gialli', 2], ['tk', 'Contrasti (Opta)', 1], ['itc', 'Intercetti (Opta)', 1],
+  ['rec', 'Palloni recuperati (Opta)', 1], ['pcar', 'Conduzioni progressive (Opta)', 1], ['gp', 'Gol evitati (Opta)', 2]];
 function vGiocatore(id) {
   const p = PL[String(id)], alt = p ? null : teamFromFixtures(id);
   if (!p && !alt) return backAny + '<p class="lead" style="margin-top:14px">Questo giocatore non è nella fotografia attuale.</p>';
@@ -784,19 +785,24 @@ function vGiocatore(id) {
       ['Gol', fx(p.g, 0), `xG ${fx(p.xg, 1)}`], ['Assist', fx(p.a, 0), `xA ${fx(p.xa, 1)}`], ['Chance create', fx(p.kp, 0), ''],
       ['Tiri', fx(p.sh, 0), `${fx(p.sot, 0)} in porta`], ['Falli fatti', fx(p.fo, 0), `subiti ${fx(p.fd, 0)}`],
       ['Ammonizioni', fx(p.yc, 0), p.rc ? `${p.rc} espulsioni` : ''], ...(pos === 'G' ? [['Parate', fx(p.sv, 0), '']] : []),
-      ...(p.mv != null ? [['Media voto', fx(p.mv, 2), p.fm != null ? `fantamedia ${fx(p.fm, 2)}` : '']] : [])];
+      ...(p.mv != null ? [['Media voto', fx(p.mv, 2), p.fm != null ? `fantamedia ${fx(p.fm, 2)}` : '']] : []),
+      ...(p.tk != null && pos !== 'G' ? [['Contrasti', fx(p.tk, 0), `intercetti ${fx(p.itc, 0)}`], ['Palloni recuperati', fx(p.rec, 0), ''],
+        ['Duelli a terra vinti', p.gd ? `${Math.round(p.gw / p.gd * 100)}%` : '–', p.gd ? `${fx(p.gw, 0)} su ${fx(p.gd, 0)}` : ''],
+        ['Duelli aerei vinti', p.ad ? `${Math.round(p.aw / p.ad * 100)}%` : '–', p.ad ? `${fx(p.aw, 0)} su ${fx(p.ad, 0)}` : ''],
+        ['Conduzioni progressive', fx(p.pcar, 0), '']] : []),
+      ...(p.gp != null && pos === 'G' ? [['Gol evitati', (p.gp > 0 ? '+' : '') + fx(p.gp, 2), `xG nello specchio subiti ${fx(p.xgot, 1)}`]] : [])];
     // per 90 minuti, con la posizione tra i giocatori dello stesso ruolo che hanno giocato abbastanza
     const maxMin = Math.max(...D.players.map(x => x.min || 0)), minQ = Math.max(180, .3 * maxMin);
     const peers = D.players.filter(x => x.pos === pos && (x.min || 0) >= minQ);
     const r90 = (x, k) => x.min ? (x[k] || 0) / x.min * 90 : null;
-    const rows = P90.filter(([k]) => p[k] != null && !(pos === 'G' && k !== 'yc')).map(([k, l, d]) => {
+    const rows = P90.filter(([k]) => p[k] != null && (pos === 'G' ? ['yc', 'gp'].includes(k) : k !== 'gp')).map(([k, l, d]) => {
       const v = r90(p, k), enough = (p.min || 0) >= minQ;
       const rank = enough ? peers.filter(x => r90(x, k) > v).length + 1 : null;
       return `<tr><td class="l">${l}</td><td><b>${fx(v, d)}</b></td><td class="l muted">${rank ? `${rank}° su ${peers.length} ${POSP[pos]}` : ''}</td></tr>`;
     }).join('');
     season = `<div class="facts">${tiles.map(([k, v, s]) => `<div class="fact"><small>${k}</small><b class="num">${v}</b>${s ? `<small>${s}</small>` : ''}</div>`).join('')}</div>
       ${rows ? `<h4>Ogni 90 minuti</h4><div class="tw"><table><tbody>${rows}</tbody></table></div>
-      <p class="small muted">${(p.min || 0) >= minQ ? `Posizione tra i ${POSP[pos]} con almeno ${Math.round(minQ)} minuti giocati.` : `Ha giocato meno di ${Math.round(minQ)} minuti: niente confronto con gli altri ${POSP[pos]}.`} Dati di Understat, ESPN${p.mv != null ? ' e Fantacalcio.it' : ''}.</p>` : ''}`;
+      <p class="small muted">${(p.min || 0) >= minQ ? `Posizione tra i ${POSP[pos]} con almeno ${Math.round(minQ)} minuti giocati.` : `Ha giocato meno di ${Math.round(minQ)} minuti: niente confronto con gli altri ${POSP[pos]}.`} Dati di Understat, ESPN${p.tk != null || p.gp != null ? ', Opta (Opta Analyst)' : ''}${p.mv != null ? ' e Fantacalcio.it' : ''}.</p>` : ''}`;
   }
   let next = '';
   if (nx && !nx.p) {

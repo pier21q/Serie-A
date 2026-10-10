@@ -59,10 +59,10 @@ ROOT = Path(__file__).resolve().parent
 NO_F_CALIB = {"shots": 1.0, "sot": 1.0, "fouls": 1.0, "fouled": 1.0, "lamG": 1.0, "lamA": 1.0}
 LEGHE = {
     "serie-a": {"name": "Serie A", "espn": "ita.1", "understat": "Serie_A", "wiki_en": "Serie A", "dir": "",
-                "fantacalcio": True, "onefootball": None, "of_comp": "serie-a-13", "port": 8765,
+                "fantacalcio": True, "onefootball": None, "of_comp": "serie-a-13", "opta": "serie-a", "port": 8765,
                 "calib": NO_F_CALIB, "roles": {"lamG": {"D": .90}}},
     "premier": {"name": "Premier League", "espn": "eng.1", "understat": "EPL", "wiki_en": "Premier League", "dir": "premier",
-                "fantacalcio": False, "onefootball": "premier-league-9", "of_comp": "premier-league-9", "port": 8766,
+                "fantacalcio": False, "onefootball": "premier-league-9", "of_comp": "premier-league-9", "opta": "premier-league", "port": 8766,
                 "calib": NO_F_CALIB, "roles": {"lamG": {"D": .80}, "lamY": {"F": 1.15}}},
 }
 LEGA_KEY = os.environ.get("SERIEA_LEGA") or "serie-a"
@@ -88,6 +88,7 @@ ESPN_FILE = CACHE / "espn.json"
 EXTRA_FILE = CACHE / "fonti.json"   # fonti di riserva: fantacalcio.it, Wikipedia
 REG_FILE = CACHE / "giocatori.json"   # anagrafica: stesso giocatore su ESPN, Understat e Fantacalcio.it
 FC_STATS_FILE = CACHE / "fantacalcio-statistiche.json"
+OPTA_FILE = CACHE / "opta.json"   # statistiche Opta della stagione (da Opta Analyst)
 HISTORY_FILE = DATA_DIR / "history.json"   # storico dei pronostici: non sta in cache perche' non si puo' ricreare
 FANTA_FILE = DATA_DIR / "fanta.json"       # rose del fantacalcio
 SNAPSHOT_FILE = DATA_DIR / "fotografia.json"   # dati compatti per la versione tascabile (artefatto)
@@ -113,6 +114,7 @@ FC_NEAR, FC_FAR = NEWS_EVERY, NEWS_EVERY   # probabili formazioni e indisponibil
 WIKI_EVERY = NEWS_EVERY            # allenatori da Wikipedia, per vedere presto esoneri e dimissioni
 PRE_EVERY = NEWS_EVERY             # precedenti e arbitro designato (ESPN), nei 3 giorni prima
 US_EVERY = NEWS_EVERY              # Understat e Fantacalcio.it
+OPTA_EVERY = 6 * 3600             # Opta: Opta Analyst aggiorna i dati una volta al giorno
 ROSTER_EVERY = 7 * 86400           # rose da ESPN: una volta a settimana (cambiano solo col mercato)
 CLOUD = "--cloud" in sys.argv
 SITE_EVERY = 15 * 60               # sito dal Mac: al massimo ogni 15 minuti (su GitHub a ogni aggiornamento)
@@ -176,6 +178,7 @@ COACHES = load_json(COACH_FILE, {})
 ESPNMAP = load_json(ESPN_FILE, {"teams": {}, "events": {}, "priorTeams": {}})
 EXTRA = load_json(EXTRA_FILE, {})
 REG = load_json(REG_FILE, {"info": {}, "espn": {}, "us": {}, "fc": {}})
+REG.setdefault("opta", {})
 VERSION = {"matches": 0, "squads": 0, "coaches": 0}
 # versione del codice: cambia a ogni modifica di server.py o model.py
 CODE_VERSION = str(int(max((ROOT / f).stat().st_mtime for f in ("server.py", "model.py", "fonti.py", "statistiche.py", "sito.py"))))
@@ -1175,6 +1178,37 @@ async def us_get(year):
         return json.loads(await r.text())
 
 
+async def opta_step(d, now):
+    """Statistiche Opta della stagione da Opta Analyst (il sito di Opta): xG, xA, chance create, contrasti, intercetti,
+    palloni recuperati, duelli, conduzioni progressive, gol evitati dai portieri. Ogni 6 ore."""
+    if not LEGA.get("opta") or now - EXTRA.get("optaAt", 0) < OPTA_EVERY:
+        return
+    EXTRA["optaAt"] = now - OPTA_EVERY + 1800   # se va male, si riprova tra mezz'ora
+    save_json(EXTRA_FILE, EXTRA)
+    tmcl = fonti.parse_opta_tmcl(await web_text(fonti.OPTA_PAGE.format(lega=LEGA["opta"])))
+    if not tmcl:
+        raise RuntimeError("codice Opta della stagione non trovato")
+    players = fonti.parse_opta_players(json.loads(await web_text(fonti.OPTA_STATS.format(tmcl=tmcl))))
+    if len(players) < 200:
+        raise RuntimeError(f"solo {len(players)} giocatori")
+    save_json(OPTA_FILE, {"at": time.time(), "tmcl": tmcl, "players": players})
+    EXTRA["optaAt"] = now
+    save_json(EXTRA_FILE, EXTRA)
+    log(f"Statistiche Opta (Opta Analyst): {len(players)} giocatori")
+
+
+def canon_opta(pid, o, team_of):
+    """Giocatore di Opta -> id dell'anagrafica (stessa squadra e stesso cognome)."""
+    cid = REG["opta"].get(pid)
+    if cid is None:
+        tid = team_of(o.get("team"))
+        cid = reg_find(o["name"], [tid] if tid else None) or reg_find(o["name"], None, need=8.0)
+        if cid is None:
+            return None
+        REG["opta"][pid] = cid
+    return cid
+
+
 async def sources_step(d, now):
     """Understat (xG, xA, pressing, minuti) e Fantacalcio.it (media voto): ogni 6 ore e dopo le partite."""
     last_end = max((e["start"] + 2.25 * 3600 for e in d.get("played") or []), default=0)
@@ -1350,6 +1384,23 @@ def build_players(results, boxes, us, team_of_title, current):
                                  "teamId": int(team_of_title(u["team"].split(",")[-1]) or x.get("teamId") or 0)})
         p.update({k: u[k] for k in US_FIELDS if u.get(k) is not None})
         p["appearances"] = max(p.get("appearances") or 0, int(u.get("appearances") or 0))
+    if current:   # Opta: xG e xA diventano la media di Understat e Opta (due modelli indipendenti), più le statistiche nuove
+        for pid, o in ((load_json(OPTA_FILE, {}) or {}).get("players") or {}).items():
+            cid = canon_opta(pid, o, team_of_title)
+            p = out.get(cid) if cid else None
+            if not p:
+                continue
+            for k, ok in (("expectedGoals", "xg"), ("expectedAssists", "xa")):
+                if o.get(ok) is not None:
+                    p[k + "Opta"] = o[ok]
+                    p[k] = (p[k] + o[ok]) / 2 if p.get(k) is not None else o[ok]
+            for k, ok in (("chancesCreated", "chances_created"), ("tackles", "tackles"), ("interceptions", "interceptions"),
+                          ("recoveries", "recoveries"), ("blocks", "blocks"), ("clearances", "clearances"),
+                          ("aerialDuels", "aerial_duels"), ("aerialWon", "aerial_duels_won"), ("groundDuels", "ground_duels"),
+                          ("groundWon", "ground_duels_won"), ("progCarries", "progressive_carries"),
+                          ("goalsPrevented", "goals_prevented"), ("xgotConceded", "xgot_conceded"), ("foulsOpta", "fouls_commited")):
+                if o.get(ok) is not None:
+                    p[k] = o[ok]
     for p in out.values():
         # dove Understat non c'è, valgono i conti delle partite ESPN
         for k, src in (("minutesPlayed", "minutesEspn"), ("goals", "goalsEspn"), ("assists", "assistsEspn"),
@@ -1468,7 +1519,7 @@ async def site_step():
 def stats_signature(d):
     rc = PRIOR.get("refCards") or {}
     return (sum(1 for e in d.get("played") or [] if (MATCHES.get(str(e["id"])) or {}).get("box")),
-            EXTRA.get("usAt"), (load_json(FC_STATS_FILE, {}) or {}).get("at"), sum(1 for v in rc.values() if "box" in v) // 40,
+            EXTRA.get("usAt"), (load_json(FC_STATS_FILE, {}) or {}).get("at"), (load_json(OPTA_FILE, {}) or {}).get("at"), sum(1 for v in rc.values() if "box" in v) // 40,
             d.get("v"))
 
 
@@ -1536,7 +1587,7 @@ async def refresher():
         if d:
             steps = ((("fantacalcio.it", fantacalcio_step), ("designazioni", fc_referees), ("arbitri", fc_prior_referees))
                      if LEGA["fantacalcio"] else (("OneFootball", onefootball_step),))
-            for name, step in steps + (("Wikipedia", wiki_coaches), ("foto", of_photos_step)):
+            for name, step in steps + (("Wikipedia", wiki_coaches), ("foto", of_photos_step), ("Opta", opta_step)):
                 try:
                     await step(d, now)
                     STATUS.pop(f"err_{name}", None)
@@ -1749,7 +1800,13 @@ def snapshot():
                    "xg": p.get("expectedGoals"), "xa": p.get("expectedAssists"), "kp": p.get("keyPasses"), "sh": p.get("totalShots"),
                    "sot": p.get("shotsOnTarget"), "fo": p.get("fouls"), "fd": p.get("wasFouled"), "yc": p.get("yellowCards"),
                    "rc": p.get("redCards"), "sv": p.get("saves"), "mv": p.get("rating"), "fm": p.get("fantamedia"),
-                   "pv": p.get("ratingPV")}, 2) for p in d.get("players") or [] if (p.get("minutesPlayed") or 0) > 0]
+                   "pv": p.get("ratingPV"),
+                   # Opta (Opta Analyst): contrasti, intercetti, recuperi, duelli, conduzioni progressive, gol evitati
+                   "tk": p.get("tackles"), "itc": p.get("interceptions"), "rec": p.get("recoveries"), "gw": p.get("groundWon"),
+                   "gd": p.get("groundDuels"), "aw": p.get("aerialWon"), "ad": p.get("aerialDuels"), "pcar": p.get("progCarries"),
+                   "gp": p.get("goalsPrevented"), "xgot": p.get("xgotConceded")}, 2)
+               for p in d.get("players") or [] if (p.get("minutesPlayed") or 0) > 0]
+    players = [{k: v for k, v in p.items() if v is not None} for p in players]   # più leggero: niente campi vuoti
     return {
         "generatedAt": time.time(), "statsAt": d.get("fullAt"), "season": d.get("season"), "errors": source_errors(),
         "standings": [{"team": str(r["team"]["id"]), "pos": r["pos"], "p": r["p"], "w": r["w"], "d": r["d"], "l": r["l"],
@@ -1893,7 +1950,9 @@ def chat_files():
     for p in d.get("players") or []:
         teams_players.setdefault(str(p.get("teamId")), []).append(p)
     keys = ("minutesPlayed", "appearances", "matchesStarted", "goals", "assists", "expectedGoals", "expectedAssists", "totalShots",
-            "shotsOnTarget", "keyPasses", "fouls", "wasFouled", "yellowCards", "redCards", "rating", "fantamedia")
+            "shotsOnTarget", "keyPasses", "fouls", "wasFouled", "yellowCards", "redCards", "rating", "fantamedia",
+            "tackles", "interceptions", "recoveries", "groundWon", "groundDuels", "aerialWon", "aerialDuels", "progCarries",
+            "goalsPrevented", "xgotConceded")
     # un giocatore per riga, con il nome senza accenti in "cerca": una ricerca per nome restituisce subito tutte le sue
     # statistiche, senza leggere il file intero
     rows = [dict({"cerca": slug(p.get("name")).replace("-", " "), "nome": p.get("name"), "squadra": name(p.get("teamId")),
@@ -1901,7 +1960,9 @@ def chat_files():
             for p in sorted(d.get("players") or [], key=lambda p: -(p.get("minutesPlayed") or 0))]
     (CHAT_DIR / "giocatori.jsonl").write_text("\n".join(json.dumps(r, ensure_ascii=False) for r in rows) + "\n")
     files["giocatori.jsonl"] = ("statistiche della stagione di tutti i giocatori, UNO PER RIGA (ruolo G/D/M/F; rating = media "
-                                "voto Fantacalcio.it; fouls = falli fatti, wasFouled = falli subiti). Per un giocatore usa Grep "
+                                "voto Fantacalcio.it; fouls = falli fatti, wasFouled = falli subiti; tackles, interceptions, recoveries, duelli "
+                                "(groundWon/groundDuels, aerialWon/aerialDuels), progCarries, goalsPrevented, xgotConceded = Opta; "
+                                "expectedGoals ed expectedAssists = media di Understat e Opta). Per un giocatore usa Grep "
                                 "con il nome in minuscolo e senza accenti (campo cerca), NON leggere il file intero")
     for tid, t in pub["teams"].items():
         put(f"squadra-{slug(name(tid))}.json", {"squadra": name(tid), "analisi": t,

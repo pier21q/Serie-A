@@ -265,6 +265,40 @@ OF_FIXTURES = "https://onefootball.com/en/competition/{lega}/fixtures"
 OF_MATCH = "https://onefootball.com/en/match/{id}"
 
 
+# ---------- Opta (dal sito Opta Analyst, che pubblica le statistiche Opta della stagione) ----------
+
+OPTA_PAGE = "https://theanalyst.com/competition/{lega}/stats"   # contiene il codice Opta della stagione (tmcl)
+OPTA_STATS = "https://theanalyst.com/wp-json/sdapi/v1/soccerdata/tournamentstats?tmcl={tmcl}"
+OPTA_GROUPS = (("attack", "overall"), ("possession", "chanceCreation"), ("carries", "overall"), ("defending", "overall"),
+               ("defending", "discipline"), ("goalkeeping", "overall"))
+OPTA_KEEP = {"mins_played", "apps", "goals", "xg", "shots", "shots_on_target", "xa", "chances_created", "assists", "carries",
+             "progressive_carries", "tackles", "interceptions", "recoveries", "blocks", "clearances", "aerial_duels",
+             "aerial_duels_won", "ground_duels", "ground_duels_won", "fouls_commited", "yellows", "reds", "saves_made",
+             "goals_prevented", "xgot_conceded", "goals_conceded"}
+
+
+def parse_opta_tmcl(page):
+    """Pagina delle statistiche di una lega su Opta Analyst -> codice Opta della stagione in corso."""
+    m = re.search(r'"tmcl":"([a-z0-9]+)"', page)
+    return m.group(1) if m else None
+
+
+def parse_opta_players(data):
+    """Statistiche Opta della stagione (tournamentstats di Opta Analyst, divise in gruppi: attacco, creazione,
+    conduzioni, difesa, disciplina, portieri) -> {id Opta: {"name", "team", campi}} con i gruppi uniti."""
+    out = {}
+    for g, sub in OPTA_GROUPS:
+        for r in (((data.get("player") or {}).get(g) or {}).get(sub) or []):
+            pid = str(r.get("player_id") or r.get("player_uuid") or "")
+            if not pid:
+                continue
+            o = out.setdefault(pid, {"name": r.get("player") or f"{r.get('first_name', '')} {r.get('last_name', '')}".strip(),
+                                     "team": r.get("contestantName") or r.get("contestantShortName"),
+                                     "pos": r.get("squad_position")})
+            o.update({k: r[k] for k in OPTA_KEEP if r.get(k) is not None})
+    return out
+
+
 OF_TABLE = "https://onefootball.com/en/competition/{lega}/table"
 OF_SQUAD = "https://onefootball.com/en/team/{team}/squad"
 OF_PHOTO = "https://images.onefootball.com/players/180/{id}.jpg"
