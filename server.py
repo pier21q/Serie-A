@@ -1200,8 +1200,12 @@ async def opta_step(d, now):
     remote = (load_json(DATA_BASE / "sito.json", {}) or {}).get("remote")
     if remote:
         branch = "opta" + (f"-{LEGA['dir']}" if LEGA["dir"] else "")
-        ok, out = await asyncio.to_thread(sito.pubblica_file, remote, branch, {"opta.json": OPTA_FILE},
-                                          f"Statistiche Opta della {LEGA['name']}")
+        for attempt in range(3):   # GitHub a volte rifiuta un push senza motivo («failed»): si riprova
+            ok, out = await asyncio.to_thread(sito.pubblica_file, remote, branch, {"opta.json": OPTA_FILE},
+                                              f"Statistiche Opta della {LEGA['name']}")
+            if ok:
+                break
+            await asyncio.sleep(20)
         log(f"Dati Opta caricati su GitHub (ramo {branch})" if ok else f"Dati Opta non caricati su GitHub: {out[-200:]}")
 
 
