@@ -1181,7 +1181,8 @@ async def us_get(year):
 async def opta_step(d, now):
     """Statistiche Opta della stagione da Opta Analyst (il sito di Opta): xG, xA, chance create, contrasti, intercetti,
     palloni recuperati, duelli, conduzioni progressive, gol evitati dai portieri. Ogni 6 ore."""
-    if not LEGA.get("opta") or now - EXTRA.get("optaAt", 0) < OPTA_EVERY:
+    # da GitHub Opta Analyst risponde 403 (blocca i computer dei centri dati): lì si usano i dati Opta del Mac, se ci sono
+    if CLOUD or not LEGA.get("opta") or now - EXTRA.get("optaAt", 0) < OPTA_EVERY:
         return
     EXTRA["optaAt"] = now - OPTA_EVERY + 1800   # se va male, si riprova tra mezz'ora
     save_json(EXTRA_FILE, EXTRA)
