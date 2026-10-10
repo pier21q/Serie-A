@@ -329,10 +329,24 @@ def merge_events(d, evs):
     now = time.time()
     allev = list(by_id.values())
     d["live"] = sorted([e for e in allev if e["status"] == "inprogress"], key=lambda e: e["start"])
-    d["played"] = sorted([e for e in allev if e["status"] == "finished"], key=lambda e: -e["start"])[:120]
+    # tutta la stagione (380 partite al massimo): le statistiche di squadre e giocatori si sommano da qui
+    d["played"] = sorted([e for e in allev if e["status"] == "finished"], key=lambda e: -e["start"])[:420]
     d["next"] = sorted([e for e in allev if e["status"] in ("notstarted", "postponed") and e["start"] > now - 3 * 86400],
                        key=lambda e: e["start"])
+    venue_standings(d)
     return ended
+
+
+def venue_standings(d):
+    """Classifiche in casa e in trasferta dai risultati (ESPN dà solo quella generale): a parità di punti contano
+    differenza reti e gol fatti."""
+    vt = model.venue_tables(d.get("played"))
+    for k in ("home", "away"):
+        rows = sorted(vt[k], key=lambda r: (-r["pts"], -(r["gf"] - r["ga"]), -r["gf"], r["team"].get("name") or ""))
+        for i, r in enumerate(rows):
+            r["pos"] = i + 1
+        if rows:
+            d.setdefault("standings", {})[k] = rows
 
 
 async def espn_schedule(d, months):
@@ -1430,6 +1444,7 @@ def rebuild_stats(d):
     us = statistiche.understat_parse(load_json(us_file(y), {})) if us_file(y).exists() else None
     fc = (load_json(FC_STATS_FILE, {}) or {}).get("players") or []
     results = [e for e in d.get("played") or [] if e.get("hs") is not None]
+    venue_standings(d)
     boxes = {str(e["id"]): (MATCHES.get(str(e["id"])) or {}).get("box") for e in results}
     boxes = {k: v for k, v in boxes.items() if v}
     team_of = lambda title: team_by_name(d, title)
@@ -1742,6 +1757,7 @@ async def cloud_main():
         reg_seed(STATE["data"])
         repair_registry(STATE["data"])
         refresh_squads(STATE["data"])
+        venue_standings(STATE["data"])
         await refresher()
     finally:
         await HTTP["espn"].close()
@@ -2234,6 +2250,7 @@ async def main():
             reg_seed(STATE["data"])
             repair_registry(STATE["data"])
             refresh_squads(STATE["data"])
+            venue_standings(STATE["data"])
             STATUS["statsAt"] = STATE["data"].get("fullAt")
             log("Caricati gli ultimi dati salvati")
     print(f"{LEGA['name']} pronta su {url}  (chiudi questa finestra o premi Ctrl+C per fermarla)", flush=True)

@@ -646,10 +646,32 @@ def style_clash(H, Aw, A):
 
 # ---------- analisi complessiva ----------
 
+def venue_tables(results):
+    """Classifiche in casa e in trasferta calcolate dai risultati (ESPN dà solo quella generale)."""
+    tab = {"home": {}, "away": {}}
+    for e in results or []:
+        if e.get("hs") is None or e.get("as") is None:
+            continue
+        for side, gf, ga in (("home", e["hs"], e["as"]), ("away", e["as"], e["hs"])):
+            t = e[side]
+            r = tab[side].setdefault(str(t["id"]), {"team": t, "p": 0, "w": 0, "d": 0, "l": 0, "gf": 0, "ga": 0, "pts": 0})
+            r["p"] += 1
+            r["gf"] += gf
+            r["ga"] += ga
+            r["w" if gf > ga else "d" if gf == ga else "l"] += 1
+            r["pts"] += 3 if gf > ga else 1 if gf == ga else 0
+    return {k: list(v.values()) for k, v in tab.items()}
+
+
 def build(data, prior=None, matches=None, now=None, coaches=None, role_rows=None):
     now = now or time.time()
     matches = matches or {}
     st = data.get("standings") or {}
+    # in casa e in trasferta: sempre dai risultati veri (le tabelle salvate non si aggiornano più)
+    if data.get("played"):
+        st = dict(st, **venue_tables(data["played"]))
+    if prior and len([e for e in prior.get("results") or [] if e.get("hs") is not None]) >= 100:
+        prior = dict(prior, standings=dict(prior.get("standings") or {}, **venue_tables(prior["results"])))
     rows = {k: {str(r["team"]["id"]): r for r in st.get(k) or []} for k in ("total", "home", "away")}
     forms = team_forms(data.get("played"))
     players = data.get("players") or []

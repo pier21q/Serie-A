@@ -278,7 +278,9 @@ function xptsCard() {
   const real = Object.fromEntries(D.standings.map(r => [r.team, r]));
   return `<h2>Classifica attesa <small>punti attesi (xPts)</small></h2>
     <div class="card tw"><table><thead><tr><th class="l">#</th><th class="l">Squadra</th><th>Pt</th><th>xPt</th><th>Diff.</th><th>xG</th><th>xGA</th></tr></thead><tbody>
-    ${rows.map(([id, x], i) => { const pts = (real[id] || {}).pts ?? x.pts, df = pts - x.xpts;
+    ${rows.map(([id, x], i) => { const r = real[id] || {};
+      // stesse partite per punti e xPt: se Understat è indietro di qualche partita si usano i suoi punti
+      const pts = r.p === x.n ? r.pts : x.pts, df = pts - x.xpts;
       return `<tr><td class="l">${i + 1}</td><td class="l"><a class="plain" href="#s${id}">${team(id, true)}</a></td><td>${pts}</td><td><b>${fx(x.xpts, 1)}</b></td>
         <td><span class="pos-luck ${df >= 1.5 ? 'up' : df <= -1.5 ? 'dn' : ''}">${df > 0 ? '+' : ''}${fx(df, 1)}</span></td><td>${fx(x.xg, 1)}</td><td>${fx(x.xga, 1)}</td></tr>`; }).join('')}
     </tbody></table>
