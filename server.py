@@ -190,7 +190,9 @@ def match_entry(e):
 
 # ---------- ESPN ----------
 
-ALIASES = {"internazionale": "inter", "inter milan": "inter", "hellas verona": "verona"}
+# nomi da ricondurre a quelli di ESPN: squadre e giocatori che le fonti scrivono in modo diverso (Understat inverte nome
+# e cognome di Fatawu Issahaku)
+ALIASES = {"internazionale": "inter", "inter milan": "inter", "hellas verona": "verona", "abdul fatawu": "fatawu issahaku"}
 STOP = {"fc", "ac", "as", "ss", "us", "calcio", "sc", "cfc", "bc", "afc", "club", "ssc", "acf", "1913", "1907"}
 ESPN_STATUS_IT = {"STATUS_FIRST_HALF": ("inprogress", "1° tempo", 6), "STATUS_HALFTIME": ("inprogress", "Intervallo", 31),
                   "STATUS_SECOND_HALF": ("inprogress", "2° tempo", 7), "STATUS_FULL_TIME": ("finished", "Finale", 100),
