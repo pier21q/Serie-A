@@ -92,6 +92,17 @@ jobs:
       - name: Componenti
         if: steps.serve.outputs.ok == 'true'
         run: pip install -r app/requirements.txt
+      - name: Dati Opta dal Mac
+        # Opta Analyst non risponde ai computer di GitHub (403): i dati Opta li carica il Mac nei rami opta e opta-premier
+        if: steps.serve.outputs.ok == 'true'
+        continue-on-error: true
+        run: |
+          for b in opta:cache opta-premier:premier/cache; do
+            br=${b%%:*}; dir=${b#*:}
+            if git -C dati fetch -q --depth=1 origin "$br" 2>/dev/null; then
+              mkdir -p "dati/$dir" && git -C dati show FETCH_HEAD:opta.json > "dati/$dir/opta.json" && echo "Dati Opta presi dal ramo $br"
+            fi
+          done
       - name: Aggiorna dati e sito
         if: steps.serve.outputs.ok == 'true'
         run: |

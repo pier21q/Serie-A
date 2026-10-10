@@ -144,6 +144,24 @@ def pubblica(site, branches=("main",), lease=False):
     return code == 0, out
 
 
+def pubblica_file(remote, branch, files, msg):
+    """Carica dei file in un ramo a parte del repository, con un solo commit sovrascritto ogni volta. Serve per i dati
+    Opta: da GitHub Opta Analyst non risponde (403), dal Mac sì, quindi li carica il Mac. files: {nome: percorso}."""
+    with tempfile.TemporaryDirectory() as tmp:
+        dest = Path(tmp) / "file"
+        dest.mkdir()
+        for name, src in files.items():
+            shutil.copyfile(src, dest / name)
+        git(dest, "init", "-q", "-b", branch)
+        git(dest, "config", "user.name", "Serie A Live")
+        git(dest, "config", "user.email", "serie-a-live@users.noreply.github.com")
+        git(dest, "remote", "add", "origin", remote)
+        git(dest, "add", "-A")
+        git(dest, "commit", "-q", "-m", msg)
+        code, out = git(dest, "push", "-q", "-f", "origin", f"HEAD:{branch}")
+        return code == 0, out
+
+
 def copia_storico(repo, src, msg, branch="storico", name="storico.json"):
     """Aggiunge una versione di src al ramo `branch`, che al contrario di "dati" tiene tutte le versioni.
     Usa il repository già scaricato in `repo` (e le sue credenziali), senza toccarne i file."""

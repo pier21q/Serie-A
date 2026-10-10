@@ -1196,6 +1196,13 @@ async def opta_step(d, now):
     EXTRA["optaAt"] = now
     save_json(EXTRA_FILE, EXTRA)
     log(f"Statistiche Opta (Opta Analyst): {len(players)} giocatori")
+    # il sito si aggiorna su GitHub, dove Opta Analyst non risponde: i dati li porta il Mac, in un ramo a parte
+    remote = (load_json(DATA_BASE / "sito.json", {}) or {}).get("remote")
+    if remote:
+        branch = "opta" + (f"-{LEGA['dir']}" if LEGA["dir"] else "")
+        ok, out = await asyncio.to_thread(sito.pubblica_file, remote, branch, {"opta.json": OPTA_FILE},
+                                          f"Statistiche Opta della {LEGA['name']}")
+        log(f"Dati Opta caricati su GitHub (ramo {branch})" if ok else f"Dati Opta non caricati su GitHub: {out[-200:]}")
 
 
 def canon_opta(pid, o, team_of):
