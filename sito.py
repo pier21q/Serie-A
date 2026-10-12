@@ -22,7 +22,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent
 ICON = ROOT / "Icona Serie A.png"
 # quello che serve a GitHub Actions per aggiornare il sito: va nel ramo main
-CODICE = ["server.py", "model.py", "fonti.py", "statistiche.py", "sito.py", "tascabile.html", "Icona Serie A.png",
+CODICE = ["server.py", "model.py", "fonti.py", "statistiche.py", "letture.py", "sito.py", "tascabile.html", "Icona Serie A.png",
           "requirements.txt"]
 CLOUD_FILES = {"cloud/aggiorna.yml": ".github/workflows/aggiorna.yml", "cloud/README.md": "README.md"}
 # i dati da cui riparte ogni aggiornamento su GitHub: vanno nel ramo "dati". Le rose del fanta no: il fanta sta solo

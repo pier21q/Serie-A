@@ -43,6 +43,7 @@ import aiohttp
 from aiohttp import web
 
 import fonti
+import letture
 import model
 import sito
 import statistiche
@@ -549,6 +550,7 @@ async def espn_summary(e):
         x["cards"] = fonti.espn_cards(j) or {}
         x["roles"] = match_roles(j) or {}
         x["box"] = statistiche.box_from_summary(j) or {}
+        x["ev"] = letture.parse_espn(j)   # cronaca (Opta): come sono nati gol e occasioni, per le letture
     for o in (j.get("gameInfo") or {}).get("officials") or []:
         if ((o.get("position") or {}).get("name") or "").lower() == "referee" and o.get("fullName"):
             ref = x.get("referee") or {}
@@ -571,7 +573,7 @@ def summaries_due(d, now):
             due.append((0, e))
     for e in d.get("played") or []:
         x = MATCHES.get(str(e["id"])) or {}
-        missing = "cards" not in x or "roles" not in x or "box" not in x
+        missing = "cards" not in x or "roles" not in x or "box" not in x or "ev" not in x
         if e.get("espn") and (not x.get("final") or missing) and now - x.get("espnAt", 0) >= (120 if missing else 3600):
             due.append((1, e))
     return [e for _, e in sorted(due, key=lambda t: t[0])]
@@ -1192,6 +1194,71 @@ async def us_get(year):
         return json.loads(await r.text())
 
 
+US_MATCH = "https://understat.com/getMatchData/{id}"
+
+
+def us_time(x):
+    try:
+        return datetime.strptime(x, "%Y-%m-%d %H:%M:%S").replace(tzinfo=timezone.utc).timestamp()
+    except (TypeError, ValueError):
+        return None
+
+
+def us_match_id(d, e, dates):
+    """Partita di Understat che corrisponde a una partita giocata: stesse squadre, stesso giorno (orari in UTC)."""
+    h, a = str(e["home"]["id"]), str(e["away"]["id"])
+    for x in dates:
+        t = us_time(x.get("datetime"))
+        if not x.get("isResult") or t is None or abs(t - e["start"]) > 36 * 3600:
+            continue
+        if team_by_name(d, (x.get("h") or {}).get("title")) == h and team_by_name(d, (x.get("a") or {}).get("title")) == a:
+            return x["id"]
+    return None
+
+
+def us_ppda(d, u, e):
+    """Pressing (PPDA: passaggi concessi per ogni intervento difensivo) e passaggi vicino all'area (deep) delle due
+    squadre in quella partita, da Understat."""
+    out = {}
+    for t in (u.get("teams") or {}).values():
+        tid = team_by_name(d, t.get("title"))
+        side = "home" if tid == str(e["home"]["id"]) else "away" if tid == str(e["away"]["id"]) else None
+        for x in (t.get("history") or []) if side else []:
+            ts = us_time(x.get("date"))
+            if ts is not None and abs(ts - e["start"]) <= 36 * 3600 and x.get("h_a") == side[0]:
+                pp = x.get("ppda") or {}
+                out[side] = {"ppda": round(pp.get("att", 0) / max(1, pp.get("def") or 1), 2), "deep": x.get("deep")}
+    return out
+
+
+async def us_matches_step(d, now):
+    """Tiri di ogni partita finita da Understat (xG, situazione, ultima azione prima del tiro) e pressing della partita:
+    servono alle letture. Una volta per partita, quando Understat l'ha già elaborata."""
+    u = load_json(us_file(season_year(d)), {}) or {}
+    dates = u.get("dates") or []
+    todo = sorted((e for e in d.get("played") or [] if e.get("status") == "finished" and e.get("hs") is not None
+                   and "us" not in (MATCHES.get(str(e["id"])) or {})), key=lambda e: -e["start"])
+    n = 0
+    for e in todo:
+        if n >= (3 if in_window(d, now) else 12):
+            break
+        uid = us_match_id(d, e, dates)
+        if not uid:
+            continue
+        headers = {"X-Requested-With": "XMLHttpRequest", "Referer": f"https://understat.com/match/{uid}"}
+        async with HTTP["web"].get(US_MATCH.format(id=uid), headers=headers, timeout=aiohttp.ClientTimeout(total=30)) as r:
+            if r.status != 200:
+                raise RuntimeError(f"Understat (partita) HTTP {r.status}")
+            j = json.loads(await r.text())
+        x = match_entry(e)
+        x.update(us=letture.parse_understat(j), usId=uid, ppda=us_ppda(d, u, e))
+        n += 1
+    if n:
+        VERSION["matches"] += 1
+        save_json(MATCH_FILE, MATCHES)
+        log(f"Tiri di Understat scaricati per {n} partite")
+
+
 async def opta_step(d, now):
     """Statistiche Opta della stagione da Opta Analyst (il sito di Opta): xG, xA, chance create, contrasti, intercetti,
     palloni recuperati, duelli, conduzioni progressive, gol evitati dai portieri. Ogni 6 ore."""
@@ -1629,6 +1696,12 @@ async def refresher():
             except Exception as e:
                 STATUS["err_statistiche"] = errtxt(e)[:200]
                 log(f"Errore statistiche (Understat): {errtxt(e)}")
+            try:
+                await us_matches_step(d, now)
+                STATUS.pop("err_letture", None)
+            except Exception as e:
+                STATUS["err_letture"] = errtxt(e)[:200]
+                log(f"Errore tiri delle partite (Understat): {errtxt(e)}")
             if stats_signature(d) != sig:
                 try:
                     rebuild_stats(d)
@@ -1767,6 +1840,86 @@ async def cloud_main():
     return 0 if await asyncio.to_thread(cloud_state_push) else 1
 
 
+# ---------- letture delle partite giocate ----------
+
+READS = {"key": None}
+# nomi brevi di ESPN che nel racconto suonano male
+PRETTY = {"Man City": "Manchester City", "Man United": "Manchester United", "Spurs": "Tottenham", "C Palace": "Crystal Palace",
+          "Nottm Forest": "Nottingham Forest", "Wolves": "Wolverhampton"}
+
+
+def team_names(d):
+    return {str(r["team"]["id"]): PRETTY.get(r["team"]["name"], r["team"]["name"]) for r in d["standings"]["total"]}
+
+
+def readings():
+    """Letture di tutte le partite giocate (come sono nati i gol, come hanno giocato, perché il pronostico è andato
+    così), profili di stagione delle squadre (come segnano e come subiscono) e riepilogo di ogni giornata.
+    Si ricalcola solo quando cambiano partite, cronache, tiri o storico."""
+    d = STATE["data"] or {}
+    played = [e for e in d.get("played") or [] if e.get("hs") is not None]
+    key = (len(played), VERSION["matches"], sum(1 for it in HISTORY.get("matches", {}).values() if it.get("result")))
+    if READS.get("key") == key:
+        return READS
+    names = team_names(d) if d.get("standings") else {}
+    base = []
+    for e in played:
+        x = MATCHES.get(str(e["id"])) or {}
+        if not x.get("ev"):
+            continue
+        h, a = str(e["home"]["id"]), str(e["away"]["id"])
+        it = HISTORY.get("matches", {}).get(str(e["id"])) or {}
+        base.append((e, {"names": {"home": names.get(h, e["home"]["name"]), "away": names.get(a, e["away"]["name"])},
+                         "hs": e["hs"], "as": e["as"], "box": x.get("box"), "ev": x.get("ev"), "us": x.get("us"),
+                         "ppda": x.get("ppda"), "f": it.get("final") if it.get("result") else None, "ids": {"home": h, "away": a}}))
+    prof = letture.profiles([{"ids": m["ids"], "goals": letture.goals_of(m), "us": m["us"], "ev": m["ev"]} for _, m in base])
+    reads, by = {}, {}
+    for e, m in base:
+        try:
+            r = letture.read_match(m, prof)
+        except Exception as ex:
+            log(f"Lettura di {e['home']['name']} - {e['away']['name']} non riuscita: {errtxt(ex)}")
+            continue
+        r.update({"id": e["id"], "round": e.get("round"), "start": e["start"], "home": m["ids"]["home"], "away": m["ids"]["away"],
+                  "hs": e["hs"], "as": e["as"]})
+        reads[str(e["id"])] = r
+        by.setdefault(e.get("round"), []).append(r)
+    played_in = {}
+    for e in d.get("played") or []:
+        played_in[e.get("round")] = played_in.get(e.get("round"), 0) + 1
+    rounds = {}
+    for rnd, lst in by.items():
+        rs = letture.round_summary(lst, rnd)
+        if rs:
+            rs["of"] = played_in.get(rnd, len(lst)) + sum(1 for e in (d.get("live") or []) + (d.get("next") or []) if e.get("round") == rnd)
+            rounds[rnd] = rs
+    ranks = {k: letture.league_ranks(prof, k, "piazzati")[0] for k in ("xgf", "xga")}
+    texts = {t: dict(letture.profile_text(p), rk={"spf": ranks["xgf"].get(t), "spa": ranks["xga"].get(t)}) for t, p in prof.items()}
+    READS.update(key=key, reads=reads, prof=prof, texts=texts, rounds=rounds, names=names)
+    return READS
+
+
+def keys_of(R, e):
+    """Chiavi della partita dalle partite giocate (palle inattive, ripartenze, errori, gioco aereo, finali)."""
+    try:
+        return letture.keys_for(R["prof"], e["home"]["id"], e["away"]["id"], R["names"])
+    except Exception as ex:
+        log(f"Chiavi della partita non calcolate: {errtxt(ex)}")
+        return []
+
+
+def profiles_out(R):
+    """Profili per le pagine delle squadre: numeri per categoria e frasi."""
+    return {t: _r({"n": p["n"], "gf": p["gf"], "ga": p["ga"], "err": p["err"], "late": p["late"], "early": p["early"],
+                   "xgf": {k: v / max(1, p.get("nus") or 1) for k, v in p["xgf"].items()},
+                   "xga": {k: v / max(1, p.get("nus") or 1) for k, v in p["xga"].items()},
+                   "fb": p["fb"], **R["texts"].get(t, {})}, 3) for t, p in R["prof"].items()}
+
+
+def recent_rounds(R, k=2):
+    return sorted((r for r in R["rounds"] if r is not None), reverse=True)[:k]
+
+
 # ---------- fotografia per la versione tascabile ----------
 
 def _r(x, nd=4):
@@ -1807,6 +1960,7 @@ def snapshot():
             lst.append(_r({"id": p["id"], "name": p.get("name"), "pos": p.get("pos"), "min": p.get("minutesPlayed"),
                            "g": p.get("goals"), "a": p.get("assists"), "xg": p.get("expectedGoals"), "xa": p.get("expectedAssists"),
                            "mv": p.get("rating"), "fm": p.get("fantamedia")}, 2))
+    R = readings()
     fixtures = []
     for e in sorted(d.get("next") or [], key=lambda e: e["start"])[:20]:
         if e.get("status") != "notstarted" or str(e["home"]["id"]) not in A["T"] or str(e["away"]["id"]) not in A["T"]:
@@ -1820,8 +1974,11 @@ def snapshot():
                          "scorers": [{"name": p["name"], "team": str(t), "p": round(p["pGoal"], 2)}
                                      for t, key in ((e["home"]["id"], "home"), (e["away"]["id"], "away"))
                                      for p in sorted(P["players"][key], key=lambda p: -p["pGoal"])[:2]],
-                         "P": _r(P)})
+                         "keys": keys_of(R, e), "P": _r(P)})
     hist = sorted(HISTORY.get("matches", {}).values(), key=lambda it: -it["start"])[:30]
+    rr = recent_rounds(R)
+    hist_ids = {str(it["id"]) for it in hist}
+    reads = {k: _r(v, 3) for k, v in R["reads"].items() if v.get("round") in rr or k in hist_ids}
     # tutti i giocatori con le statistiche della stagione: scheda del giocatore e ricerca
     players = [_r({"id": p["id"], "n": p.get("name"), "t": str(p.get("teamId")), "pos": p.get("pos"), "ap": p.get("appearances"),
                    "st": p.get("matchesStarted"), "min": p.get("minutesPlayed"), "g": p.get("goals"), "a": p.get("assists"),
@@ -1841,8 +1998,8 @@ def snapshot():
                        "gf": r["gf"], "ga": r["ga"], "pts": r["pts"], "zone": r.get("zone")} for r in d["standings"]["total"]],
         "teams": teams, "fixtures": fixtures, "squads": squads, "evidenza": an["evidenza"],
         "metrics": pub["metrics"], "styleLabels": pub["styleLabels"], "N": len(A["T"]), "priorYear": A.get("priorYear"),
-        "played": [{"home": str(e["home"]["id"]), "away": str(e["away"]["id"]), "hs": e["hs"], "as": e["as"], "start": e["start"],
-                    "round": e.get("round")} for e in (d.get("played") or []) if e.get("hs") is not None],
+        "played": [{"id": e["id"], "home": str(e["home"]["id"]), "away": str(e["away"]["id"]), "hs": e["hs"], "as": e["as"],
+                    "start": e["start"], "round": e.get("round")} for e in (d.get("played") or []) if e.get("hs") is not None],
         "live": [{"home": str(e["home"]["id"]), "away": str(e["away"]["id"]), "hs": e.get("hs"), "as": e.get("as"),
                   "clock": e.get("clock") or e.get("statusText")} for e in d.get("live") or []],
         "results": [{"home": str(e["home"]["id"]), "away": str(e["away"]["id"]), "hs": e["hs"], "as": e["as"],
@@ -1854,6 +2011,8 @@ def snapshot():
                                # com'è andata: il pronostico al calcio d'inizio e le statistiche vere
                                "f": it.get("final") if it.get("result") else None, "real": it.get("real")} for it in hist]},
         "players": players, "xpts": xpts_table(d),
+        # letture delle partite: come sono nati i gol, come hanno giocato, perché il pronostico è andato così
+        "reads": reads, "rounds": {str(k): R["rounds"][k] for k in rr}, "profiles": profiles_out(R),
         "league": {"yellowGame": _r(A["L"].get("yellowGame"), 2), "key": LEGA_KEY, "name": LEGA["name"], "dir": LEGA["dir"],
                    "fantacalcio": LEGA["fantacalcio"]},
         "leagues": [{"key": k, "name": v["name"], "dir": v["dir"]} for k, v in LEGHE.items()],
@@ -1891,7 +2050,11 @@ async def h_data(_):
     extras = {eid: {"confirmed": bool((x.get("lineups") or {}).get("confirmed")), "lineups": bool(x.get("lineups")),
                     "referee": (x.get("referee") or {}).get("name")}
               for eid, x in MATCHES.items() if not x.get("final")}
+    R = readings()
+    rr = recent_rounds(R, 3)
     return web.json_response({**STATE["data"], "analysis": an["pub"], "fixtures": an["fixtures"], "extras": extras,
+                              "reads": {k: v for k, v in R["reads"].items() if v.get("round") in rr},
+                              "rounds": {str(k): R["rounds"][k] for k in rr}, "profiles": profiles_out(R),
                               "evidenza": an["evidenza"],
                               "league": {"key": LEGA_KEY, "name": LEGA["name"], "fantacalcio": LEGA["fantacalcio"]},
                               "leagues": [{"key": k, "name": v["name"], "port": v["port"]} for k, v in LEGHE.items()],
@@ -1914,7 +2077,9 @@ async def h_match(req):
     A = analysis()["A"]
     if not e or str(e["home"]["id"]) not in A["T"] or str(e["away"]["id"]) not in A["T"]:
         raise web.HTTPNotFound()
-    return web.json_response(model.predict(A, e["home"]["id"], e["away"]["id"], e, MATCHES.get(str(e["id"]))))
+    P = model.predict(A, e["home"]["id"], e["away"]["id"], e, MATCHES.get(str(e["id"])))
+    P["keys"] = keys_of(readings(), e)
+    return web.json_response(P)
 
 
 # ---------- chat: domande a Claude sui dati dell'app (solo sul Mac) ----------
@@ -1944,7 +2109,9 @@ def chat_files():
     """Scrive (quando cambiano i dati) i file che Claude legge per rispondere: indice, classifica, partite,
     pronostici completi della prossima giornata, squadre, giocatori, in evidenza, fanta, storico."""
     an = analysis()
-    if CHAT["key"] == an["key"] and (CHAT_DIR / "indice.json").exists():
+    R = readings()
+    ck = (an["key"], R["key"])
+    if CHAT["key"] == ck and (CHAT_DIR / "indice.json").exists():
         return
     d, A, pub = STATE["data"], an["A"], an["pub"]
     name = lambda tid: (A["T"].get(str(tid)) or {}).get("team", {}).get("name") or str(tid)
@@ -2005,9 +2172,19 @@ def chat_files():
             "le squadre del fantacalcio dell'utente con i punti attesi dei giocatori")
     put("storico.json", {"riepilogo": model.history_summary(HISTORY), "partite": list(HISTORY.get("matches", {}).values())[-40:]},
         "storico dei pronostici dell'app e quanto ci ha azzeccato")
+    rr = recent_rounds(R, 3)
+    put("letture.json", {"giornate": {str(k): R["rounds"][k] for k in rr},
+                         "partite": [dict(r, partita=f"{R['names'].get(r['home'], r['home'])} {r['hs']}-{r['as']} {R['names'].get(r['away'], r['away'])}")
+                                     for r in sorted(R["reads"].values(), key=lambda r: -r["start"]) if r.get("round") in rr]},
+        "letture delle ultime giornate: per ogni partita come sono nati i gol (why, lab = perché: errore, palla inattiva, "
+        "transizione, seconda palla, difesa superata, prodezza), come hanno giocato le squadre (game), perché il pronostico "
+        "è andato così (verdict) e i difetti che si ripetono (lessons); fonti: cronaca Opta di ESPN e tiri di Understat")
+    put("profili-squadre.json", {R["names"].get(t, t): v for t, v in profiles_out(R).items()},
+        "come segna e come subisce ogni squadra in stagione: gol per tipo (gf fatti, ga subiti: azione, corner, punizione, "
+        "contropiede, rigore, autogol), errori individuali, gol nel finale, xG a partita per situazione (xgf/xga)")
     (CHAT_DIR / "indice.json").write_text(json.dumps({"aggiornato": time.strftime("%d/%m/%Y %H:%M"), "file": files},
                                                       ensure_ascii=False, indent=1))
-    CHAT["key"] = an["key"]
+    CHAT["key"] = ck
 
 
 def claude_bin():
@@ -2073,6 +2250,8 @@ async def h_predict(req):
 
 async def h_history(_):
     items = sorted(HISTORY.get("matches", {}).values(), key=lambda it: -it["start"])
+    R = readings()
+    items = [dict(it, read=R["reads"].get(str(it["id"]))) for it in items]
     return web.json_response({"items": items, "summary": model.history_summary(HISTORY)})
 
 
