@@ -229,6 +229,8 @@ def parse_cambi_en(page):
         head = [h.lower() for h in grid[0]] if grid else []
         col = lambda key: next((i for i, h in enumerate(head) if key in h), None)
         it, io, ih, il, ii, isn = (col(k) for k in ("team", "outgoing", "manner", "vacancy", "incoming", "appointment"))
+        ii = ii if ii is not None else col("replaced")   # in alcune pagine (Serie A) la colonna è «Replaced by»
+        ip = col("position")
         if None in (it, io, ii):
             continue
         cell = lambda g, i: g[i] if i is not None and i < len(g) else ""
@@ -238,7 +240,8 @@ def parse_cambi_en(page):
                 continue
             how = cell(g, ih).lower()
             out.append({"team": cell(g, it), "out": clean(cell(g, io)), "how": next((v for k, v in COME.items() if k in how), None),
-                        "left": _data_en(cell(g, il)), "in": clean(cell(g, ii)) or None, "since": _data_en(cell(g, isn))})
+                        "left": _data_en(cell(g, il)), "in": clean(cell(g, ii)) or None, "since": _data_en(cell(g, isn)),
+                        "pre": "pre-season" in cell(g, ip).lower()})   # cambio d'estate, prima del campionato
         return out
     return []
 

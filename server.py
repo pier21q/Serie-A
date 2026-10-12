@@ -701,6 +701,38 @@ def next_kickoff(d, now):
 
 # ---------- analisi (model.py) ----------
 
+def coach_changes(d):
+    """Cambi di allenatore durante la stagione in corso (non quelli d'estate), da Wikipedia in inglese:
+    {id squadra: {"at": data del cambio, "pre": cambiato anche d'estate}}. Dopo un cambio le partite di prima pesano meno nella forza della squadra."""
+    starts = [e["start"] for e in d.get("played") or [] if e.get("start")]
+    if not starts:
+        return {}
+    first, out, pre = min(starts), {}, set()
+    for c in EXTRA.get("wikiEn") or []:
+        t = c.get("since") or c.get("left")
+        tid = team_by_name(d, c.get("team"))
+        if not tid or not t:
+            continue
+        if c.get("pre") or t <= first + 86400:
+            pre.add(tid)   # cambiato anche d'estate: la stagione scorsa pesava già meno
+        else:
+            out[tid] = max(out.get(tid, 0), t)
+    return {tid: {"at": t, "pre": tid in pre} for tid, t in out.items()}
+
+
+def us_history(d):
+    """Partite della stagione di ogni squadra da Understat (data, gol, xG senza rigori), per pesarle una a una."""
+    u = load_json(us_file(season_year(d)), {}) or {}
+    out = {}
+    for t in (u.get("teams") or {}).values():
+        tid = team_by_name(d, t.get("title"))
+        rows = [{"t": us_time(h.get("date")), "gf": model.num(h.get("scored")) or 0, "ga": model.num(h.get("missed")) or 0,
+                 "npxg": model.num(h.get("npxG")) or 0, "npxga": model.num(h.get("npxGA")) or 0} for h in t.get("history") or []]
+        if tid:
+            out[tid] = [r for r in rows if r["t"]]
+    return out
+
+
 ANALYSIS = {"key": None}
 
 
@@ -710,7 +742,7 @@ def analysis():
            len(PRIOR.get("results") or []), len(FANTA.get("teams", [])),
            sum(1 for v in (PRIOR.get("refCards") or {}).values() if "roles" in v) // 20)
     if ANALYSIS["key"] != key:
-        A = model.build(d, PRIOR, MATCHES, coaches=COACHES, role_rows=role_rows(d))
+        A = model.build(d, PRIOR, MATCHES, coaches=COACHES, role_rows=role_rows(d), changes=coach_changes(d), us_hist=us_history(d))
         nxt = sorted((e for e in d.get("next") or [] if e.get("status") == "notstarted"
                       and str(e["home"]["id"]) in A["T"] and str(e["away"]["id"]) in A["T"]), key=lambda e: e["start"])
         # giocatori in evidenza: le partite della prossima giornata (o dei 4 giorni dopo la prima, se manca la giornata)

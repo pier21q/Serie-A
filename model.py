@@ -16,7 +16,14 @@ import time
 import unicodedata
 
 K_PRIOR = 12           # peso della stagione scorsa sulle squadre, in partite equivalenti (un buon inizio conta, ma poco)
-K_PRIOR_NEW = 6        # con un allenatore nuovo la stagione scorsa pesa meno
+K_PRIOR_NEW = 6        # con un allenatore nuovo la stagione scorsa pesa meno (confermato dalla prova del 13/10/2026)
+# Prova all'indietro del 13/10/2026 su 1520 partite (Serie A e Premier 2024/25 e 2025/26, ogni partita prevista solo
+# con le precedenti): la forza misurata con gli xG senza rigori (80%) più i gol veri (20%) prevede meglio della vecchia
+# formula (55% gol, 45% xG; in difesa tiri in porta e palloni concessi vicino all'area). Correggere per espulsioni,
+# punteggio o calci piazzati e per i giocatori in campo non aiuta, o aiuta meno del margine d'errore.
+W_GOALS = 0.20
+MID_W = 0.25           # cambio di allenatore durante la stagione: le partite prima del cambio (e la stagione scorsa) pesano così
+VENUE_W = 0.0          # quota del rendimento in casa/fuori di quest'anno: era 0,20, la prova dice che peggiora (troppo rumoroso)
 SOFT_CAP = .10         # tetto complessivo di forma, accoppiamenti tattici, stili e ritmo sui gol attesi
 GOAL_SHARE_CAP, ASSIST_SHARE_CAP = .40, .30   # quota massima dei gol e degli assist dei titolari per un giocatore
 # taratura degli attaccanti titolari sulle partite reali (confronto del 28/09/2026 su 50 partite)
@@ -32,7 +39,8 @@ PLAYER_PRIOR_MIN = 450  # peso del dato di base nelle statistiche per 90' dei gi
 RARE_PRIOR_MIN = 1200   # per gol, assist, xG e xA (eventi rari): circa 13 partite
 RARE_KEYS = {"goals", "assists", "expectedGoals", "expectedAssists"}
 RHO = -0.08            # correzione Dixon-Coles
-CALIB = 0.80           # le forze di attacco e difesa vengono avvicinate un po' alla media (evita pronostici troppo netti)
+CALIB = 1.0            # avvicinamento alla media delle forze di attacco e difesa: era 0,80, ma i pronostici risultavano troppo
+                       # prudenti (al 74% previsto l'esito usciva l'86% delle volte); con 1,0 sono tarati
 FORM_EFF = 0.05        # effetto massimo della forma recente sui gol attesi
 PAIR_ADV, PAIR_NEUT, PAIR_CAP = .03, -.02, .08   # accoppiamenti tattici: effetto per vantaggio, per neutralizzazione, tetto
 MAXG = 10
@@ -223,11 +231,16 @@ def league_block(standings, teams_m):
     }
 
 
-def rating(m, L):
+def rating(m, L, npx=None):
+    """Forza in attacco e in difesa rispetto alla media (1 = media). npx: (xG senza rigori fatti, concessi) a partita;
+    senza (manca Understat) si usa la formula di prima, con tiri in porta e palloni concessi vicino all'area."""
     mu = L["mu"]
     gpm = m.get("gpm") if m.get("gpm") is not None else mu
     xg = m.get("xg") if m.get("xg") is not None else gpm
     gapm = m.get("gapm") if m.get("gapm") is not None else mu
+    if npx and npx[0] is not None and npx[1] is not None and L.get("npxg"):
+        return {"att": W_GOALS * gpm / mu + (1 - W_GOALS) * npx[0] / L["npxg"],
+                "de": W_GOALS * gapm / mu + (1 - W_GOALS) * npx[1] / L["npxg"], "xg": xg}
     sotA = m.get("sotA") if m.get("sotA") is not None else L["sotA"]
     bcA = m.get("bcA") if m.get("bcA") is not None else L["bcA"]
     att = (.55 * gpm + .45 * xg) / mu
@@ -663,7 +676,15 @@ def venue_tables(results):
     return {k: list(v.values()) for k, v in tab.items()}
 
 
-def build(data, prior=None, matches=None, now=None, coaches=None, role_rows=None):
+def npx_of(s, n):
+    """xG senza rigori fatti e concessi a partita, dalle statistiche di stagione (Understat)."""
+    a, b = num(s.get("npxG")), num(s.get("npxGA"))
+    return (a / n, b / n) if a is not None and b is not None and n else None
+
+
+def build(data, prior=None, matches=None, now=None, coaches=None, role_rows=None, changes=None, us_hist=None):
+    """changes: {squadra: {"at": data dell'ultimo cambio di allenatore in corsa, "pre": cambiato anche d'estate}}; us_hist: {squadra: partite
+    di Understat con data, gol e xG senza rigori} (per pesare meno le partite prima del cambio)."""
     now = now or time.time()
     matches = matches or {}
     st = data.get("standings") or {}
@@ -698,8 +719,12 @@ def build(data, prior=None, matches=None, now=None, coaches=None, role_rows=None
         pr_league = league_block(pst, pm_)
         pr_league["yellow"] = mean([dv(g(s, "yellowCards"), int(g(s, "matches") or 38)) for s in prior["teams"].values()])
         pr_league["mu"] = (pr_league["hgf"] + pr_league["hga"]) / (2 * pr_league["hp"]) if pr_league["hp"] else 1.3
+        pn = [(num(s.get("npxG")), int(g(s, "matches") or 0)) for s in prior["teams"].values()]
+        pr_league["npxg"] = (sum(a for a, k in pn if a is not None) / sum(k for a, k in pn if a is not None)
+                             if any(a is not None and k for a, k in pn) else None)
         for tid, m in pm_.items():
-            pr_rating[tid] = rating(m, pr_league)
+            s_ = prior["teams"][tid]
+            pr_rating[tid] = rating(m, pr_league, npx_of(s_, int(g(s_, "matches") or 0)))
         _, ppct, _ = rank_all(pm_)
         for tid in pm_:
             prev_dims[tid] = style_dims(ppct[tid])
@@ -721,6 +746,11 @@ def build(data, prior=None, matches=None, now=None, coaches=None, role_rows=None
     for k in ("sotA", "bcA", "shA", "fk", "foul", "xg", "yellow"):
         c, p = cur.get(k), (pr_league or {}).get(k)
         L[k] = c if p is None else p if c is None else (c * cur["hp"] + p * K_LEAGUE) / (cur["hp"] + K_LEAGUE)
+    cn = [(num(x["s"].get("npxG")), x["n"]) for x in T.values()]
+    cur_np = sum(a for a, k in cn if a is not None) / sum(k for a, k in cn if a is not None) if any(a is not None for a, k in cn) else None
+    pr_np = (pr_league or {}).get("npxg")
+    hp = cur["hp"] or 0
+    L["npxg"] = (cur_np * hp + pr_np * K_LEAGUE) / (hp + K_LEAGUE) if cur_np and pr_np else cur_np or pr_np
     L["sotA"] = L["sotA"] or 4.5
     L["bcA"] = L["bcA"] or 2.3
     L["yellowGame"] = 2 * (L["yellow"] or 2.1)
@@ -745,10 +775,25 @@ def build(data, prior=None, matches=None, now=None, coaches=None, role_rows=None
         # panchina vacante: chi è andato via, quando e come (finché Wikipedia non indica il successore)
         t["vacant"] = None if t["coach"] else (((coaches or {}).get(tid) or {}).get("wiki") or {}).get("left")
         k_prior = K_PRIOR_NEW if t["coach"] and t["coach"]["same"] is False else K_PRIOR
-        r = rating(t["m"], {"mu": L["mu"], "sotA": cur["sotA"] or L["sotA"], "bcA": cur["bcA"] or L["bcA"]})
+        Lr = {"mu": L["mu"], "sotA": cur["sotA"] or L["sotA"], "bcA": cur["bcA"] or L["bcA"], "npxg": L.get("npxg")}
+        r = rating(t["m"], Lr, npx_of(t["s"], t["n"]))
+        n_eff = t["n"]
+        # allenatore cambiato durante la stagione: le partite di prima contano un quarto, e la stagione scorsa ancora meno
+        cc, hist = (changes or {}).get(tid) or {}, (us_hist or {}).get(tid) or []
+        ch = cc.get("at")
+        t["midChange"] = None
+        if ch and any(h["t"] < ch for h in hist) and any(h["t"] >= ch for h in hist):
+            k_prior = K_PRIOR_NEW if cc.get("pre") else K_PRIOR   # come nella prova: conta il cambio d'estate, non quello in corsa
+            ws = [(1.0 if h["t"] >= ch else MID_W, h) for h in hist]
+            sw = sum(w_ for w_, _ in ws)
+            mm = dict(t["m"], gpm=sum(w_ * h["gf"] for w_, h in ws) / sw, gapm=sum(w_ * h["ga"] for w_, h in ws) / sw)
+            r = rating(mm, Lr, (sum(w_ * h["npxg"] for w_, h in ws) / sw, sum(w_ * h["npxga"] for w_, h in ws) / sw))
+            n_eff = sw
+            k_prior *= MID_W
+            t["midChange"] = {"at": ch, "before": sum(1 for h in hist if h["t"] < ch), "after": sum(1 for h in hist if h["t"] >= ch)}
         base = pr_rating.get(tid) or pr_rating.get("_promoted") or dict(NO_PRIOR, xg=L["mu"])
         t["prior"] = "stagione scorsa" if tid in pr_rating else "neopromossa (media delle ultime 5)" if "_promoted" in pr_rating else None
-        w = t["n"] / (t["n"] + k_prior)
+        w = n_eff / (n_eff + k_prior)
         t["att"] = w * r["att"] + (1 - w) * base["att"]
         t["de"] = w * r["de"] + (1 - w) * base["de"]
         t["xgBase"] = w * r["xg"] + (1 - w) * base.get("xg", r["xg"])
@@ -828,7 +873,7 @@ def public_analysis(A):
                       "form": t["ctx"]["form"][:10], "style": t["style"], "rel": rel,
                       "formations": [{"f": f, "n": c} for f, c in fm],
                       "rating": {"att": round(t["att"], 3), "de": round(t["de"], 3), "prior": t["prior"],
-                                 "priorWeight": round(t["priorWeight"], 2)},
+                                 "priorWeight": round(t["priorWeight"], 2), "midChange": t.get("midChange")},
                       "dims": t["dims"], "dimsPrev": t["dimsPrev"], "arch": t["arch"], "changes": t["changes"],
                       "summary": t["summary"], "coach": t["coach"], "coachRoles": t.get("coachRoles"),
                       "vacant": t.get("vacant")}
@@ -1535,12 +1580,12 @@ def predict(A, hid, aid, ev=None, extra=None):
 
     attH, deH, attA, deA = (x ** CALIB for x in (H["att"], H["de"], Aw["att"], Aw["de"]))
     hr, ar = H["ctx"]["home"], Aw["ctx"]["away"]
-    if hr and hr.get("p"):
-        attH = .8 * attH + .2 * shr(hr["gf"] / hr["p"] / L["HA"], hr["p"], 4)
-        deH = .8 * deH + .2 * shr(hr["ga"] / hr["p"] / L["AA"], hr["p"], 4)
-    if ar and ar.get("p"):
-        attA = .8 * attA + .2 * shr(ar["gf"] / ar["p"] / L["AA"], ar["p"], 4)
-        deA = .8 * deA + .2 * shr(ar["ga"] / ar["p"] / L["HA"], ar["p"], 4)
+    if VENUE_W and hr and hr.get("p"):
+        attH = (1 - VENUE_W) * attH + VENUE_W * shr(hr["gf"] / hr["p"] / L["HA"], hr["p"], 4)
+        deH = (1 - VENUE_W) * deH + VENUE_W * shr(hr["ga"] / hr["p"] / L["AA"], hr["p"], 4)
+    if VENUE_W and ar and ar.get("p"):
+        attA = (1 - VENUE_W) * attA + VENUE_W * shr(ar["gf"] / ar["p"] / L["AA"], ar["p"], 4)
+        deA = (1 - VENUE_W) * deA + VENUE_W * shr(ar["ga"] / ar["p"] / L["HA"], ar["p"], 4)
     lh, la = L["HA"] * attH * deA, L["AA"] * attA * deH
     base_h, base_a = lh, la
 

@@ -721,7 +721,7 @@ function vPartita(id) {
     ${refCard(P)}${lineupCard(P, 'home', h)}${lineupCard(P, 'away', a)}
     ${absentCard(P, h, a)}${scorersCard(P, h, a)}${yellowCard(P, h, a)}${heatCard(P, h, a)}
     ${radarCard(h, a)}${mirrorCard(h, a)}${swCard(h, a)}
-    <p class="small muted">Come funziona: per ogni squadra si stima la forza offensiva (gol segnati e xG) e difensiva (gol subiti, tiri in porta e palloni concessi vicino all'area) rispetto alla media della ${LGN}, partendo dalla stagione scorsa e dando sempre più peso a quella in corso. Poi si corregge per casa e trasferta, forma, accoppiamenti tra forze e debolezze, scontro di stili e assenze. I gol attesi alimentano un modello di Poisson con correzione Dixon-Coles.</p>
+    <p class="small muted">Come funziona: per ogni squadra si stima la forza in attacco e in difesa rispetto alla media della ${LGN}: per l'80% dagli xG senza rigori creati e concessi, per il 20% dai gol veri, partendo dalla stagione scorsa e dando sempre più peso a quella in corso. Se l'allenatore è cambiato d'estate la stagione scorsa pesa meno; se è cambiato in corsa, le partite di prima contano un quarto. È la combinazione che ha previsto meglio, provata all'indietro su 1520 partite di Serie A e Premier. Poi si corregge per forma, accoppiamenti tra forze e debolezze, scontro di stili e assenze. I gol attesi alimentano un modello di Poisson con correzione Dixon-Coles.</p>
   </div>`;
 }
 
@@ -850,7 +850,7 @@ function vSquadra(id) {
     <div class="card"><h3>Profilo statistico</h3>
       <p class="small muted">La barra indica la posizione tra le ${D.N} squadre: più è lunga, meglio è. Le voci di "Stile" non sono né buone né cattive.</p>
       ${cats.map(c => `<h4>${esc(c)}</h4>${D.metrics.filter(M => M.c === c).map(M => pbar(f, M)).join('')}`).join('')}
-      <p class="small muted">Nel pronostico la forza di ${nm(id)} combina questa stagione (${f.n} partite)${rt.prior ? ` con la base ${rt.prior === 'stagione scorsa' ? 'della stagione ' + esc(D.priorYear || 'scorsa') : 'da ' + esc(rt.prior)}, che pesa il ${pc(rt.priorWeight)}` : ''}. Attacco ${fx(rt.att, 2)}, difesa ${fx(rt.de, 2)} (1 = media della ${LGN}; in difesa più basso è meglio).</p></div>
+      <p class="small muted">Nel pronostico la forza di ${nm(id)} combina questa stagione (${f.n} partite)${rt.prior ? ` con la base ${rt.prior === 'stagione scorsa' ? 'della stagione ' + esc(D.priorYear || 'scorsa') : 'da ' + esc(rt.prior)}, che pesa il ${pc(rt.priorWeight)}` : ''}${rt.midChange ? `. Allenatore cambiato in corsa (${day(rt.midChange.at)}): le ${rt.midChange.before} partite di prima contano un quarto` : ''}. Attacco ${fx(rt.att, 2)}, difesa ${fx(rt.de, 2)} (1 = media della ${LGN}; in difesa più basso è meglio).</p></div>
     ${squadCard(id)}
     <div class="card"><h3>Ultime partite</h3><table><tbody>${played.map(e => `<tr><td class="l">${team(e.home, true)}</td><td class="num"><b>${e.hs}–${e.as}</b></td><td class="l">${team(e.away, true)}</td><td>${(D.reads || {})[String(e.id)] ? `<a class="plain" href="#r${e.id}" style="color:var(--accent);font-weight:600;font-size:13px">lettura ›</a>` : ''}</td></tr>`).join('') || '<tr><td class="l muted">—</td></tr>'}</tbody></table></div>
     ${nx.length ? `<div class="card"><h3>Prossime partite</h3>${nx.slice(0, 4).map(x => `<a class="rowlink" href="#p${x.id}"><span>${team(x.home, true)}</span><span class="muted">${when(x.start)}</span><span>${team(x.away, true)}</span></a>`).join('')}</div>` : ''}
