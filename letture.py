@@ -79,7 +79,9 @@ def same_name(a, b):
     """Stesso giocatore con nomi scritti in modo diverso (ESPN e Understat): stesso cognome, o parole in comune."""
     na, nb = _norm(a), _norm(b)
     common = set(na) & set(nb)
-    return bool(common) and (na[-1] == nb[-1] or len(common) >= 2 or min(len(na), len(nb)) == 1)
+    # «Paco Esteban» e «Francisco Esteban Sánchez»: il cognome dell'uno è tra le parole dell'altro
+    return bool(common) and (na[-1] == nb[-1] or len(common) >= 2 or min(len(na), len(nb)) == 1
+                             or (na[-1] in nb and len(na[-1]) >= 4) or (nb[-1] in na and len(nb[-1]) >= 4))
 
 
 def _detail(rest):
@@ -241,15 +243,34 @@ US_SIT = {"OpenPlay": "azione", "FromCorner": "corner", "SetPiece": "punizione",
           "Penalty": "rigore"}
 
 
+US_VERSION = 2   # 2: con le coordinate dei tiri (mappa dei tiri e zone da cui si tira e si subisce)
+
+
 def parse_understat(j):
     """Dati di una partita di Understat -> tiri compatti per squadra:
-    [minuto, giocatore, xG, esito, situazione, tipo di tiro, ultima azione, assist]."""
+    [minuto, giocatore, xG, esito, situazione, tipo di tiro, ultima azione, assist, X, Y]. X va da 0 a 1 verso la
+    porta attaccata (la linea dell'area è a 0,84), Y da 0 a 1 da una linea laterale all'altra."""
     out = {}
     for k, side in (("h", "home"), ("a", "away")):
         out[side] = [[int(float(x.get("minute") or 0)), x.get("player"), round(float(x.get("xG") or 0), 3), x.get("result"),
-                      x.get("situation"), x.get("shotType"), x.get("lastAction"), x.get("player_assisted")]
+                      x.get("situation"), x.get("shotType"), x.get("lastAction"), x.get("player_assisted"),
+                      round(float(x.get("X") or 0), 3), round(float(x.get("Y") or 0), 3)]
                      for x in (j.get("shots") or {}).get(k) or []]
     return out
+
+
+ZONES = [("piccola", "Area piccola"), ("centro", "Centro dell'area"), ("lati", "Lati dell'area"), ("fuori", "Fuori area")]
+
+
+def zone(x, y):
+    """Zona di un tiro dalle coordinate di Understat."""
+    if x is None or y is None:
+        return None
+    if x < .835:
+        return "fuori"
+    if x >= .945 and .36 <= y <= .64:
+        return "piccola"
+    return "centro" if .30 <= y <= .70 else "lati"
 
 
 # ---------- numeri e parole ----------
@@ -285,8 +306,10 @@ def shots_of(m):
     degli xG: Understat, oppure una stima dalla cronaca se Understat non ha ancora la partita."""
     us = m.get("us")
     if us and (us.get("home") or us.get("away")):
-        return {s: [(x[0], x[2], x[1], x[3], x[4], x[6]) for x in us.get(s) or [] if x[3] != "OwnGoal"] for s in ("home", "away")}, "understat"
+        return {s: [(x[0], x[2], x[1], x[3], x[4], x[6], x[8] if len(x) > 9 else None, x[9] if len(x) > 9 else None)
+                    for x in us.get(s) or [] if x[3] != "OwnGoal"] for s in ("home", "away")}, "understat"
     out = {"home": [], "away": []}
+    res = {"saved": "SavedShot", "missed": "MissedShots", "blocked": "BlockedShot"}
     for e in (m.get("ev") or {}).get("ev") or []:
         if e["k"] in ("goal", "shot", "wood") or e["k"] == "pens":
             if e["k"] == "pens" or e.get("sit") == "rigore":
@@ -294,8 +317,9 @@ def shots_of(m):
             else:
                 x = EST_XG.get(e.get("z"), .08) * (.6 if e.get("b") == "colpo di testa" and e.get("z") != "vicino" else 1)
                 x *= 1.3 if e.get("sit") == "contropiede" else 1
-            out[e["s"]].append((e.get("t") or 0, round(x, 3), e.get("w"), "Goal" if e["k"] == "goal" else "Shot",
-                                "Penalty" if x == .76 else "OpenPlay", None))
+            r = ("Goal" if e["k"] == "goal" else "ShotOnPost" if e["k"] == "wood" else
+                 ("SavedShot" if e.get("x") == "parato" else "MissedShots") if e["k"] == "pens" else res.get(e.get("r"), "MissedShots"))
+            out[e["s"]].append((e.get("t") or 0, round(x, 3), e.get("w"), r, "Penalty" if x == .76 else "OpenPlay", None, None, None))
     return out, "cronaca"
 
 
@@ -693,15 +717,116 @@ def read_match(m, prof=None):
                 if ne >= 3 and (other(g["s"]), "err") not in seen:
                     seen.add((other(g["s"]), "err"))
                     lessons.append(f"{cap(art(nm(other(g['s']))))} è già a {ne} gol subiti per errori individuali in stagione.")
-    out = {"v": 1, "title": headline(m, goals, xg, reds, nm), "xg": [round(xg["home"], 2), round(xg["away"], 2)], "src": src,
+    # il momento migliore di ogni squadra: i 15 minuti con più xG, se sono stati davvero suoi
+    for s in ("home", "away"):
+        best = max(((a, sum(x[1] for x in shots[s] if a <= x[0] < a + 15), sum(1 for x in shots[s] if a <= x[0] < a + 15),
+                     sum(x[1] for x in shots[other(s)] if a <= x[0] < a + 15)) for a in range(0, 81, 5)), key=lambda w: w[1])
+        if best[1] >= .7 and best[1] >= 2.5 * best[3] and best[1] >= .35 * max(xg[s], .01):
+            game.append(f"Il momento migliore {art(nm(s), 'di')}: tra il {best[0]}' e il {best[0] + 15}' "
+                        f"({fx(best[1])} xG in {plural(best[2], 'tiro', 'tiri')}, contro {fx(best[3])} {art(nm(other(s)), 'di')}).")
+    lu_text, not_started = lineup_reading(m, nm)
+    out = {"v": 2, "title": headline(m, goals, xg, reds, nm), "xg": [round(xg["home"], 2), round(xg["away"], 2)], "src": src,
            "xgp": [round(v, 3) for v in xgp], "shots": [nsh["home"], nsh["away"]],
+           # tiri per l'andamento e la mappa: [minuto, 0 casa / 1 ospiti, xG, esito, X, Y, giocatore]
+           "sh": sorted([[x[0], i, round(x[1], 2), RES_CODE.get(x[3], "M"), x[6], x[7], short(x[2])]
+                         for i, s in enumerate(("home", "away")) for x in shots[s]], key=lambda r: (r[0], r[1])),
+           "mk": {"g": [[g["t"] or 0, 0 if g["s"] == "home" else 1, g["sc"], short(g["w"]), g["cat"] == "autogol"] for g in goals],
+                  "r": [[r.get("t") or 0, 0 if r["s"] == "home" else 1, short(r.get("w"))] for r in reds]},
+           "lu": lu_text, "ref": ref_reading(m, ev, nm),
            "goals": [{k: g.get(k) for k in ("m", "s", "sc", "w", "a", "xg", "cat", "lab", "why", "how", "tags")} for g in goals],
            "game": game, "lessons": lessons}
     if has_f and hs is not None:
         f = m["f"]
-        out["verdict"] = verdict(m, xg, xgp, goals, reds, big, nm, shots)
+        out["verdict"] = verdict(m, xg, xgp, goals, reds, big, nm, shots, not_started)
         out["pred"] = {"p1": f.get("p1"), "px": f.get("px"), "p2": f.get("p2"), "label": (f.get("pick") or {}).get("label"),
                        "lh": f.get("lh"), "la": f.get("la")}
+    return out
+
+
+RES_CODE = {"Goal": "G", "SavedShot": "S", "MissedShots": "M", "BlockedShot": "B", "ShotOnPost": "P"}
+
+
+def lineup_reading(m, nm):
+    """Moduli, assenti e, se c'è il pronostico, i titolari previsti che non sono partiti dall'inizio.
+    -> (frasi, {lato: [(nome, prob. di segnare)]})."""
+    lu, f, box = m.get("lu") or {}, m.get("f") or {}, m.get("box") or {}
+    out, miss_txt, not_started = [], [], {}
+    forms = [(s, (lu.get(s) or {}).get("formation")) for s in ("home", "away")]
+    if any(fm for _, fm in forms):
+        out.append("Moduli: " + ", ".join(f"{nm(s)} {fm}" for s, fm in forms if fm) + ".")
+    for s in ("home", "away"):
+        # gli assenti che contano: chi ha giocato di più in stagione (min, lo aggiunge server.py), al massimo 4
+        ms = sorted((x for x in (lu.get(s) or {}).get("missing") or [] if x.get("type") == "missing" and x.get("name")),
+                    key=lambda x: -(x.get("min") or 0))
+        ms = [x for x in ms if (x.get("min") or 0) >= 90][:4]
+        if ms:
+            why = lambda x: "squalificato" if x.get("reason") == 3 or "squalif" in (x.get("desc") or "").lower() else "infortunato"
+            miss_txt.append(f"{nm(s)} senza " + ", ".join(f"{short(x['name'])} ({why(x)}, {x['min']}' in stagione)" for x in ms))
+    if miss_txt:
+        out.append("Assenze pesanti: " + "; ".join(miss_txt) + ".")
+    pl = f.get("pl") or {}
+    # titolari veri: la formazione ufficiale di ESPN salvata dopo la partita
+    starters = {s: [p.get("name") for p in (lu.get(s) or {}).get("starters") or []] if lu.get("confirmed") else [] for s in ("home", "away")}
+    if pl and starters["home"] and starters["away"]:
+        src = f.get("lineups") or ""
+        word = "ufficiale" if src == "ufficiale" else "probabile" if src.startswith("probabile") else "stimata"
+        for s in ("home", "away"):
+            ns = [(p[1], p[7] or 0) for p in pl.get(s) or [] if p[1] and not any(same_name(p[1], n) for n in starters[s])]
+            if ns:
+                not_started[s] = ns
+        if not_started:
+            out.append(f"Il pronostico usava la formazione {word}. Titolari previsti che non sono partiti: "
+                       + "; ".join(f"{nm(s)} " + ", ".join(short(n) for n, _ in v) for s, v in not_started.items()) + ".")
+        else:
+            out.append(f"Il pronostico usava la formazione {word}: i titolari previsti sono partiti tutti dall'inizio.")
+    return out, not_started
+
+
+VAR_IT = [(r"^penalty\b", "rigore assegnato"), (r"^no penalty", "rigore tolto"), (r"^no goal|goal cancelled|goal disallowed", "gol annullato"),
+          (r"^goal\b", "gol convalidato"), (r"card upgraded|^red card", "cartellino trasformato in rosso"),
+          (r"card downgraded|red card cancelled", "rosso tolto"), (r"decision cancelled", "decisione dell'arbitro annullata")]
+
+
+def ref_reading(m, ev, nm):
+    """Arbitro: severità abituale, cartellini contro quelli attesi, falli, rigori e decisioni del VAR."""
+    box, R, f = m.get("box") or {}, m.get("ref") or {}, m.get("f") or {}
+    out = []
+    b = {s: box.get(s) or {} for s in ("home", "away")}
+    y = {s: int(b[s].get("yellowCards") or 0) for s in b}
+    fo = {s: int(b[s].get("fouls") or 0) for s in b}
+    if R.get("name"):
+        s_ = f"Arbitro: {R['name']}"
+        if R.get("games") and R.get("base") and R.get("yellow") is not None:
+            ypg = R["yellow"] / R["games"]
+            d = ypg / R["base"] - 1
+            tone = "di solito severo" if d >= .15 else "di solito permissivo" if d <= -.15 else "nella media"
+            s_ += f", {tone}: {fx(ypg, 1)} gialli a partita in {R['games']} partite, contro {fx(R['base'], 1)} di media"
+        out.append(s_ + ".")
+    if b["home"] or b["away"]:
+        s_ = f"Cartellini: {plural(y['home'] + y['away'], 'giallo', 'gialli')} ({nm('home')} {y['home']}, {nm('away')} {y['away']})"
+        exp = f.get("cards")
+        if exp:
+            e = sum(exp)
+            tot = y["home"] + y["away"]
+            s_ += f", contro {fx(e, 1)} attesi" + (": partita più nervosa del previsto" if tot >= e + 2 else
+                                                     ": arbitro più largo del previsto" if tot <= e - 2 else "")
+        reds = [e for e in ev if e["k"] == "red"]
+        s_ += ("; " + ", ".join(f"rosso a {short(e.get('w'))} ({nm(e['s'])}, {e.get('m')}{', doppio giallo' if e.get('x') == '2y' else ''})" for e in reds)) if reds else "; nessuna espulsione"
+        out.append(s_ + f". Falli: {fo['home'] + fo['away']} ({nm('home')} {fo['home']}, {nm('away')} {fo['away']}).")
+    pens = [e for e in ev if e["k"] == "penw"]
+    if pens:
+        out.append("Rigori: " + ", ".join(f"uno {art(nm(e['s']), 'a')} {mp('al', e.get('m'))}" for e in pens) + ".")
+    elif ev:
+        out.append("Nessun rigore.")
+    var = []
+    for e in ev:
+        if e["k"] != "var":
+            continue
+        t = (e.get("x") or "").strip()
+        it = next((v for k, v in VAR_IT if re.search(k, t, re.I)), None)
+        var.append(f"{it or 'revisione'} {mp('al', e.get('m'))}" if e.get("m") else (it or "revisione"))
+    if var:
+        out.append("VAR: " + "; ".join(var) + ".")
     return out
 
 
@@ -743,7 +868,7 @@ def headline(m, goals, xg, reds, nm):
 
 # ---------- perché il pronostico è andato così ----------
 
-def verdict(m, xg, xgp, goals, reds, big, nm, shots):
+def verdict(m, xg, xgp, goals, reds, big, nm, shots, not_started=None):
     f = m["f"]
     hs, as_ = m["hs"], m["as"]
     out = "1" if hs > as_ else "X" if hs == as_ else "2"
@@ -815,6 +940,11 @@ def verdict(m, xg, xgp, goals, reds, big, nm, shots):
     if early:
         g = early[0]
         why.append((4, f"Il gol {mp('del', g['m'])} ({short(g['w'])}) ha messo subito la partita sui binari {art(nm(g['s']), 'di')}."))
+    # titolari su cui contava il pronostico e che non sono partiti (formazione probabile o stimata, cambi all'ultimo)
+    for s, ns in (not_started or {}).items():
+        pg = sum(p for _, p in ns)
+        if pick != out and pick != "X" and S[pick] == s and pg >= .2:
+            why.append((6, f"Il pronostico contava su {', '.join(short(n) for n, _ in ns)} tra i titolari {art(nm(s), 'di')}, ma non sono partiti dall'inizio."))
     # come sono arrivati i gol inattesi
     if pick != out:
         surprise = [g for g in goals if out != "X" and g["s"] == S[out] or out == "X" and pick != "X" and g["s"] != S[pick]]
@@ -871,7 +1001,7 @@ def profiles(matches):
         ids = mm.get("ids") or {}
         for s in ("home", "away"):
             p = P.setdefault(str(ids.get(s)), {"n": 0, "nus": 0, "gf": {}, "ga": {}, "tf": {}, "ta": {}, "xgf": {}, "xga": {},
-                                               "late": [0, 0], "early": [0, 0], "err": {}, "fb": [0, 0]})
+                                               "late": [0, 0], "early": [0, 0], "err": {}, "fb": [0, 0], "zf": {}, "za": {}, "nz": 0})
             p["n"] += 1
         for g in mm.get("goals") or []:
             f, a = P[str(ids.get(g["s"]))], P[str(ids.get(other(g["s"])))]
@@ -893,6 +1023,19 @@ def profiles(matches):
         if us.get("home") or us.get("away"):
             for s in ("home", "away"):
                 P[str(ids.get(s))]["nus"] += 1
+            if any(len(x) > 9 for s in ("home", "away") for x in us.get(s) or []):
+                for s in ("home", "away"):
+                    f, a = P[str(ids.get(s))], P[str(ids.get(other(s)))]
+                    f["nz"] += 1
+                    for x in us.get(s) or []:
+                        z = zone(x[8], x[9]) if len(x) > 9 and x[3] != "OwnGoal" and x[4] != "Penalty" else None
+                        if not z:
+                            continue
+                        for side in (f["zf"], a["za"]):
+                            c = side.setdefault(z, [0, 0.0, 0])
+                            c[0] += 1
+                            c[1] = round(c[1] + x[2], 3)
+                            c[2] += x[3] == "Goal"
         for s in ("home", "away"):
             f, a = P[str(ids.get(s))], P[str(ids.get(other(s)))]
             for x in us.get(s) or []:
@@ -922,9 +1065,22 @@ def err_txt(err):
     return ", ".join(f"{v} {one.get(k, k) if v == 1 else k}" for k, v in err.items())
 
 
-def profile_text(p):
-    """Frasi brevi per la scheda della squadra: come segna, come subisce, difetti e armi ricorrenti."""
+def profile_text(p, zr=None, n_t=20):
+    """Frasi brevi per la scheda della squadra: come segna, come subisce, difetti e armi ricorrenti, zone di tiro.
+    zr: posizioni in lega per zona (zone_ranks)."""
     out = {"segna": _cats_line(p.get("gf") or {}, "fatti"), "subisce": _cats_line(p.get("ga") or {}, "subiti"), "note": []}
+    if zr and zr.get("za"):
+        ra, rf, va, vf = zr["za"].get("mezzo"), zr["zf"].get("mezzo"), zr["va"].get("mezzo"), zr["vf"].get("mezzo")
+        if ra and ra <= 3:
+            out["note"].append(f"Concede troppo in mezzo all'area: {fx(va)} xG a partita da area piccola e centro dell'area, rigori esclusi ({ra}ª più esposta).")
+        elif ra and ra >= n_t - 2:
+            out["note"].append(f"Protegge bene il centro dell'area: {fx(va)} xG a partita concessi lì ({n_t - ra + 1}ª meno esposta).")
+        if rf and rf <= 3:
+            out["note"].append(f"Arriva spesso a tirare in mezzo all'area: {fx(vf)} xG a partita da lì ({rf}ª in lega).")
+        zf = p.get("zf") or {}
+        tot = sum(c[0] for c in zf.values())
+        if tot >= 30 and (zf.get("fuori") or [0])[0] / tot >= .5:
+            out["note"].append(f"Tira molto da fuori: {round((zf['fuori'][0]) / tot * 100)}% dei tiri, spesso segno che fatica a entrare in area.")
     ta, tf = p.get("ta") or {}, p.get("tf") or {}
     err = p.get("err") or {}
     if sum(err.values()) >= 2:
@@ -941,6 +1097,25 @@ def profile_text(p):
         out["note"].append(f"Non molla mai: {p['late'][0]} gol segnati dall'80' in poi.")
     if (p.get("early") or [0, 0])[1] >= 3:
         out["note"].append(f"Parte piano: {p['early'][1]} gol subiti nel primo quarto d'ora.")
+    return out
+
+
+def zone_ranks(P):
+    """Per ogni squadra la posizione in lega per xG a partita creati (zf) e concessi (za) in ogni zona, dal più alto,
+    più «in mezzo all'area» (area piccola + centro). -> {id: {"zf": {zona: pos}, "za": {...}}}, valori a partita."""
+    out = {t: {"zf": {}, "za": {}, "vf": {}, "va": {}} for t in P}
+    for key, rk, vk in (("zf", "zf", "vf"), ("za", "za", "va")):
+        for z in [z for z, _ in ZONES] + ["mezzo"]:
+            vals = {}
+            for t, p in P.items():
+                if not p.get("nz"):
+                    continue
+                d = p.get(key) or {}
+                v = (d.get("piccola", [0, 0])[1] + d.get("centro", [0, 0])[1]) if z == "mezzo" else (d.get(z) or [0, 0])[1]
+                vals[t] = v / p["nz"]
+            for i, t in enumerate(sorted(vals, key=lambda t: -vals[t])):
+                out[t][rk][z] = i + 1
+                out[t][vk][z] = round(vals[t], 3)
     return out
 
 

@@ -1268,14 +1268,16 @@ async def us_matches_step(d, now):
     servono alle letture. Una volta per partita, quando Understat l'ha già elaborata."""
     u = load_json(us_file(season_year(d)), {}) or {}
     dates = u.get("dates") or []
+    # anche le partite scaricate con una versione vecchia (senza le coordinate dei tiri)
     todo = sorted((e for e in d.get("played") or [] if e.get("status") == "finished" and e.get("hs") is not None
-                   and "us" not in (MATCHES.get(str(e["id"])) or {})), key=lambda e: -e["start"])
-    n = 0
+                   and (MATCHES.get(str(e["id"])) or {}).get("usv") != letture.US_VERSION), key=lambda e: -e["start"])
+    n, left = 0, 0
     for e in todo:
-        if n >= (3 if in_window(d, now) else 12):
-            break
         uid = us_match_id(d, e, dates)
         if not uid:
+            continue
+        if n >= (3 if in_window(d, now) else 12):
+            left += 1
             continue
         headers = {"X-Requested-With": "XMLHttpRequest", "Referer": f"https://understat.com/match/{uid}"}
         async with HTTP["web"].get(US_MATCH.format(id=uid), headers=headers, timeout=aiohttp.ClientTimeout(total=30)) as r:
@@ -1283,12 +1285,13 @@ async def us_matches_step(d, now):
                 raise RuntimeError(f"Understat (partita) HTTP {r.status}")
             j = json.loads(await r.text())
         x = match_entry(e)
-        x.update(us=letture.parse_understat(j), usId=uid, ppda=us_ppda(d, u, e))
+        x.update(us=letture.parse_understat(j), usId=uid, ppda=us_ppda(d, u, e), usv=letture.US_VERSION)
         n += 1
+    STATUS["_usPending"] = left   # altre partite pronte su Understat: il prossimo giro arriva presto
     if n:
         VERSION["matches"] += 1
         save_json(MATCH_FILE, MATCHES)
-        log(f"Tiri di Understat scaricati per {n} partite")
+        log(f"Tiri di Understat scaricati per {n} partite" + (f", ne mancano {left}" if left else ""))
 
 
 async def opta_step(d, now):
@@ -1769,7 +1772,7 @@ async def refresher():
             if pend:
                 # formazioni delle partite giocate da recuperare: con ESPN si può andare più veloci
                 targets.append(now + (120 if any(e.get("status") == "finished" for e in pend) else LINEUP_EVERY))
-            if (PRIOR.get("complete") and not PRIOR.get("resultsDone")) or prior_ref_pending():
+            if (PRIOR.get("complete") and not PRIOR.get("resultsDone")) or prior_ref_pending() or STATUS.get("_usPending"):
                 targets.append(now + 120)
             if site_conf() and not CLOUD:
                 targets.append(EXTRA.get("siteAt", 0) + SITE_EVERY)
@@ -1894,6 +1897,7 @@ def readings():
     if READS.get("key") == key:
         return READS
     names = team_names(d) if d.get("standings") else {}
+    mins = {p["id"]: int(p.get("minutesPlayed") or 0) for p in d.get("players") or []}
     base = []
     for e in played:
         x = MATCHES.get(str(e["id"])) or {}
@@ -1903,7 +1907,8 @@ def readings():
         it = HISTORY.get("matches", {}).get(str(e["id"])) or {}
         base.append((e, {"names": {"home": names.get(h, e["home"]["name"]), "away": names.get(a, e["away"]["name"])},
                          "hs": e["hs"], "as": e["as"], "box": x.get("box"), "ev": x.get("ev"), "us": x.get("us"),
-                         "ppda": x.get("ppda"), "f": it.get("final") if it.get("result") else None, "ids": {"home": h, "away": a}}))
+                         "ppda": x.get("ppda"), "f": it.get("final") if it.get("result") else None, "ids": {"home": h, "away": a},
+                         "ref": x.get("referee"), "lu": lineups_minutes(x.get("lineups"), mins)}))
     prof = letture.profiles([{"ids": m["ids"], "goals": letture.goals_of(m), "us": m["us"], "ev": m["ev"]} for _, m in base])
     reads, by = {}, {}
     for e, m in base:
@@ -1926,9 +1931,22 @@ def readings():
             rs["of"] = played_in.get(rnd, len(lst)) + sum(1 for e in (d.get("live") or []) + (d.get("next") or []) if e.get("round") == rnd)
             rounds[rnd] = rs
     ranks = {k: letture.league_ranks(prof, k, "piazzati")[0] for k in ("xgf", "xga")}
-    texts = {t: dict(letture.profile_text(p), rk={"spf": ranks["xgf"].get(t), "spa": ranks["xga"].get(t)}) for t, p in prof.items()}
+    zr = letture.zone_ranks(prof)
+    texts = {t: dict(letture.profile_text(p, zr.get(t), len(prof)), rk={"spf": ranks["xgf"].get(t), "spa": ranks["xga"].get(t)},
+                     zone=zr.get(t)) for t, p in prof.items()}
     READS.update(key=key, reads=reads, prof=prof, texts=texts, rounds=rounds, names=names)
     return READS
+
+
+def lineups_minutes(lu, mins):
+    """Formazioni della partita con i minuti in stagione di ogni assente (per dire quali assenze pesavano)."""
+    if not lu:
+        return lu
+    out = dict(lu)
+    for s in ("home", "away"):
+        if isinstance(lu.get(s), dict):
+            out[s] = dict(lu[s], missing=[dict(x, min=mins.get(x.get("id"), 0)) for x in lu[s].get("missing") or []])
+    return out
 
 
 def keys_of(R, e):
