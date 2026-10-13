@@ -25,7 +25,9 @@ Avvio:  python server.py            (apre la pagina nel browser)
 import asyncio
 import difflib
 import json
+import math
 import os
+import random
 import re
 import shutil
 import signal
@@ -42,6 +44,7 @@ from urllib.parse import urlencode, urlsplit
 import aiohttp
 from aiohttp import web
 
+import europa
 import fonti
 import letture
 import model
@@ -69,6 +72,11 @@ LEGHE = {
     "liga": {"name": "La Liga", "espn": "esp.1", "understat": "La_liga", "wiki_en": "La Liga", "dir": "liga",
              "fantacalcio": False, "onefootball": "laliga-10", "of_comp": "laliga-10", "opta": "la-liga", "port": 8767,
              "calib": NO_F_CALIB, "roles": {}},
+    # dal 13/10/2026. Coppa: squadre di campionati diversi, quindi la forza viene da europa.py (campionati e coppe
+    # europee insieme), non dalle partite della Champions; niente Understat né Wikipedia della competizione
+    "champions": {"name": "Champions League", "espn": "uefa.champions", "understat": None, "wiki_en": None, "dir": "champions",
+                  "fantacalcio": False, "onefootball": "uefa-champions-league-5", "of_comp": "uefa-champions-league-5",
+                  "opta": "uefa-champions-league", "port": 8768, "calib": NO_F_CALIB, "roles": {}, "cup": True},
 }
 # zone della classifica per posizione: solo i posti sicuri per la stagione dopo (Champions, Europa, Conference), più
 # la retrocessione. Le note di ESPN non vanno bene: segnavano la vincitrice della coppa della stagione scorsa (Athletic
@@ -77,15 +85,20 @@ LEGHE = {
 # europei della stagione si sanno in primavera e possono far scalare le posizioni: lo spiega la nota sotto la classifica.
 ZONE_RULES = {"serie-a": [(1, 4, "Champions League"), (5, 5, "Europa League"), (6, 6, "Conference League")],
               "premier": [(1, 4, "Champions League"), (5, 5, "Europa League")],
-              "liga": [(1, 4, "Champions League"), (5, 5, "Europa League"), (6, 6, "Conference League")]}
+              "liga": [(1, 4, "Champions League"), (5, 5, "Europa League"), (6, 6, "Conference League")],
+              # Champions: le prime 8 agli ottavi, dalla 9ª alla 24ª agli spareggi, le altre fuori
+              "champions": [(1, 8, "Round of 16"), (9, 24, "Playoffs"), (25, 36, "Eliminated")]}
 LEGA_KEY = os.environ.get("SERIEA_LEGA") or "serie-a"
 LEGA = LEGHE[LEGA_KEY]
 model.LEAGUE = LEGA["name"]
 model.F_CALIB = dict(model.F_CALIB, **(LEGA.get("calib") or {}))
 model.ROLE_CALIB = LEGA.get("roles") or {}
-statistiche.UNDERSTAT = statistiche.UNDERSTAT.replace("Serie_A", LEGA["understat"])
-statistiche.UNDERSTAT_REF = statistiche.UNDERSTAT_REF.replace("Serie_A", LEGA["understat"])
-fonti.WIKI_EN_TITLE = "{a}–{b:02d} " + LEGA["wiki_en"]
+CUP = bool(LEGA.get("cup"))
+if LEGA["understat"]:
+    statistiche.UNDERSTAT = statistiche.UNDERSTAT.replace("Serie_A", LEGA["understat"])
+    statistiche.UNDERSTAT_REF = statistiche.UNDERSTAT_REF.replace("Serie_A", LEGA["understat"])
+if LEGA["wiki_en"]:
+    fonti.WIKI_EN_TITLE = "{a}–{b:02d} " + LEGA["wiki_en"]
 # dati salvati e immagini stanno fuori dalla cartella dell'app, che puo' essere sincronizzata con iCloud
 DATA_BASE = Path(os.environ.get("SERIEA_DATA_DIR") or Path.home() / "Library" / "Application Support" / "Serie A Live")
 DATA_DIR = DATA_BASE / LEGA["dir"] if LEGA["dir"] else DATA_BASE
@@ -192,7 +205,7 @@ ESPNMAP = load_json(ESPN_FILE, {"teams": {}, "events": {}, "priorTeams": {}})
 EXTRA = load_json(EXTRA_FILE, {})
 REG = load_json(REG_FILE, {"info": {}, "espn": {}, "us": {}, "fc": {}})
 REG.setdefault("opta", {})
-VERSION = {"matches": 0, "squads": 0, "coaches": 0}
+VERSION = {"matches": 0, "squads": 0, "coaches": 0, "forza": 0}
 # versione del codice: cambia a ogni modifica di server.py o model.py
 CODE_VERSION = str(int(max((ROOT / f).stat().st_mtime for f in ("server.py", "model.py", "fonti.py", "statistiche.py", "sito.py"))))
 
@@ -293,9 +306,15 @@ def espn_event(e, teams):
         {"pre": "notstarted", "in": "inprogress", "post": "finished"}.get(typ.get("state"), "notstarted"),
         typ.get("description") or "", None))
     score = lambda x: int(x["score"]) if state in ("inprogress", "finished") and str(x.get("score", "")).isdigit() else None
-    return {"espn": str(e["id"]), "start": espn_time(e.get("date") or c.get("date")), "status": state, "statusText": text,
-            "code": code, "clock": st.get("displayClock") if state == "inprogress" and code != 31 else None,
-            "home": teams[h], "away": teams[a], "hs": score(comp["home"]), "as": score(comp["away"])}
+    out = {"espn": str(e["id"]), "start": espn_time(e.get("date") or c.get("date")), "status": state, "statusText": text,
+           "code": code, "clock": st.get("displayClock") if state == "inprogress" and code != 31 else None,
+           "home": teams[h], "away": teams[a], "hs": score(comp["home"]), "as": score(comp["away"])}
+    if CUP:   # fase (league-phase, knockout-round-playoffs, round-of-16, ...) e andata o ritorno
+        note = ((c.get("notes") or [{}])[0] or {}).get("headline") or ""
+        out["stage"] = (e.get("season") or {}).get("slug")
+        out["leg"] = 2 if note.startswith("2nd Leg") else 1 if note.startswith("1st Leg") else None
+        out["neutral"] = bool(c.get("neutralSite")) or out["stage"] == "final"
+    return out
 
 
 def cur_teams(d):
@@ -370,7 +389,9 @@ async def espn_schedule(d, months):
         j = await espn_get(ESPN_SITE + "/scoreboard", dates=m)
         evs += [x for x in (espn_event(e, teams) for e in j.get("events", [])) if x]
     ended = merge_events(d, evs)
-    if LEGA["dir"]:
+    if CUP:
+        cup_rounds(d)
+    elif LEGA["dir"]:
         number_rounds(d)
     d["updatedAt"] = time.time()
     return ended
@@ -381,8 +402,9 @@ ZONE_CANON = (("champions", "Champions League"), ("europa", "Europa League"), ("
 
 
 def zone_at(pos, n=20):
-    """Zona della classifica di una posizione, con le regole della lega (ZONE_RULES): le ultime tre retrocedono."""
-    if pos and pos > n - 3:
+    """Zona della classifica di una posizione, con le regole della lega (ZONE_RULES): nei campionati le ultime tre
+    retrocedono, in coppa no."""
+    if not CUP and pos and pos > n - 3:
         return "Relegation"
     return next((z for a, b, z in ZONE_RULES.get(LEGA_KEY, []) if a <= (pos or 0) <= b), None)
 
@@ -613,6 +635,72 @@ def summaries_due(d, now):
     return [e for _, e in sorted(due, key=lambda t: t[0])]
 
 
+# Champions: dopo le 8 giornate della fase campionato, i turni a eliminazione diretta (andata e ritorno; finale secca)
+KO_STAGES = ["knockout-round-playoffs", "round-of-16", "quarterfinals", "semifinals", "final"]
+KO_NAMES = ["Spareggi", "Ottavi", "Quarti", "Semifinali", "Finale"]
+
+
+def round_label(r):
+    """Nome di un turno: «3ª giornata» o, in coppa, «Ottavi – andata»."""
+    if r is None:
+        return None
+    if CUP and r > 8:
+        i, leg = divmod(r - 9, 2)
+        if i >= len(KO_NAMES) - 1:
+            return "Finale"
+        return f"{KO_NAMES[i]} – {'andata' if leg == 0 else 'ritorno'}"
+    return f"{r}ª giornata"
+
+
+def round_names(d):
+    """{giornata: nome} delle partite in calendario (solo in coppa, dove i turni non sono tutti «giornate»)."""
+    if not CUP:
+        return {}
+    rs = {e.get("round") for lst in ("played", "live", "next") for e in d.get(lst) or [] if e.get("round")}
+    return {str(r): round_label(r) for r in sorted(rs)}
+
+
+def cup_rounds(d):
+    """Turni della Champions: la fase campionato in ordine di data (8 giornate), l'eliminazione diretta dalla fase di
+    ESPN (andata e ritorno: dalla nota di ESPN o, se manca, la seconda partita tra le stesse squadre)."""
+    evs = sorted({str(e["id"]): e for lst in ("played", "live", "next") for e in d.get(lst) or []}.values(), key=lambda e: e["start"])
+    league = [e for e in evs if e.get("stage") in (None, "league-phase")]
+    teams_in, cur = {}, 0
+    for e in league:
+        h, a = e["home"]["id"], e["away"]["id"]
+        r = cur or 1
+        if h in teams_in.get(r, set()) or a in teams_in.get(r, set()):
+            r = cur + 1
+        e["round"] = min(r, 8)
+        cur = max(cur, r)
+        teams_in.setdefault(r, set()).update((h, a))
+    seen = {}
+    for e in evs:
+        st = e.get("stage")
+        if st not in KO_STAGES:
+            continue
+        i = KO_STAGES.index(st)
+        if st == "final":
+            e["round"], e["leg"] = 9 + 2 * i, None
+            continue
+        pair = (st, frozenset((e["home"]["id"], e["away"]["id"])))
+        leg = e.get("leg") or (2 if pair in seen and seen[pair] != e["id"] else 1)
+        seen.setdefault(pair, e["id"])
+        e["leg"] = leg
+        e["round"] = 9 + 2 * i + (leg - 1)
+    # ritorno: il risultato dell'andata, girato sulle squadre di questa partita (per la probabilità di passare il turno)
+    first = {}
+    for e in evs:
+        if e.get("leg") == 1 and e.get("hs") is not None:
+            first[(e.get("stage"), e["home"]["id"], e["away"]["id"])] = (e["hs"], e["as"])
+    for e in evs:
+        if e.get("leg") == 2:
+            f = first.get((e.get("stage"), e["away"]["id"], e["home"]["id"]))
+            e["tie"] = {"first": [f[1], f[0]]} if f else None   # gol dell'andata: [squadra di casa ora, ospite ora]
+        elif e.get("stage") == "final":
+            e["tie"] = {"first": [0, 0], "final": True}
+
+
 def number_rounds(d):
     """Giornate quando ESPN non le dà (leghe senza dati di partenza, come la Premier League): in ordine di data, una
     giornata finisce quando una delle squadre gioca di nuovo. Le partite che hanno già la giornata la tengono."""
@@ -630,9 +718,15 @@ def number_rounds(d):
         teams_in.setdefault(e["round"], set()).update((h, a))
 
 
+# Champions: i nomi brevi di ESPN che in italiano non si usano
+CUP_NAMES = {"Inter Milan": "Inter", "AS Roma": "Roma", "S Bratislava": "Slovan Bratislava", "Bodo/Glimt": "Bodø/Glimt",
+             "Atlético": "Atlético Madrid"}
+
+
 def espn_team(t):
     """Squadra ESPN nel formato dell'app (per le leghe che partono da ESPN l'id è quello ESPN)."""
-    return {"id": int(t["id"]), "name": t.get("shortDisplayName") or t.get("displayName"), "fullName": t.get("displayName"),
+    name = t.get("shortDisplayName") or t.get("displayName")
+    return {"id": int(t["id"]), "name": CUP_NAMES.get(name, name) if CUP else name, "fullName": t.get("displayName"),
             "code": t.get("abbreviation"), "color": "#" + (t.get("color") or "6C7A72")}
 
 
@@ -640,14 +734,15 @@ def espn_table(j, teams):
     """Classifica ESPN -> righe nel formato dell'app."""
     ch = j.get("children") or []
     rows = []
-    for e in ((ch[0].get("standings") if ch else j.get("standings")) or {}).get("entries") or []:
+    entries = ((ch[0].get("standings") if ch else j.get("standings")) or {}).get("entries") or []
+    for e in entries:
         tid = str((e.get("team") or {}).get("id"))
         if tid not in teams:
             continue
         S = {s.get("name"): s.get("value") for s in e.get("stats") or []}
         n = lambda k: int(S.get(k) or 0)
         rows.append({"team": teams[tid], "pos": n("rank"), "p": n("gamesPlayed"), "w": n("wins"), "d": n("ties"), "l": n("losses"),
-                     "gf": n("pointsFor"), "ga": n("pointsAgainst"), "pts": n("points"), "zone": zone_at(n("rank"))})
+                     "gf": n("pointsFor"), "ga": n("pointsAgainst"), "pts": n("points"), "zone": zone_at(n("rank"), len(entries))})
     return sorted(rows, key=lambda r: r["pos"])
 
 
@@ -671,11 +766,14 @@ async def espn_bootstrap():
     lt = time.localtime()
     upto = (lt.tm_year * 12 + lt.tm_mon) + 1
     months = [f"{yy}{mm:02d}" for yy, mm in [(y, m) for m in range(7, 13)] + [(y + 1, m) for m in range(1, 7)]
-              if yy * 12 + mm <= upto]
+              if yy * 12 + mm <= upto or CUP]
     await espn_schedule(d, months)
-    number_rounds(d)
+    cup_rounds(d) if CUP else number_rounds(d)
     for e in [e for e in d["played"] if e.get("espn")]:
-        await espn_summary(e)
+        try:
+            await espn_summary(e)
+        except Exception as ex:   # la riprende summaries_due al giro dopo
+            log(f"Riepilogo di {e['home']['name']} - {e['away']['name']} non scaricato ({errtxt(ex)}): si riprova più tardi")
     # stagione scorsa: classifica (anche delle squadre retrocesse), poi risultati, arbitri e cartellini di ogni partita
     pj = await espn_get(ESPN_STAND, season=str(y - 1))
     pch = pj.get("children") or []
@@ -686,8 +784,9 @@ async def espn_bootstrap():
                  standings={"total": espn_table(pj, pteams), "home": [], "away": []})
     while not PRIOR.get("resultsDone"):
         await espn_prior_results()
-    while prior_ref_pending():
-        await prior_ref_step(40)
+    skip = set()
+    while prior_ref_pending() and await prior_ref_step(40, skip):
+        pass
     save_json(MATCH_FILE, MATCHES)
     save_json(ESPN_FILE, ESPNMAP)
     save_json(DATA_FILE, d)
@@ -772,11 +871,12 @@ ANALYSIS = {"key": None}
 
 def analysis():
     d = STATE["data"]
-    key = (d.get("updatedAt"), VERSION["matches"], VERSION["squads"], VERSION["coaches"], PRIOR.get("sid"),
+    key = (d.get("updatedAt"), VERSION["matches"], VERSION["squads"], VERSION["coaches"], VERSION["forza"], PRIOR.get("sid"),
            len(PRIOR.get("results") or []), len(FANTA.get("teams", [])),
            sum(1 for v in (PRIOR.get("refCards") or {}).values() if "roles" in v) // 20)
     if ANALYSIS["key"] != key:
-        A = model.build(d, PRIOR, MATCHES, coaches=COACHES, role_rows=role_rows(d), changes=coach_changes(d), us_hist=us_history(d))
+        A = model.build(d, PRIOR, MATCHES, coaches=COACHES, role_rows=role_rows(d), changes=coach_changes(d), us_hist=us_history(d),
+                        ext=cup_ext(d))
         nxt = sorted((e for e in d.get("next") or [] if e.get("status") == "notstarted"
                       and str(e["home"]["id"]) in A["T"] and str(e["away"]["id"]) in A["T"]), key=lambda e: e["start"])
         # giocatori in evidenza: le partite della prossima giornata (o dei 4 giorni dopo la prima, se manca la giornata)
@@ -789,7 +889,7 @@ def analysis():
             if same(e):
                 items.append((e, P))
         ANALYSIS.update(key=key, A=A, pub=model.public_analysis(A), fixtures=fixtures, evidenza=model.evidenza(items, A=A),
-                        preds=items)
+                        preds=items, proj=cup_projection(d, A) if CUP and A.get("cup") else None)
     return ANALYSIS
 
 
@@ -1192,17 +1292,27 @@ async def espn_prematch(d, now, limit):
     return done
 
 
-async def prior_ref_step(limit):
-    """Arbitro e cartellini delle partite della scorsa stagione (una volta sola, poco alla volta)."""
+async def prior_ref_step(limit, skip=None):
+    """Arbitro e cartellini delle partite della scorsa stagione (una volta sola, poco alla volta). Una partita che non
+    risponde si salta (skip) e si riprova più tardi: un solo riepilogo lento non deve fermare tutto. -> scaricate."""
     rc = PRIOR.setdefault("refCards", {})
-    todo = [x["espn"] for x in PRIOR.get("results") or [] if x.get("espn") and "box" not in rc.get(str(x["espn"]), {})][:limit]
+    skip = skip if skip is not None else set()
+    todo = [x["espn"] for x in PRIOR.get("results") or []
+            if x.get("espn") and "box" not in rc.get(str(x["espn"]), {}) and str(x["espn"]) not in skip][:limit]
+    n = 0
     for eid in todo:
-        j = await espn_get(ESPN_SITE + "/summary", event=eid)
+        try:
+            j = await espn_get(ESPN_SITE + "/summary", event=eid)
+        except Exception as e:
+            skip.add(str(eid))
+            log(f"Riepilogo ESPN {eid} della stagione scorsa non scaricato ({errtxt(e)}): si riprova più tardi")
+            continue
         rc[str(eid)] = {"ref": fonti.espn_referee(j), "cards": fonti.espn_cards(j), "roles": match_roles(j) or {},
                         "box": statistiche.box_from_summary(j) or {}}
-    if todo:
+        n += 1
+    if n:
         save_json(PRIOR_FILE, PRIOR)
-    return len(todo)
+    return n
 
 
 def prior_ref_pending():
@@ -1371,6 +1481,251 @@ def canon_opta(pid, o, team_of):
     return cid
 
 
+# ---------- Champions League: forza europea, giocatori dai campionati, allenatori, proiezione della classifica ----------
+
+ESPN_SOCCER = "https://site.api.espn.com/apis/site/v2/sports/soccer"
+MONDO_DIR = CACHE / "mondo"          # calendari mensili di ESPN di campionati e coppe europee
+FORZA_FILE = CACHE / "forza.json"    # attacco e difesa di tutte le squadre (europa.fit)
+MONDO_EVERY = 6 * 3600
+US_LEAGUES = {"eng.1": "EPL", "esp.1": "La_liga", "ita.1": "Serie_A", "ger.1": "Bundesliga", "fra.1": "Ligue_1"}
+# Wikipedia in inglese: la pagina della stagione dei campionati da cui prendere gli allenatori (tabella del personale)
+WIKI_LEAGUES = {"ger.1": "Bundesliga", "fra.1": "Ligue 1", "por.1": "Primeira Liga", "ned.1": "Eredivisie", "tur.1": "Süper Lig",
+                "bel.1": "Belgian Pro League", "aut.1": "Austrian Football Bundesliga", "gre.1": "Super League Greece",
+                "sco.1": "Scottish Premiership", "sui.1": "Swiss Super League", "den.1": "Danish Superliga",
+                "nor.1": "Eliteserien", "swe.1": "Allsvenskan", "cyp.1": "Cypriot First Division", "rou.1": "Liga I",
+                "rus.1": "Russian Premier League"}
+CALENDAR_YEAR = {"nor.1", "swe.1"}   # stagione dentro l'anno solare: la pagina è «2026 Eliteserien»
+
+
+def mondo_months(now, n=40):
+    k = time.gmtime(now).tm_year * 12 + time.gmtime(now).tm_mon - 1
+    return [f"{m // 12}{m % 12 + 1:02d}" for m in range(k - n + 1, k + 1)]
+
+
+async def mondo_step(d, now):
+    """Forza europea (solo per la Champions): calendari mensili di ESPN dei campionati delle squadre e delle coppe
+    europee degli ultimi 40 mesi (i due mesi più recenti si riscaricano ogni 6 ore), poi europa.fit."""
+    if not CUP or now - EXTRA.get("mondoAt", 0) < MONDO_EVERY:
+        return
+    EXTRA["mondoAt"] = now - MONDO_EVERY + 1800   # se va male, si riprova tra mezz'ora
+    save_json(EXTRA_FILE, EXTRA)
+    MONDO_DIR.mkdir(parents=True, exist_ok=True)
+    months = mondo_months(now)
+    todo = [(c, m) for c in europa.COMPS for m in months if m in months[-2:] or not (MONDO_DIR / f"{c}-{m}.json").exists()]
+    sem = asyncio.Semaphore(6)
+
+    async def one(c, m):
+        async with sem:
+            j = await espn_get(f"{ESPN_SOCCER}/{c}/scoreboard", dates=m, limit=500)
+            save_json(MONDO_DIR / f"{c}-{m}.json", europa.compact(j, c))
+    res = await asyncio.gather(*(one(c, m) for c, m in todo), return_exceptions=True)
+    bad = [r for r in res if isinstance(r, Exception)]
+    if len(bad) > len(todo) / 4:
+        raise RuntimeError(f"ESPN: {len(bad)} calendari su {len(todo)} non scaricati ({errtxt(bad[0])})")
+    for f in MONDO_DIR.glob("*.json"):
+        if f.stem.rsplit("-", 1)[-1] not in months:
+            f.unlink()
+    allm = {}
+    for f in MONDO_DIR.glob("*.json"):
+        for m in load_json(f, []) or []:
+            allm[m["id"]] = m
+    done, group = europa.prepare(allm.values())
+    prev = load_json(FORZA_FILE, None)
+    P = await asyncio.to_thread(europa.fit, done, group, time.time(), prev, 15 if prev else 60)
+    if not P:
+        raise RuntimeError("forza europea: nessuna partita")
+    P["at"] = time.time()
+    P["matches"] = len(done)
+    save_json(FORZA_FILE, P)
+    VERSION["forza"] += 1
+    EXTRA["mondoAt"] = now
+    save_json(EXTRA_FILE, EXTRA)
+    log(f"Forza europea ricalcolata: {len(done)} partite, {len(P['A'])} squadre" + (f" ({len(bad)} calendari non scaricati)" if bad else ""))
+
+
+def cup_ext(d):
+    """Forza delle squadre di Champions dal modello europeo: {"mu", "he", "teams": {id: {A, D, league, n}}}."""
+    P = load_json(FORZA_FILE, None)
+    if not CUP or not P:
+        return None
+    teams = {tid: {"A": europa.effect(P, tid, "A"), "D": europa.effect(P, tid, "D"),
+                   "league": (P.get("group") or {}).get(tid, "altro"), "n": (P.get("n") or {}).get(tid, 0)}
+             for tid in (d.get("teams") or {})}
+    return {"mu": P["mu"], "he": P["he"], "teams": teams, "at": P.get("at")}
+
+
+async def us_league_get(lg, year):
+    headers = {"X-Requested-With": "XMLHttpRequest", "Referer": f"https://understat.com/league/{lg}/{year}"}
+    async with HTTP["web"].get(f"https://understat.com/getLeagueData/{lg}/{year}", headers=headers,
+                               timeout=aiohttp.ClientTimeout(total=40)) as r:
+        if r.status != 200:
+            raise RuntimeError(f"Understat {lg} HTTP {r.status}")
+        return json.loads(await r.text())
+
+
+def cup_us_teams(d):
+    """Squadra di Champions -> (campionato Understat, nome della squadra su Understat), scegliendo solo tra le squadre del
+    suo campionato (così «Real Sociedad» non diventa «Real Madrid»)."""
+    P = load_json(FORZA_FILE, None) or {}
+    y = season_year(d)
+    out = {}
+    for tid, o in (d.get("teams") or {}).items():
+        lg = US_LEAGUES.get((P.get("group") or {}).get(tid))
+        if not lg:
+            continue
+        titles = [t["title"] for t in ((load_json(CACHE / f"understat-{lg}-{y}.json", {}) or {}).get("teams") or {}).values()]
+        t = o["team"]
+        names = [t.get("name"), t.get("fullName"), t.get("shortName")]
+        sc = lambda title: max(difflib.SequenceMatcher(None, " ".join(tok_seq(title)), " ".join(tok_seq(n))).ratio()
+                               for n in names if n) + .3 * len(tokens(title) & tokens(*names))
+        best = max(titles, key=sc, default=None)
+        if best and sc(best) >= .75:
+            out[tid] = (lg, best)
+    return out
+
+
+def cup_prior_players(d):
+    """Base dei giocatori di Champions: le loro statistiche nei cinque campionati di Understat (stagione in corso e
+    scorsa). In Champions si giocano al massimo 8 partite: senza questa base i numeri per 90' sarebbero solo medie di ruolo."""
+    y = season_year(d)
+    teams = cup_us_teams(d)
+    by_title = {(lg, title): tid for tid, (lg, title) in teams.items()}
+    usmap = REG.setdefault("usd", {})
+    out = {}
+    for yy in (y, y - 1):
+        for lg in set(US_LEAGUES.values()):
+            f = CACHE / f"understat-{lg}-{yy}.json"
+            for u in ((statistiche.understat_parse(load_json(f, {})) or {}).get("players") or []) if f.exists() else []:
+                cid = usmap.get(u["usId"])
+                if cid is None and yy == y:   # il collegamento si fa con la stagione in corso, per squadra
+                    tids = [by_title.get((lg, t.strip())) for t in (u.get("team") or "").split(",")]
+                    tids = [t for t in tids if t]
+                    cid = reg_find(u["name"], tids) if tids else None
+                    if cid:
+                        usmap[u["usId"]] = cid
+                if cid is None:
+                    continue
+                p = out.setdefault(cid, {"id": int(cid), "minutesPlayed": 0.0})
+                for k in US_FIELDS:
+                    if u.get(k) is not None:
+                        p[k] = p.get(k, 0) + u[k]
+    return list(out.values())
+
+
+async def cup_coaches(d, now):
+    """Allenatori delle squadre di Champions: dalle altre leghe dell'app (Serie A, Premier, Liga) e, per gli altri
+    campionati, dalla tabella del personale della loro pagina su Wikipedia in inglese. Una volta al giorno."""
+    if not CUP or now - EXTRA.get("coachAt", 0) < 86400:
+        return
+    EXTRA["coachAt"] = now - 86400 + 3600
+    P = load_json(FORZA_FILE, None) or {}
+    group = P.get("group") or {}
+    found = {}
+    # le altre leghe dell'app: Premier e Liga hanno gli id ESPN; la Serie A li traduce con la sua mappa
+    for key, cfg in LEGHE.items():
+        if cfg.get("cup"):
+            continue
+        base = DATA_BASE / cfg["dir"] if cfg["dir"] else DATA_BASE
+        co = load_json(base / "cache" / "coaches.json", {}) or {}
+        emap = (load_json(base / "cache" / "espn.json", {}) or {}).get("teams") or {}
+        for tid in d.get("teams") or {}:
+            c = co.get(emap.get(tid, tid)) if cfg["dir"] == "" else co.get(tid)
+            name = ((c or {}).get("manager") or {}).get("name")
+            if name:
+                found[tid] = name
+    y = season_year(d)
+    for comp, title in WIKI_LEAGUES.items():
+        mine = [tid for tid in d.get("teams") or {} if group.get(tid) == comp and tid not in found]
+        if not mine:
+            continue
+        page = f"{time.gmtime(now).tm_year} {title}" if comp in CALENDAR_YEAR else f"{y}–{(y + 1) % 100:02d} {title}"
+        try:
+            base = {"action": "parse", "page": page, "format": "json", "formatversion": "2"}
+            get = lambda **p: web_text(fonti.WIKI_EN + "?" + urlencode(dict(base, **p)), headers={"User-Agent": WIKI_UA})
+            secs = json.loads(await get(prop="sections")).get("parse", {}).get("sections") or []
+            sec = next((x["index"] for x in secs if "personnel" in x["line"].lower()), None)
+            table = fonti.parse_personale_en(json.loads(await get(prop="text", section=sec))["parse"]["text"]) if sec else {}
+            # senza tabella del personale (es. Belgio 2026/27): per ogni squadra l'ultimo allenatore arrivato nei cambi
+            # della stagione (la tabella è in ordine di data, quindi l'ultimo vince); chi non ha cambiato resta senza
+            chg = next((x["index"] for x in secs if "managerial" in x["line"].lower()), None)
+            if not table and chg:
+                for c in fonti.parse_cambi_en(json.loads(await get(prop="text", section=chg))["parse"]["text"]):
+                    if c.get("in") and c.get("team"):
+                        table[c["team"]] = [{"name": c["in"]}]
+        except Exception as e:
+            log(f"Allenatori ({page}) non letti: {errtxt(e)}")
+            continue
+        for tid in mine:
+            t = d["teams"][tid]["team"]
+            tk = tokens(t.get("name"), t.get("fullName"), t.get("shortName"))
+            best = max(table, key=lambda k: len(tokens(k) & tk), default=None)
+            if best and len(tokens(best) & tk) >= max(1, min(2, len(tokens(best)))) and table[best]:
+                found[tid] = table[best][-1]["name"]
+    n = 0
+    for tid, name in found.items():
+        c = COACHES.setdefault(tid, {})
+        if ((c.get("manager") or {}).get("name")) != name:
+            n += 1
+        c["manager"] = {"id": None, "name": name}
+        c["wiki"] = {"name": name, "new": None, "left": None}
+    if n:
+        save_json(COACH_FILE, COACHES)
+        VERSION["coaches"] += 1
+    EXTRA["coachAt"] = now
+    save_json(EXTRA_FILE, EXTRA)
+    log(f"Allenatori della Champions: {len(found)} squadre su {len(d.get('teams') or {})}")
+
+
+def cup_projection(d, A, sims=5000):
+    """Fase campionato della Champions: probabilità di ogni squadra di finire tra le prime 8 (ottavi), dalla 9ª alla
+    24ª (spareggi) o fuori, simulando le partite che mancano con i gol attesi del modello. Criteri di classifica:
+    punti, differenza reti, gol fatti, gol fatti in trasferta, vittorie, vittorie in trasferta (poi a sorte)."""
+    league = {str(e["id"]): e for lst in ("played", "live", "next") for e in d.get(lst) or [] if e.get("stage") in (None, "league-phase")}
+    league = list(league.values())
+    rest = [e for e in league if e.get("status") != "finished" or e.get("hs") is None]
+    # serve il calendario intero (8 partite per squadra): con partite mancanti le probabilità sarebbero sbagliate
+    if not rest or len(league) < len(A["T"]) * 8 // 2:
+        return None
+    base = {tid: [0, 0, 0, 0, 0, 0] for tid in A["T"]}   # punti, differenza, gol, gol fuori, vittorie, vittorie fuori
+    def add(st, h, a, gh, ga):
+        sh, sa = st[h], st[a]
+        sh[1] += gh - ga; sa[1] += ga - gh; sh[2] += gh; sa[2] += ga; sa[3] += ga
+        if gh > ga:
+            sh[0] += 3; sh[4] += 1
+        elif ga > gh:
+            sa[0] += 3; sa[4] += 1; sa[5] += 1
+        else:
+            sh[0] += 1; sa[0] += 1
+    for e in league:
+        h, a = str(e["home"]["id"]), str(e["away"]["id"])
+        if e not in rest and h in base and a in base:
+            add(base, h, a, e["hs"], e["as"])
+    lam = [(str(e["home"]["id"]), str(e["away"]["id"]), *model.base_lambdas(A, e["home"]["id"], e["away"]["id"]))
+           for e in rest if str(e["home"]["id"]) in base and str(e["away"]["id"]) in base]
+    rng = random.Random(7)
+
+    def pois(l):
+        k, p, lim = 0, 1.0, math.exp(-l)
+        while True:
+            p *= rng.random()
+            if p <= lim:
+                return k
+            k += 1
+    n = len(base)
+    count = {t: [0, 0, 0] for t in base}
+    pts = {t: 0.0 for t in base}
+    for _ in range(sims):
+        st = {t: list(v) for t, v in base.items()}
+        for h, a, lh, la in lam:
+            add(st, h, a, pois(lh), pois(la))
+        order = sorted(st, key=lambda t: (st[t][0], st[t][1], st[t][2], st[t][3], st[t][4], st[t][5], rng.random()), reverse=True)
+        for i, t in enumerate(order):
+            count[t][0 if i < 8 else 1 if i < 24 else 2] += 1
+            pts[t] += st[t][0]
+    return {t: {"top8": round(c[0] / sims, 3), "po": round(c[1] / sims, 3), "out": round(c[2] / sims, 3),
+                "pts": round(pts[t] / sims, 1)} for t, c in count.items()} | {"_left": len(lam), "_n": n}
+
+
 async def sources_step(d, now):
     """Understat (xG, xA, pressing, minuti) e Fantacalcio.it (media voto): ogni 6 ore e dopo le partite."""
     last_end = max((e["start"] + 2.25 * 3600 for e in d.get("played") or []), default=0)
@@ -1380,9 +1735,15 @@ async def sources_step(d, now):
     EXTRA["usAt"] = now - US_EVERY + 1800   # se va male, si riprova tra mezz'ora
     save_json(EXTRA_FILE, EXTRA)
     y = season_year(d)
-    save_json(us_file(y), await us_get(y))
-    if not us_file(y - 1).exists():
-        save_json(us_file(y - 1), await us_get(y - 1))
+    if CUP:   # Understat non ha la Champions: i campionati dei giocatori, per la loro base
+        for lg in sorted(set(US_LEAGUES.values())):
+            save_json(CACHE / f"understat-{lg}-{y}.json", await us_league_get(lg, y))
+            if not (CACHE / f"understat-{lg}-{y - 1}.json").exists():
+                save_json(CACHE / f"understat-{lg}-{y - 1}.json", await us_league_get(lg, y - 1))
+    else:
+        save_json(us_file(y), await us_get(y))
+        if not us_file(y - 1).exists():
+            save_json(us_file(y - 1), await us_get(y - 1))
     STATUS["usAt"] = time.time()
     if LEGA["fantacalcio"]:
         try:
@@ -1594,6 +1955,10 @@ def rebuild_stats(d):
         if cid in players:
             players[cid].update(rating=f.get("mv"), ratingPV=f.get("pv"), fantamedia=f.get("fm"), fcRole=f.get("role"))
     d["players"] = sorted(players.values(), key=lambda p: -(p.get("minutesPlayed") or 0))
+    if CUP:   # la base dei giocatori sono i loro campionati (al posto della stagione scorsa della competizione)
+        PRIOR["players"] = cup_prior_players(d)
+        PRIOR["statsV"] = 2
+        save_json(PRIOR_FILE, PRIOR)
     d["v"] = DATA_VERSION
     d["fullAt"] = d["updatedAt"] = time.time()
     d["sources"] = {"matches": len(boxes), "played": len(results), "understat": bool(us), "fantacalcio": len(fc)}
@@ -1702,7 +2067,12 @@ async def refresher():
                 if now >= due["months"]:
                     lt = time.localtime(now)
                     nm = (lt.tm_year + (lt.tm_mon == 12), lt.tm_mon % 12 + 1)
-                    ended += await espn_schedule(d, [f"{lt.tm_year}{lt.tm_mon:02d}", f"{nm[0]}{nm[1]:02d}"])
+                    months = [f"{lt.tm_year}{lt.tm_mon:02d}", f"{nm[0]}{nm[1]:02d}"]
+                    if CUP:   # in coppa tutti i mesi fino a giugno: il calendario intero della fase campionato e dei turni
+                        k = lt.tm_year * 12 + lt.tm_mon - 1
+                        end = (lt.tm_year + (lt.tm_mon >= 7)) * 12 + 5
+                        months = [f"{m // 12}{m % 12 + 1:02d}" for m in range(k, end + 1)]
+                    ended += await espn_schedule(d, months)
                     due["months"] = now + MONTHS_EVERY
                     due["today"] = now + (LIVE_EVERY if window else IDLE_EVERY)
                 elif now >= due["today"]:
@@ -1750,7 +2120,8 @@ async def refresher():
         if d:
             steps = ((("fantacalcio.it", fantacalcio_step), ("designazioni", fc_referees), ("arbitri", fc_prior_referees))
                      if LEGA["fantacalcio"] else (("OneFootball", onefootball_step),))
-            for name, step in steps + (("Wikipedia", wiki_coaches), ("foto", of_photos_step), ("Opta", opta_step)):
+            steps += (("forza europea", mondo_step), ("allenatori", cup_coaches)) if CUP else (("Wikipedia", wiki_coaches),)
+            for name, step in steps + (("foto", of_photos_step), ("Opta", opta_step)):
                 try:
                     await step(d, now)
                     STATUS.pop(f"err_{name}", None)
@@ -2100,7 +2471,9 @@ def snapshot():
         # letture delle partite: come sono nati i gol, come hanno giocato, perché il pronostico è andato così
         "reads": reads, "rounds": {str(k): R["rounds"][k] for k in rr}, "profiles": profiles_out(R),
         "league": {"yellowGame": _r(A["L"].get("yellowGame"), 2), "key": LEGA_KEY, "name": LEGA["name"], "dir": LEGA["dir"],
-                   "fantacalcio": LEGA["fantacalcio"]},
+                   "fantacalcio": LEGA["fantacalcio"], "cup": CUP},
+        # coppa: nomi dei turni («Ottavi – andata»), proiezione della fase campionato, campionato di ogni squadra
+        "roundNames": round_names(d), "proj": an.get("proj"),
         "leagues": [{"key": k, "name": v["name"], "dir": v["dir"]} for k, v in LEGHE.items()],
     }
 
@@ -2142,7 +2515,8 @@ async def h_data(_):
                               "reads": {k: v for k, v in R["reads"].items() if v.get("round") in rr},
                               "rounds": {str(k): R["rounds"][k] for k in rr}, "profiles": profiles_out(R),
                               "evidenza": an["evidenza"],
-                              "league": {"key": LEGA_KEY, "name": LEGA["name"], "fantacalcio": LEGA["fantacalcio"]},
+                              "league": {"key": LEGA_KEY, "name": LEGA["name"], "fantacalcio": LEGA["fantacalcio"], "cup": CUP},
+                              "roundNames": round_names(STATE["data"]), "proj": an.get("proj"),
                               "leagues": [{"key": k, "name": v["name"], "port": v["port"]} for k, v in LEGHE.items()],
                               "fantaTeams": len(FANTA.get("teams", [])), "status": status_public(), "now": time.time()})
 

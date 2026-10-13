@@ -755,7 +755,7 @@ RES_CODE = {"Goal": "G", "SavedShot": "S", "MissedShots": "M", "BlockedShot": "B
 def lineup_reading(m, nm):
     """Moduli, assenti e, se c'è il pronostico, i titolari previsti che non sono partiti dall'inizio.
     -> (frasi, {lato: [(nome, prob. di segnare)]})."""
-    lu, f, box = m.get("lu") or {}, m.get("f") or {}, m.get("box") or {}
+    lu, f = m.get("lu") or {}, m.get("f") or {}
     out, miss_txt, not_started = [], [], {}
     forms = [(s, (lu.get(s) or {}).get("formation")) for s in ("home", "away")]
     if any(fm for _, fm in forms):
@@ -930,7 +930,7 @@ def verdict(m, xg, xgp, goals, reds, big, nm, shots, not_started=None):
         elif xg[s] > 1.5 * L and xg[s] - L >= .7:
             extra = ""
             if red and red["s"] == o:
-                extra = f", anche per la superiorità numerica"
+                extra = ", anche per la superiorità numerica"
             why.append((8, f"{cap(art(nm(s)))} ha creato più del previsto: {fx(xg[s])} xG contro {fx(L)} attesi{extra}."))
     # concretezza e portieri
     for s in ("home", "away"):

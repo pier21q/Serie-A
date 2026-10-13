@@ -6,6 +6,9 @@ Il sito si aggiorna da solo sui computer di GitHub (GitHub Actions), anche con i
 l'app riscarica i dati da ESPN, Understat, Fantacalcio.it e Wikipedia, ricalcola statistiche e pronostici
 e ripubblica il sito, anche se non è cambiato niente.
 
+Leghe: Serie A (in cima al sito), Premier League (`/premier/`), Liga (`/liga/`) e Champions League (`/champions/`).
+Ognuna ha i suoi dati in una cartella del ramo `dati` e i suoi rami `storico-…` e `opta-…` (la Serie A senza suffisso).
+
 Rami del repository:
 
 - `main`: il codice dell'app e la programmazione (`.github/workflows/aggiorna.yml`)

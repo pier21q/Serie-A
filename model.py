@@ -682,9 +682,11 @@ def npx_of(s, n):
     return (a / n, b / n) if a is not None and b is not None and n else None
 
 
-def build(data, prior=None, matches=None, now=None, coaches=None, role_rows=None, changes=None, us_hist=None):
+def build(data, prior=None, matches=None, now=None, coaches=None, role_rows=None, changes=None, us_hist=None, ext=None):
     """changes: {squadra: {"at": data dell'ultimo cambio di allenatore in corsa, "pre": cambiato anche d'estate}}; us_hist: {squadra: partite
-    di Understat con data, gol e xG senza rigori} (per pesare meno le partite prima del cambio)."""
+    di Understat con data, gol e xG senza rigori} (per pesare meno le partite prima del cambio).
+    ext: forza europea (europa.py, per la Champions) {"mu", "he", "teams": {id: {A, D, league, n}}}: sostituisce la forza
+    calcolata dalle partite della competizione, che in coppa sono poche e tra squadre di campionati diversi."""
     now = now or time.time()
     matches = matches or {}
     st = data.get("standings") or {}
@@ -809,6 +811,25 @@ def build(data, prior=None, matches=None, now=None, coaches=None, role_rows=None
         count, last = formations_of(tid, matches)
         t["formations"], t["lastXI"] = count, last
 
+    # coppa: attacco e difesa dal modello europeo, riportati alla media delle squadre della competizione (1 = media)
+    if ext and ext.get("teams"):
+        ids = [tid for tid in T if tid in ext["teams"]]
+        if ids:
+            ma = mean([ext["teams"][t]["A"] for t in ids])
+            md = mean([ext["teams"][t]["D"] for t in ids])
+            for tid in ids:
+                e = ext["teams"][tid]
+                t = T[tid]
+                t["att"], t["de"] = math.exp(e["A"] - ma), math.exp(e["D"] - md)
+                t["xgBase"] = t["att"] * L["mu"]
+                t["prior"], t["priorWeight"] = "forza europea", 1.0
+                t["euro"] = {"league": e.get("league"), "n": e.get("n"), "net": round(e["A"] - e["D"], 3)}
+            L["HA"] = math.exp(ext["mu"] + ext["he"] + ma + md)
+            L["AA"] = math.exp(ext["mu"] + ma + md)
+            ranked = sorted(ids, key=lambda t: -(ext["teams"][t]["A"] - ext["teams"][t]["D"]))
+            for i, tid in enumerate(ranked):
+                T[tid]["euro"]["rank"] = i + 1
+
     # medie per ruolo dei giocatori (per 90'), stagione in corso + scorsa
     pool = players + ((prior or {}).get("players") or [])
     posavg = {}
@@ -859,7 +880,7 @@ def build(data, prior=None, matches=None, now=None, coaches=None, role_rows=None
         th, ta = T.get(str(e["home"]["id"])), T.get(str(e["away"]["id"]))
         if th and ta and e.get("hs") is not None:
             entries.append((th["arch"]["key"], ta["arch"]["key"], e["hs"], e["as"]))
-    return {"T": T, "L": L, "players": {p["id"]: p for p in players}, "prior_players": prior_players,
+    return {"T": T, "L": L, "cup": bool(ext and ext.get("teams")), "players": {p["id"]: p for p in players}, "prior_players": prior_players,
             "posavg": posavg, "matches": matches, "hasPrior": bool(pr_rating), "priorYear": (prior or {}).get("year"),
             "archTable": arch_table(entries), "archMatches": len(entries)}
 
@@ -873,7 +894,7 @@ def public_analysis(A):
                       "form": t["ctx"]["form"][:10], "style": t["style"], "rel": rel,
                       "formations": [{"f": f, "n": c} for f, c in fm],
                       "rating": {"att": round(t["att"], 3), "de": round(t["de"], 3), "prior": t["prior"],
-                                 "priorWeight": round(t["priorWeight"], 2), "midChange": t.get("midChange")},
+                                 "priorWeight": round(t["priorWeight"], 2), "midChange": t.get("midChange"), "euro": t.get("euro")},
                       "dims": t["dims"], "dimsPrev": t["dimsPrev"], "arch": t["arch"], "changes": t["changes"],
                       "summary": t["summary"], "coach": t["coach"], "coachRoles": t.get("coachRoles"),
                       "vacant": t.get("vacant")}
@@ -1579,6 +1600,8 @@ def predict(A, hid, aid, ev=None, extra=None):
         return (n * r + k) / (n + k)
 
     attH, deH, attA, deA = (x ** CALIB for x in (H["att"], H["de"], Aw["att"], Aw["de"]))
+    cup = A.get("cup")
+    neutral = bool((ev or {}).get("neutral"))   # finale in campo neutro: nessun vantaggio del campo
     hr, ar = H["ctx"]["home"], Aw["ctx"]["away"]
     if VENUE_W and hr and hr.get("p"):
         attH = (1 - VENUE_W) * attH + VENUE_W * shr(hr["gf"] / hr["p"] / L["HA"], hr["p"], 4)
@@ -1586,11 +1609,15 @@ def predict(A, hid, aid, ev=None, extra=None):
     if VENUE_W and ar and ar.get("p"):
         attA = (1 - VENUE_W) * attA + VENUE_W * shr(ar["gf"] / ar["p"] / L["AA"], ar["p"], 4)
         deA = (1 - VENUE_W) * deA + VENUE_W * shr(ar["ga"] / ar["p"] / L["HA"], ar["p"], 4)
-    lh, la = L["HA"] * attH * deA, L["AA"] * attA * deH
+    lh, la = (L["AA"] if neutral else L["HA"]) * attH * deA, L["AA"] * attA * deH
     base_h, base_a = lh, la
 
     fh, fa = H["m"].get("form"), Aw["m"].get("form")
     fd = ((fh if fh is not None else 1.4) - (fa if fa is not None else 1.4)) / 3
+    # in coppa forma, accoppiamenti e stili verrebbero da 1-8 partite della competizione: niente effetto sui gol attesi
+    # (la forza europea pesa già le partite recenti, di campionato e di coppa); restano le descrizioni
+    if cup:
+        fd = 0.0
     if abs(fd) > .05:
         adj.append({"team": int(hid), "what": "Forma recente", "pct": FORM_EFF * 100 * fd})
         adj.append({"team": int(aid), "what": "Forma recente", "pct": -FORM_EFF * 100 * fd})
@@ -1598,8 +1625,8 @@ def predict(A, hid, aid, ev=None, extra=None):
     la *= 1 - FORM_EFF * fd
 
     ins = sorted(insights(H, Aw, "h", L["N"]) + insights(Aw, H, "a", L["N"]), key=lambda i: -i["score"])
-    bh = clamp(sum(i["eff"] for i in ins if i["side"] == "h"), -PAIR_CAP, PAIR_CAP)
-    ba = clamp(sum(i["eff"] for i in ins if i["side"] == "a"), -PAIR_CAP, PAIR_CAP)
+    bh = 0.0 if cup else clamp(sum(i["eff"] for i in ins if i["side"] == "h"), -PAIR_CAP, PAIR_CAP)
+    ba = 0.0 if cup else clamp(sum(i["eff"] for i in ins if i["side"] == "a"), -PAIR_CAP, PAIR_CAP)
     if bh:
         adj.append({"team": int(hid), "what": "Accoppiamenti tattici", "pct": bh * 100})
     if ba:
@@ -1609,6 +1636,8 @@ def predict(A, hid, aid, ev=None, extra=None):
 
     # scontro di stili
     clash = style_clash(H, Aw, A)
+    if cup:
+        clash = dict(clash, eff={"h": 0.0, "a": 0.0}, tempo=0.0, cards=0.0)
     for key, tid in (("h", hid), ("a", aid)):
         if clash["eff"][key]:
             adj.append({"team": int(tid), "what": "Scontro di stili", "pct": clash["eff"][key] * 100})
@@ -1655,6 +1684,7 @@ def predict(A, hid, aid, ev=None, extra=None):
 
     mat = score_matrix(lh, la)
     res, scores = outcome_probs(mat)
+    tie = tie_probs(mat, lh, la, (ev or {}).get("tie")) if cup and (ev or {}).get("tie") else None
     outs = [("1", res["p1"], lambda s: s["i"] > s["j"], "Vittoria " + H["team"]["name"]),
             ("X", res["px"], lambda s: s["i"] == s["j"], "Pareggio"),
             ("2", res["p2"], lambda s: s["i"] < s["j"], "Vittoria " + Aw["team"]["name"])]
@@ -1715,11 +1745,34 @@ def predict(A, hid, aid, ev=None, extra=None):
                   "away": {"arch": Aw["arch"], "dims": Aw["dims"], "coach": Aw["coach"]},
                   "items": clash["items"], "tempo": clash["tempo"], "cards": clash["cards"], "poss": clash["poss"],
                   "matches": A.get("archMatches", 0)},
-        "h2h": (extra or {}).get("h2h"),
+        "h2h": (extra or {}).get("h2h"), "tie": tie, "neutral": neutral, "cup": bool(cup),
         "coachRoles": {"home": (H.get("coachRoles") or {}).get("text"), "away": (Aw.get("coachRoles") or {}).get("text")},
         "prior": {"home": H["prior"], "away": Aw["prior"], "weightH": H["priorWeight"], "weightA": Aw["priorWeight"],
                   "year": A["priorYear"]},
     }
+
+
+def tie_probs(mat, lh, la, tie):
+    """Coppa: probabilità di passare il turno. tie: {"first": [gol dell'andata della squadra di casa di oggi, gol
+    dell'ospite di oggi]} (finale: [0, 0]). Pareggio nel totale: supplementari (gol attesi per 30 minuti) e poi rigori
+    a sorte."""
+    f = tie.get("first") or [0, 0]
+    ph = 0.0
+    xh, xa = pois(lh / 3, MAXG), pois(la / 3, MAXG)
+    et_h = sum(xh[i] * xa[j] for i in range(MAXG + 1) for j in range(MAXG + 1) if i > j)
+    et_d = sum(xh[i] * xa[i] for i in range(MAXG + 1))
+    for i, row in enumerate(mat):
+        for j, v in enumerate(row):
+            gh, ga = f[0] + i, f[1] + j
+            ph += v if gh > ga else v * (et_h + et_d / 2) if gh == ga else 0.0
+    return {"home": ph, "away": 1 - ph, "first": f, "final": bool(tie.get("final"))}
+
+
+def base_lambdas(A, hid, aid, neutral=False):
+    """Gol attesi di base (solo la forza delle squadre), per simulare le partite lontane (proiezione della classifica)."""
+    H, Aw, L = A["T"][str(hid)], A["T"][str(aid)], A["L"]
+    attH, deH, attA, deA = (x ** CALIB for x in (H["att"], H["de"], Aw["att"], Aw["de"]))
+    return (L["AA"] if neutral else L["HA"]) * attH * deA, L["AA"] * attA * deH
 
 
 def summary(P):
