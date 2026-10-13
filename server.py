@@ -314,6 +314,9 @@ def espn_event(e, teams):
         out["stage"] = (e.get("season") or {}).get("slug")
         out["leg"] = 2 if note.startswith("2nd Leg") else 1 if note.startswith("1st Leg") else None
         out["neutral"] = bool(c.get("neutralSite")) or out["stage"] == "final"
+        adv = [x["homeAway"] for x in (comp["home"], comp["away"]) if x.get("advance") or (out["stage"] == "final" and x.get("winner"))]
+        if state == "finished" and len(adv) == 1:
+            out["adv"] = adv[0]   # chi passa il turno (anche ai rigori) o vince la finale
     return out
 
 
@@ -1612,10 +1615,33 @@ def cup_prior_players(d):
     return list(out.values())
 
 
+def uefa_coaches(d):
+    """Allenatori ufficiali della UEFA: chi era in panchina nell'ultima partita di Champions di ogni squadra."""
+    out = {}
+    for e in sorted(d.get("played") or [], key=lambda e: e["start"]):
+        coach = (((MATCHES.get(str(e["id"])) or {}).get("uefa") or {}).get("coach") or {})
+        for side in ("home", "away"):
+            if coach.get(side):
+                out[str(e[side]["id"])] = coach[side]
+    return out
+
+
 async def cup_coaches(d, now):
-    """Allenatori delle squadre di Champions: dalle altre leghe dell'app (Serie A, Premier, Liga) e, per gli altri
-    campionati, dalla tabella del personale della loro pagina su Wikipedia in inglese. Una volta al giorno."""
-    if not CUP or now - EXTRA.get("coachAt", 0) < 86400:
+    """Allenatori delle squadre di Champions: quello ufficiale della UEFA (formazioni dell'ultima partita); per chi non
+    ha ancora giocato, dalle altre leghe dell'app (Serie A, Premier, Liga) e, per gli altri campionati, dalla tabella
+    del personale della loro pagina su Wikipedia in inglese (una volta al giorno)."""
+    if not CUP:
+        return
+    official = uefa_coaches(d)
+    if official and any((COACHES.get(t, {}).get("manager") or {}).get("name") != n for t, n in official.items()):
+        for tid, name in official.items():
+            COACHES.setdefault(tid, {})["manager"] = {"id": None, "name": name}
+            COACHES[tid]["wiki"] = {"name": name, "new": None, "left": None}
+            COACHES[tid]["src"] = "UEFA"
+        save_json(COACH_FILE, COACHES)
+        VERSION["coaches"] += 1
+        log(f"Allenatori ufficiali UEFA: {len(official)} squadre")
+    if now - EXTRA.get("coachAt", 0) < 86400 or len(official) >= len(d.get("teams") or {}):
         return
     EXTRA["coachAt"] = now - 86400 + 3600
     P = load_json(FORZA_FILE, None) or {}
@@ -1663,6 +1689,8 @@ async def cup_coaches(d, now):
                 found[tid] = table[best][-1]["name"]
     n = 0
     for tid, name in found.items():
+        if tid in official:   # la UEFA vale più delle altre fonti
+            continue
         c = COACHES.setdefault(tid, {})
         if ((c.get("manager") or {}).get("name")) != name:
             n += 1
@@ -1673,20 +1701,243 @@ async def cup_coaches(d, now):
         VERSION["coaches"] += 1
     EXTRA["coachAt"] = now
     save_json(EXTRA_FILE, EXTRA)
-    log(f"Allenatori della Champions: {len(found)} squadre su {len(d.get('teams') or {})}")
+    log(f"Allenatori della Champions: {len(official)} dalla UEFA, {len([t for t in found if t not in official])} da altre fonti, "
+        f"su {len(d.get('teams') or {})} squadre")
+
+
+# Champions: i dati ufficiali della UEFA (gli stessi di uefa.com): statistiche di squadra con quelle del tracciamento
+# (km percorsi, sprint, velocità massima), statistiche di ogni giocatore, formazioni con gli allenatori e il migliore in
+# campo. Nessuna chiave: sono le richieste pubbliche del sito della UEFA.
+UEFA_MATCHES = "https://match.uefa.com/v5/matches"
+UEFA_STATS = "https://matchstats.uefa.com/v2"
+UEFA_FILE = CACHE / "uefa.json"   # partite UEFA della stagione e collegamento con quelle di ESPN
+UEFA_VERSION = 1
+# statistica UEFA -> chiave corta (squadra)
+UEFA_TEAM = {"ball_possession": "poss", "attempts": "sh", "attempts_on_target": "sot", "passes_attempted": "pa",
+             "passes_completed": "pc", "passes_long_attempted": "pl", "cross_attempted": "cr", "corners": "cor",
+             "recovered_ball": "rec", "recovered_balls_opposite": "reco", "tackles": "tk", "tackles_won": "tkw",
+             "distance_covered": "km", "distance_covered_in_possession": "kmp", "distance_covered_not_in_possession": "kmn",
+             "sprints": "spr", "top_speed": "vmax", "distance_covered_in_high_intensity_running": "hi",
+             "ball_touches_by_player_penalty_area": "box", "delivery_into_penalty_area": "dlv", "dribbling": "drb",
+             "dribbling_successful": "drbw", "fouls_committed": "fc", "saves": "sv", "offsides": "off"}
+# statistica UEFA -> chiave corta (giocatore)
+UEFA_PLAYER = {"minutes_played_official": "min", "distance_covered": "km", "top_speed": "vmax", "sprints": "spr",
+               "distance_covered_in_high_intensity_running": "hi", "recovered_ball": "rec", "recovered_balls_opposite": "reco",
+               "tackles_won": "tkw", "passes_attempted": "pa", "passes_completed": "pc", "key_passes": "kp",
+               "total_ball_touches": "tch", "dribbling_successful": "drbw", "attempts": "sh", "attempts_on_target": "sot",
+               "goals": "g", "assists": "a", "fouls_committed": "fc", "fouls_suffered": "fs", "saves": "sv"}
+
+
+async def uefa_get(url, **params):
+    async with HTTP["web"].get(url, params=params or None, timeout=aiohttp.ClientTimeout(total=60)) as r:
+        if r.status != 200:
+            raise RuntimeError(f"UEFA HTTP {r.status}")
+        return await r.json(content_type=None)
+
+
+def _uefa_name(x):
+    return ((x.get("translations") or {}).get("name") or {}).get("EN") or x.get("internationalName") or x.get("name")
+
+
+def _uefa_stats(rows, keys):
+    out = {}
+    for x in rows or []:
+        k = keys.get(x.get("name"))
+        if k:
+            try:
+                out[k] = round(float(x.get("value")), 3)
+            except (TypeError, ValueError):
+                pass
+    return out
+
+
+def uefa_link(d, U):
+    """Partita ESPN -> partita UEFA: stessa ora (entro 3 ore) e nomi delle squadre più simili."""
+    def sc(espn_team, name):
+        a, b = " ".join(tok_seq(espn_team.get("fullName") or espn_team["name"])), " ".join(tok_seq(name))
+        c = " ".join(tok_seq(espn_team["name"]))
+        return max(difflib.SequenceMatcher(None, a, b).ratio(), difflib.SequenceMatcher(None, c, b).ratio()) + \
+            .3 * len(tokens(espn_team["name"], espn_team.get("fullName")) & tokens(name))
+    link = {}
+    for e in (x for lst in ("played", "live", "next") for x in d.get(lst) or []):
+        best, bs = None, 0.0
+        for uid, m in (U.get("matches") or {}).items():
+            if abs((m.get("t") or 0) - e["start"]) > 3 * 3600:
+                continue
+            v = sc(e["home"], m["h"][1]) + sc(e["away"], m["a"][1])
+            if v > bs:
+                best, bs = uid, v
+        if best and bs >= 1.0:
+            link[str(e["id"])] = best
+    return link
+
+
+async def uefa_step(d, now):
+    """Dati ufficiali della UEFA delle partite giocate (al massimo 12 per giro: ogni partita sono tre richieste)."""
+    if not CUP:
+        return
+    U = load_json(UEFA_FILE, {}) or {}
+    year = season_year(d) + 1   # per la UEFA la stagione 2026/27 è il 2027
+    played = [e for e in d.get("played") or [] if e.get("hs") is not None and e.get("status") == "finished"]
+    todo = [e for e in played if ((MATCHES.get(str(e["id"])) or {}).get("uefa") or {}).get("v") != UEFA_VERSION]
+    unlinked = [e for e in todo if str(e["id"]) not in (U.get("link") or {})]
+    if U.get("year") != year or now - U.get("at", 0) > 6 * 3600 or (unlinked and now - U.get("at", 0) > 1800):
+        ms = []
+        for off in range(0, 500, 100):
+            j = await uefa_get(UEFA_MATCHES, competitionId=1, seasonYear=year, limit=100, offset=off, order="ASC")
+            ms += j or []
+            if len(j or []) < 100:
+                break
+        mm = {}
+        for m in ms:
+            try:
+                t = espn_time((m.get("kickOffTime") or {}).get("dateTime"))
+            except (TypeError, ValueError, AttributeError):
+                continue
+            potm = ((m.get("playerOfTheMatch") or {}).get("player") or {})
+            mm[str(m["id"])] = {"t": t, "h": [str(m["homeTeam"]["id"]), _uefa_name(m["homeTeam"])],
+                                "a": [str(m["awayTeam"]["id"]), _uefa_name(m["awayTeam"])], "st": m.get("status"),
+                                "potm": [str(potm["id"]), _uefa_name(potm)] if potm.get("id") else None}
+        U = {"year": year, "at": now, "matches": mm}
+        U["link"] = uefa_link(d, U)
+        save_json(UEFA_FILE, U)
+    n = 0
+    for e in todo:
+        uid = (U.get("link") or {}).get(str(e["id"]))
+        m = (U.get("matches") or {}).get(uid or "")
+        if not m or m.get("st") != "FINISHED" or n >= 12:
+            continue
+        ts = await uefa_get(f"{UEFA_STATS}/team-statistics/{uid}")
+        ps = await uefa_get(f"{UEFA_STATS}/player-statistics/{uid}")
+        lu = await uefa_get(f"{UEFA_MATCHES}/{uid}/lineups")
+        side_of = {m["h"][0]: "home", m["a"][0]: "away"}
+        t = {side_of[str(x.get("teamId"))]: _uefa_stats(x.get("statistics"), UEFA_TEAM) for x in ts or [] if str(x.get("teamId")) in side_of}
+        people, coach = {}, {}
+        for side, key in (("home", "homeTeam"), ("away", "awayTeam")):
+            T_ = (lu or {}).get(key) or {}
+            for x in (T_.get("field") or []) + (T_.get("bench") or []):
+                pl = x.get("player") or {}
+                if pl.get("id"):
+                    people[str(pl["id"])] = (side, _uefa_name(pl), x.get("jerseyNumber"), pl.get("fieldPosition"))
+            c = ((T_.get("coaches") or [{}])[0] or {}).get("person") or {}
+            if _uefa_name(c):
+                coach[side] = _uefa_name(c)
+        pls = {"home": [], "away": []}
+        for x in ps or []:
+            pid = str(x.get("playerId"))
+            st = _uefa_stats(x.get("statistics"), UEFA_PLAYER)
+            side, name, no, pos = people.get(pid) or (side_of.get(str(x.get("teamId"))), None, None, None)
+            if side and name and st.get("min"):
+                pls[side].append(dict(st, id=pid, n=name, no=no, pos=pos))
+        if not t.get("home") or not t.get("away"):
+            continue   # la UEFA non ha ancora le statistiche: si riprova al prossimo giro
+        x = MATCHES.setdefault(str(e["id"]), {})
+        x["uefa"] = {"v": UEFA_VERSION, "id": uid, "t": t, "p": pls, "coach": coach, "potm": m.get("potm")}
+        n += 1
+    if n:
+        save_json(MATCH_FILE, MATCHES)
+        VERSION["matches"] += 1
+        log(f"Dati UEFA: {n} partite")
+
+
+def uefa_teams(d):
+    """Medie a partita delle statistiche UEFA di ogni squadra in questa Champions e posizione tra le squadre
+    (1 = il valore più alto). -> {id: {"n": partite, "avg": {chiave: media}, "rk": {chiave: posizione}, "N": squadre}}."""
+    sums = {}
+    for e in d.get("played") or []:
+        u = (MATCHES.get(str(e["id"])) or {}).get("uefa") or {}
+        for side in ("home", "away"):
+            st = (u.get("t") or {}).get(side)
+            if not st:
+                continue
+            o = sums.setdefault(str(e[side]["id"]), {"n": 0, "s": {}, "against": {}})
+            o["n"] += 1
+            for k, v in st.items():
+                o["s"][k] = o["s"].get(k, 0.0) + v
+            for k, v in ((u.get("t") or {}).get("away" if side == "home" else "home") or {}).items():
+                o["against"][k] = o["against"].get(k, 0.0) + v
+    out = {}
+    for tid, o in sums.items():
+        avg = {k: v / o["n"] for k, v in o["s"].items()}
+        a = o["s"]
+        if a.get("pa"):
+            avg["pacc"] = 100 * a.get("pc", 0) / a["pa"]           # precisione dei passaggi
+            avg["plong"] = 100 * a.get("pl", 0) / a["pa"]          # quota di lanci lunghi
+        if a.get("rec"):
+            avg["recohi"] = 100 * a.get("reco", 0) / a["rec"]      # palloni recuperati nella metà campo avversaria, in %
+        if a.get("km"):
+            avg["kmnp"] = 100 * a.get("kmn", 0) / a["km"]          # quota di corsa senza palla
+        avg["shc"] = o["against"].get("sh", 0) / o["n"]            # tiri concessi
+        out[tid] = {"n": o["n"], "avg": {k: round(v, 2) for k, v in avg.items()}}
+    keys = {k for o in out.values() for k in o["avg"]}
+    for k in keys:
+        vals = sorted((o["avg"][k] for o in out.values() if k in o["avg"]), reverse=True)
+        for o in out.values():
+            if k in o["avg"]:
+                o.setdefault("rk", {})[k] = vals.index(o["avg"][k]) + 1
+    for o in out.values():
+        o["N"] = len(out)
+    return out
+
+
+def uefa_players(d):
+    """Statistiche UEFA dei giocatori in questa Champions, sommate e collegate all'anagrafica (squadra, nome, numero).
+    -> {id del giocatore: {"n": partite, "min", "km", "vmax" (la più alta), "spr", "hi", "rec", "reco", "tkw", "pa", "pc",
+    "kp", "tch", "drbw"}}."""
+    out = {}
+    for e in d.get("played") or []:
+        u = (MATCHES.get(str(e["id"])) or {}).get("uefa") or {}
+        for side in ("home", "away"):
+            tid = str(e[side]["id"])
+            for x in (u.get("p") or {}).get(side) or []:
+                cid = UEFA_PLAYER_IDS.get(x["id"])
+                if cid is None:
+                    cid = reg_find(x["n"], [tid], x.get("no"))
+                    UEFA_PLAYER_IDS[x["id"]] = cid
+                if not cid:
+                    continue
+                o = out.setdefault(cid, {"n": 0})
+                o["n"] += 1
+                for k, v in x.items():
+                    if k in ("id", "n", "no", "pos"):
+                        continue
+                    o[k] = max(o.get(k, 0), v) if k == "vmax" else round(o.get(k, 0) + v, 3)
+    return out
+UEFA_PLAYER_IDS = {}   # id UEFA -> id dell'anagrafica (si ricalcola a ogni avvio)
+
+
+def uefa_out(d):
+    """Dati UEFA per le pagine: {"uefaTeams": uefa_teams, "uefaPlayers": {id: totali}} (vuoti se non ci sono)."""
+    try:
+        return {"uefaTeams": _r(uefa_teams(d), 2), "uefaPlayers": _r(uefa_players(d), 2)}
+    except Exception as ex:
+        log(f"Dati UEFA per le pagine non preparati: {errtxt(ex)}")
+        return {}
 
 
 def cup_projection(d, A, sims=5000):
-    """Fase campionato della Champions: probabilità di ogni squadra di finire tra le prime 8 (ottavi), dalla 9ª alla
-    24ª (spareggi) o fuori, simulando le partite che mancano con i gol attesi del modello. Criteri di classifica:
-    punti, differenza reti, gol fatti, gol fatti in trasferta, vittorie, vittorie in trasferta (poi a sorte)."""
-    league = {str(e["id"]): e for lst in ("played", "live", "next") for e in d.get(lst) or [] if e.get("stage") in (None, "league-phase")}
-    league = list(league.values())
-    rest = [e for e in league if e.get("status") != "finished" or e.get("hs") is None]
-    # serve il calendario intero (8 partite per squadra): con partite mancanti le probabilità sarebbero sbagliate
-    if not rest or len(league) < len(A["T"]) * 8 // 2:
+    """Champions simulata `sims` volte con i gol attesi del modello: fase campionato (le partite che mancano; criteri:
+    punti, differenza reti, gol fatti, gol fatti in trasferta, vittorie, vittorie in trasferta, poi a sorte) e poi
+    l'eliminazione diretta del formato dal 2024/25. Spareggi: 9ª/10ª contro 23ª/24ª, 11ª/12ª contro 21ª/22ª, 13ª/14ª
+    contro 19ª/20ª, 15ª/16ª contro 17ª/18ª. Ottavi: le vincenti degli spareggi delle coppie 15/16, 13/14, 11/12 e 9/10
+    contro 1ª/2ª, 3ª/4ª, 5ª/6ª e 7ª/8ª. Tabellone: in ogni metà un quarto tra le vie di 1ª/2ª e 7ª/8ª e uno tra 3ª/4ª e
+    5ª/6ª, poi la semifinale tra i due; 1ª e 2ª (come 3ª e 4ª...) stanno in metà diverse. Chi è più in alto in classifica
+    gioca il ritorno in casa negli spareggi e negli ottavi; nei quarti e in semifinale lo decide il sorteggio. Andata e
+    ritorno, poi supplementari (un terzo dei gol attesi) e rigori a sorte; finale in campo neutro. I turni già
+    sorteggiati o giocati (partite di ESPN) si usano come sono, con i risultati veri; quello che il sorteggio non ha
+    ancora deciso si sorteggia a ogni simulazione.
+    -> {id: {"top8", "po", "out", "pts", "r16", "qf", "sf", "final", "win"}, "_left": partite della fase campionato
+    che mancano, "_n": squadre, "_ko": turno a cui è arrivata l'eliminazione diretta}."""
+    evs = {str(e["id"]): e for lst in ("played", "live", "next") for e in d.get(lst) or []}.values()
+    league = [e for e in evs if e.get("stage") in (None, "league-phase")]
+    teams = list(A["T"])
+    # serve il calendario intero della fase campionato (8 partite per squadra): con partite mancanti sarebbe sbagliata
+    if len(league) < len(teams) * 8 // 2 or len(teams) < 36:
         return None
-    base = {tid: [0, 0, 0, 0, 0, 0] for tid in A["T"]}   # punti, differenza, gol, gol fuori, vittorie, vittorie fuori
+    done_ = lambda e: e.get("status") == "finished" and e.get("hs") is not None
+    rest = [e for e in league if not done_(e)]
+    base = {tid: [0, 0, 0, 0, 0, 0] for tid in teams}   # punti, differenza, gol, gol fuori, vittorie, vittorie fuori
+
     def add(st, h, a, gh, ga):
         sh, sa = st[h], st[a]
         sh[1] += gh - ga; sa[1] += ga - gh; sh[2] += gh; sa[2] += ga; sa[3] += ga
@@ -1698,10 +1949,29 @@ def cup_projection(d, A, sims=5000):
             sh[0] += 1; sa[0] += 1
     for e in league:
         h, a = str(e["home"]["id"]), str(e["away"]["id"])
-        if e not in rest and h in base and a in base:
+        if done_(e) and h in base and a in base:
             add(base, h, a, e["hs"], e["as"])
-    lam = [(str(e["home"]["id"]), str(e["away"]["id"]), *model.base_lambdas(A, e["home"]["id"], e["away"]["id"]))
-           for e in rest if str(e["home"]["id"]) in base and str(e["away"]["id"]) in base]
+    lam_cache = {}
+
+    def lam(h, a, neutral=False):
+        k = (h, a, neutral)
+        if k not in lam_cache:
+            lam_cache[k] = model.base_lambdas(A, h, a, neutral)
+        return lam_cache[k]
+    rest_l = [(str(e["home"]["id"]), str(e["away"]["id"])) for e in rest if str(e["home"]["id"]) in base and str(e["away"]["id"]) in base]
+    # classifica vera a fase campionato finita (ESPN ha anche gli ultimi criteri, come i punti delle avversarie)
+    table = (d.get("standings") or {}).get("total") or []
+    real_order = [str(r["team"]["id"]) for r in sorted(table, key=lambda r: r["pos"] or 99)] if not rest else None
+    if real_order and set(real_order) != set(teams):
+        real_order = None
+    # eliminazione diretta già sorteggiata: {fase: {coppia: [andata, ritorno]}}
+    ko = {}
+    for e in evs:
+        if e.get("stage") in KO_STAGES:
+            pair = frozenset((str(e["home"]["id"]), str(e["away"]["id"])))
+            ko.setdefault(e["stage"], {}).setdefault(pair, []).append(e)
+    ko_need = {"knockout-round-playoffs": 8, "round-of-16": 8, "quarterfinals": 4, "semifinals": 2, "final": 1}
+    ko = {st: v for st, v in ko.items() if len(v) == ko_need[st]}   # un turno conta solo se è sorteggiato tutto
     rng = random.Random(7)
 
     def pois(l):
@@ -1711,19 +1981,143 @@ def cup_projection(d, A, sims=5000):
             if p <= lim:
                 return k
             k += 1
-    n = len(base)
-    count = {t: [0, 0, 0] for t in base}
-    pts = {t: 0.0 for t in base}
+
+    def tie(a, b, real=None, final=False):
+        """Vincente tra a e b; a gioca l'andata in casa, b il ritorno. real: partite vere di ESPN della coppia."""
+        real = sorted(real or [], key=lambda e: e["start"])
+        if final:
+            e = real[0] if real else None
+            if e and done_(e) and e.get("adv"):
+                return str(e[e["adv"]]["id"])
+            lh, la = lam(a, b, True)
+            ga, gb = pois(lh), pois(la)
+            if ga == gb:
+                ga += pois(lh / 3); gb += pois(la / 3)
+            return a if ga > gb else b if gb > ga else rng.choice((a, b))
+        if real:
+            a = str(real[0]["home"]["id"])
+            b = str(real[0]["away"]["id"])
+            if len(real) > 1 and done_(real[1]) and real[1].get("adv"):
+                return str(real[1][real[1]["adv"]]["id"])
+        tot = {a: 0, b: 0}
+        for leg, (h, w) in enumerate(((a, b), (b, a))):
+            e = real[leg] if real and leg < len(real) else None
+            if e and done_(e):
+                tot[str(e["home"]["id"])] += e["hs"]; tot[str(e["away"]["id"])] += e["as"]
+            else:
+                lh, la = lam(h, w)
+                tot[h] += pois(lh); tot[w] += pois(la)
+        if tot[a] == tot[b]:   # supplementari nel ritorno (in casa di b), poi rigori
+            lh, la = lam(b, a)
+            tot[b] += pois(lh / 3); tot[a] += pois(la / 3)
+        return a if tot[a] > tot[b] else b if tot[b] > tot[a] else rng.choice((a, b))
+
+    def two_leg(seeded, other, stage):
+        """Coppia degli spareggi o degli ottavi: ritorno in casa della testa di serie, o le partite vere."""
+        real = ko.get(stage, {}).get(frozenset((seeded, other)))
+        return tie(other, seeded, real)
+
+    keys = ("top8", "po", "out", "r16", "qf", "sf", "final", "win")
+    count = {t: dict.fromkeys(keys, 0) for t in teams}
+    pts = dict.fromkeys(teams, 0.0)
     for _ in range(sims):
-        st = {t: list(v) for t, v in base.items()}
-        for h, a, lh, la in lam:
-            add(st, h, a, pois(lh), pois(la))
-        order = sorted(st, key=lambda t: (st[t][0], st[t][1], st[t][2], st[t][3], st[t][4], st[t][5], rng.random()), reverse=True)
+        if real_order:
+            order = real_order
+            for t in teams:
+                pts[t] += base[t][0]
+        else:
+            st = {t: list(v) for t, v in base.items()}
+            for h, a in rest_l:
+                lh, la = lam(h, a)
+                add(st, h, a, pois(lh), pois(la))
+            order = sorted(st, key=lambda t: (st[t][0], st[t][1], st[t][2], st[t][3], st[t][4], st[t][5], rng.random()), reverse=True)
+            for t in teams:
+                pts[t] += st[t][0]
+        rank = {t: i + 1 for i, t in enumerate(order)}
         for i, t in enumerate(order):
-            count[t][0 if i < 8 else 1 if i < 24 else 2] += 1
-            pts[t] += st[t][0]
-    return {t: {"top8": round(c[0] / sims, 3), "po": round(c[1] / sims, 3), "out": round(c[2] / sims, 3),
-                "pts": round(pts[t] / sims, 1)} for t, c in count.items()} | {"_left": len(lam), "_n": n}
+            count[t]["top8" if i < 8 else "po" if i < 24 else "out"] += 1
+        # spareggi: per ogni coppia di teste di serie (9/10, 11/12, 13/14, 15/16) le due avversarie (23/24, 21/22...)
+        po_win = {}   # indice della coppia (0: 9/10 ... 3: 15/16) -> [vincenti]
+        if "knockout-round-playoffs" in ko:
+            for pair, legs in ko["knockout-round-playoffs"].items():
+                x, y = sorted(pair, key=lambda t: rank[t])
+                w = tie(y, x, legs)
+                po_win.setdefault(min(3, max(0, (rank[x] - 9) // 2)), []).append(w)
+        else:
+            for k in range(4):
+                seeds, others = order[8 + 2 * k:10 + 2 * k], order[22 - 2 * k:24 - 2 * k]
+                if rng.random() < .5:
+                    others = others[::-1]
+                po_win[k] = [two_leg(s_, o_, "knockout-round-playoffs") for s_, o_ in zip(seeds, others)]
+        # ottavi: ogni squadra prende il «seme» della testa di serie del suo ottavo (1-8)
+        r16_win = {}   # seme -> vincente
+        if "round-of-16" in ko:
+            for pair, legs in ko["round-of-16"].items():
+                x, y = sorted(pair, key=lambda t: rank[t])
+                r16_win[min(rank[x], 8)] = tie(y, x, legs)
+                for t in pair:
+                    count[t]["r16"] += 1
+        else:
+            for k, (s1, s2) in enumerate(((7, 8), (5, 6), (3, 4), (1, 2))):
+                ws = list(po_win.get(k, []))
+                rng.shuffle(ws)
+                for seed, w in zip((s1, s2), ws):
+                    top = order[seed - 1]
+                    count[top]["r16"] += 1
+                    count[w]["r16"] += 1
+                    r16_win[seed] = two_leg(top, w, "round-of-16")
+        # metà del tabellone: per ogni coppia di semi (1/2, 3/4, 5/6, 7/8) uno per metà, a sorte
+        half = {}
+        for s1, s2 in ((1, 2), (3, 4), (5, 6), (7, 8)):
+            hs_ = (0, 1) if rng.random() < .5 else (1, 0)
+            half[s1], half[s2] = hs_
+        seed_of = {w: sd for sd, w in r16_win.items()}
+        for w in r16_win.values():
+            count[w]["qf"] += 1
+        if "quarterfinals" in ko:
+            qf = [(pair, legs) for pair, legs in ko["quarterfinals"].items()]
+            qf_w = []
+            for pair, legs in qf:
+                x, y = sorted(pair)
+                qf_w.append((tie(x, y, legs), min(seed_of.get(t, 9) for t in pair)))
+        else:
+            qf_w = []
+            for h_ in (0, 1):
+                for g1, g2 in (((1, 2), (7, 8)), ((3, 4), (5, 6))):
+                    a_ = next(r16_win[sd] for sd in g1 if half[sd] == h_)
+                    b_ = next(r16_win[sd] for sd in g2 if half[sd] == h_)
+                    if rng.random() < .5:
+                        a_, b_ = b_, a_
+                    qf_w.append((tie(a_, b_), min(seed_of[a_], seed_of[b_])))
+        for w, _ in qf_w:
+            count[w]["sf"] += 1
+        if "semifinals" in ko:
+            sf_w = [tie(*sorted(pair), legs) for pair, legs in ko["semifinals"].items()]
+        else:
+            # in ogni semifinale un quarto della via 1/2-7/8 e uno della via 3/4-5/6
+            g12 = [w for w, sd in qf_w if sd in (1, 2, 7, 8)]
+            g34 = [w for w, sd in qf_w if sd not in (1, 2, 7, 8)]
+            if len(g12) != 2 or len(g34) != 2:   # quarti veri che non seguono lo schema: semifinali a sorte
+                ws = [w for w, _ in qf_w]
+                rng.shuffle(ws)
+                g12, g34 = ws[:2], ws[2:]
+            elif "quarterfinals" not in ko:
+                g34 = [next(w for w, sd in qf_w if sd not in (1, 2, 7, 8) and half[sd] == half[seed_of[x]]) for x in g12]
+            else:
+                rng.shuffle(g34)
+            sf_w = []
+            for a_, b_ in zip(g12, g34):
+                if rng.random() < .5:
+                    a_, b_ = b_, a_
+                sf_w.append(tie(a_, b_))
+        for w in sf_w:
+            count[w]["final"] += 1
+        fin = ko.get("final")
+        a_, b_ = sf_w
+        count[tie(a_, b_, next(iter(fin.values())) if fin else None, final=True)]["win"] += 1
+    stage = next((st for st in reversed(KO_STAGES) if st in ko), None)
+    return {t: {k: round(c[k] / sims, 3) for k in keys} | {"pts": round(pts[t] / sims, 1)} for t, c in count.items()} | {
+        "_left": len(rest_l), "_n": len(teams), "_ko": stage}
 
 
 async def sources_step(d, now):
@@ -2120,7 +2514,8 @@ async def refresher():
         if d:
             steps = ((("fantacalcio.it", fantacalcio_step), ("designazioni", fc_referees), ("arbitri", fc_prior_referees))
                      if LEGA["fantacalcio"] else (("OneFootball", onefootball_step),))
-            steps += (("forza europea", mondo_step), ("allenatori", cup_coaches)) if CUP else (("Wikipedia", wiki_coaches),)
+            steps += ((("forza europea", mondo_step), ("UEFA", uefa_step), ("allenatori", cup_coaches)) if CUP
+                      else (("Wikipedia", wiki_coaches),))
             for name, step in steps + (("foto", of_photos_step), ("Opta", opta_step)):
                 try:
                     await step(d, now)
@@ -2315,7 +2710,7 @@ def readings():
         base.append((e, {"names": {"home": names.get(h, e["home"]["name"]), "away": names.get(a, e["away"]["name"])},
                          "hs": e["hs"], "as": e["as"], "box": x.get("box"), "ev": x.get("ev"), "us": x.get("us"),
                          "ppda": x.get("ppda"), "f": it.get("final") if it.get("result") else None, "ids": {"home": h, "away": a},
-                         "ref": x.get("referee"), "lu": lineups_minutes(x.get("lineups"), mins)}))
+                         "ref": x.get("referee"), "lu": lineups_minutes(x.get("lineups"), mins), "uefa": x.get("uefa")}))
     prof = letture.profiles([{"ids": m["ids"], "goals": letture.goals_of(m), "us": m["us"], "ev": m["ev"]} for _, m in base])
     reads, by = {}, {}
     for e, m in base:
@@ -2474,6 +2869,8 @@ def snapshot():
                    "fantacalcio": LEGA["fantacalcio"], "cup": CUP},
         # coppa: nomi dei turni («Ottavi – andata»), proiezione della fase campionato, campionato di ogni squadra
         "roundNames": round_names(d), "proj": an.get("proj"),
+        # coppa: dati ufficiali della UEFA (medie delle squadre e statistiche dei giocatori in Champions)
+        **(uefa_out(d) if CUP else {}),
         "leagues": [{"key": k, "name": v["name"], "dir": v["dir"]} for k, v in LEGHE.items()],
     }
 
@@ -2517,6 +2914,7 @@ async def h_data(_):
                               "evidenza": an["evidenza"],
                               "league": {"key": LEGA_KEY, "name": LEGA["name"], "fantacalcio": LEGA["fantacalcio"], "cup": CUP},
                               "roundNames": round_names(STATE["data"]), "proj": an.get("proj"),
+                              **(uefa_out(STATE["data"]) if CUP else {}),
                               "leagues": [{"key": k, "name": v["name"], "port": v["port"]} for k, v in LEGHE.items()],
                               "fantaTeams": len(FANTA.get("teams", [])), "status": status_public(), "now": time.time()})
 

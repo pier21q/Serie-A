@@ -57,7 +57,8 @@ def prepare(matches):
         except ValueError:
             continue
         eu = m["comp"].startswith("uefa.")
-        done.append(dict(m, t=t, eu=eu, neu=m.get("neutral") or m["comp"] == "uefa.super_cup"))
+        # yh e ya: la misura dei gol con cui si stima la forza (gol veri, o gol mescolati agli xG con mix_xg)
+        done.append(dict(m, t=t, eu=eu, neu=m.get("neutral") or m["comp"] == "uefa.super_cup", yh=m["hs"], ya=m["as"]))
     done.sort(key=lambda m: m["t"])
     count = defaultdict(lambda: defaultdict(int))
     for m in done:
@@ -114,19 +115,19 @@ def fit(done, group, now, prev=None, iters=40):
                     (m, w), (lh, la) = rows[i], lam[i]
                     home = m["h"] == t
                     if kind == "A":
-                        g += w * ((m["hs"] - lh) if home else (m["as"] - la))
+                        g += w * ((m["yh"] - lh) if home else (m["ya"] - la))
                         hs += w * (lh if home else la)
                     else:
-                        g += w * ((m["as"] - la) if home else (m["hs"] - lh))
+                        g += w * ((m["ya"] - la) if home else (m["yh"] - lh))
                         hs += w * (la if home else lh)
                 par[t] += (g - K_TEAM * (par[t] - gpar[g_of[t]])) / (hs + K_TEAM)
             for g, ts in mem.items():
                 gpar[g] = K_TEAM * sum(par[t] for t in ts) / (K_TEAM * len(ts) + K_LEAGUE)
         lam = lams()
-        P["mu"] += math.log(sum(w * (m["hs"] + m["as"]) for m, w in rows) / sum(w * (l[0] + l[1]) for (m, w), l in zip(rows, lam)))
+        P["mu"] += math.log(sum(w * (m["yh"] + m["ya"]) for m, w in rows) / sum(w * (l[0] + l[1]) for (m, w), l in zip(rows, lam)))
         for key, sel in (("h", lambda m: not m["neu"] and not m["eu"]), ("he", lambda m: not m["neu"] and m["eu"])):
             lam = lams()
-            num = sum(w * m["hs"] for (m, w), l in zip(rows, lam) if sel(m))
+            num = sum(w * m["yh"] for (m, w), l in zip(rows, lam) if sel(m))
             den = sum(w * l[0] for (m, w), l in zip(rows, lam) if sel(m))
             if num and den:
                 P[key] += math.log(num / den) / 2

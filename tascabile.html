@@ -112,6 +112,8 @@ a.plain{color:inherit;text-decoration:none}
 .tile b{font-family:var(--display);font-size:26px;font-weight:700}
 .ok{color:var(--good)}.ko{color:var(--bad)}
 .tw{overflow-x:auto}
+.path{font-size:13px}.path td{padding-inline:3px}.path th{padding-inline:3px}
+.path td.l{max-width:118px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .muted{color:var(--muted)}
 .live{border-color:color-mix(in srgb,var(--bad) 45%,var(--line))}
 footer{font-size:12px;color:var(--muted);margin-top:28px;max-width:62ch}
@@ -321,13 +323,30 @@ function vClassifica() {
   const rows = D.standings.map(r => { const z = ZONE[r.zone]; if (z) zones.add(r.zone); const q = pj && pj[r.team];
     return `<tr><td class="l"><span class="pos ${z ? 'z-' + z[0] : ''}">${r.pos}</span></td><td class="l"><a class="plain" href="#s${r.team}">${team(r.team, true)}</a></td>
       <td>${r.p}</td><td>${r.gf - r.ga > 0 ? '+' : ''}${r.gf - r.ga}</td><td><b>${r.pts}</b></td>${pj ? `<td>${q ? pc(q.top8) : '–'}</td><td>${q ? pc(q.top8 + q.po) : '–'}</td>` : `<td>${dots((T[r.team] || {}).form)}</td>`}</tr>`; }).join('');
-  const note = cup ? `Le prime 8 vanno agli ottavi, dalla 9ª alla 24ª agli spareggi (andata e ritorno), le altre sono eliminate.${pj ? ` Ottavi e Avanti: probabilità di finire tra le prime 8 e tra le prime 24, da 5.000 simulazioni delle ${pj._left} partite che mancano con i gol attesi del pronostico.` : ''}`
+  const note = cup ? `Le prime 8 vanno agli ottavi, dalla 9ª alla 24ª agli spareggi (andata e ritorno), le altre sono eliminate.${pj ? ` Top 8 e Top 24: probabilità di finire tra le prime 8 e tra le prime 24, da 5.000 simulazioni delle ${pj._left} partite che mancano con i gol attesi del pronostico.` : ''}`
     : "Zone dei posti sicuri per la prossima stagione. La vincitrice della coppa nazionale va in Europa League e un posto Champions in più va alle due nazioni con i migliori risultati europei di quest'anno: si sanno in primavera e possono far scalare le posizioni.";
-  return `<h2>Classifica${cup ? ' <small>fase campionato</small>' : ''}</h2><div class="card tw"><table><thead><tr><th class="l">#</th><th class="l">Squadra</th><th>G</th><th>DR</th><th>Pt</th>${pj ? '<th>Ottavi</th><th>Avanti</th>' : '<th>Forma</th>'}</tr></thead><tbody>${rows}</tbody></table>
+  return `<h2>Classifica${cup ? ' <small>fase campionato</small>' : ''}</h2><div class="card tw"><table><thead><tr><th class="l">#</th><th class="l">Squadra</th><th>G</th><th>DR</th><th>Pt</th>${pj ? '<th>Top 8</th><th>Top 24</th>' : '<th>Forma</th>'}</tr></thead><tbody>${rows}</tbody></table>
     ${zones.size ? `<div class="legend">${[...zones].map(z => `<span><i style="background:var(--${{cl: 'home', el: 'away', co: 'accent', rel: 'bad'}[ZONE[z][0]]})"></i>${ZONE[z][1]}</span>`).join('')}</div>
       <p class="small muted">${note}</p>` : ''}</div>
+    ${pathCard()}
     ${xptsCard()}
     ${D.results.length ? `<h2>Ultimi risultati</h2><div class="card"><table><tbody>${D.results.map(e => `<tr><td class="l">${team(e.home, true)}</td><td class="num"><b>${e.hs}–${e.as}</b></td><td class="l">${team(e.away, true)}</td></tr>`).join('')}</tbody></table></div>` : ''}`;
+}
+
+// coppa: probabilità di arrivare a ogni turno e di vincerla (D.proj, simulazione di tutta la Champions)
+function pathCard() {
+  const pj = D.proj;
+  if (!pj || !Object.values(pj).some(v => v && v.win != null)) return '';
+  const pp = v => v >= .995 ? '100%' : v < .005 ? '–' : pc(v);
+  const ids = Object.keys(pj).filter(k => !k.startsWith('_')).sort((a, b) => ['win', 'final', 'sf', 'qf', 'r16', 'top8']
+    .reduce((r, k) => r || pj[b][k] - pj[a][k], 0));
+  // prima la probabilità di vincere: sul telefono è la colonna che deve vedersi sempre
+  const row = id => `<tr><td class="l"><a class="plain" href="#s${id}">${team(id, true)}</a></td><td><b>${pp(pj[id].win)}</b></td>${['final', 'sf', 'qf', 'r16'].map(k => `<td>${pp(pj[id][k])}</td>`).join('')}</tr>`;
+  const head = '<thead><tr><th class="l">Squadra</th><th>Vince</th><th>Finale</th><th>Semi</th><th>Quarti</th><th>Ottavi</th></tr></thead>';
+  const top = ids.slice(0, 12), rest = ids.slice(12);
+  return `<h2>Percorso previsto <small>fino alla finale</small></h2><div class="card tw"><table class="path">${head}<tbody>${top.map(row).join('')}</tbody></table>
+    ${rest.length ? `<details><summary class="small">Tutte le squadre</summary><table class="path">${head}<tbody>${rest.map(row).join('')}</tbody></table></details>` : ''}
+    <p class="small muted">Probabilità di arrivare a ogni turno e di vincere la coppa, da 5.000 simulazioni del resto della Champions con i gol attesi del pronostico: fase campionato, spareggi (9ª-24ª), ottavi, quarti e semifinali secondo il tabellone del formato UEFA, con supplementari e rigori, e la finale in campo neutro. Le partite giocate contano con il risultato vero e i turni già sorteggiati con gli accoppiamenti veri.</p></div>`;
 }
 
 function xptsCard() {
@@ -406,7 +425,7 @@ function goalsCard(rd) {
       return `<div class="goal"><div class="mn num">${esc(g.m)}<small>${esc(g.sc)}</small></div>
         <div><div class="who">${team(tid, true)}<b>${g.cat === 'autogol' ? 'autogol di ' + esc(g.w) : esc(g.w)}</b><span class="lab ${LABC[g.lab] || ''}">${esc(g.lab)}</span>${g.xg != null ? `<span class="how num">xG ${fx(g.xg, 2)}</span>` : ''}</div>
         <div class="how">${esc(g.how)}</div><p>${esc(g.why)}</p></div></div>`; }).join('')}
-    <p class="small muted">Le etichette dicono perché il gol è nato: <b>errore</b> (rigore causato, autogol, palla persa), <b>palla inattiva</b>, <b>transizione</b> (contropiede), <b>seconda palla</b> (ribattuta non allontanata), <b>difesa superata</b> (cross, filtrante, inserimento), <b>prodezza</b> (tiro difficile, xG basso). Fonti: cronaca Opta di ESPN e xG di ogni tiro di Understat.</p></div>`;
+    <p class="small muted">Le etichette dicono perché il gol è nato: <b>errore</b> (rigore causato, autogol, palla persa), <b>palla inattiva</b>, <b>transizione</b> (contropiede), <b>seconda palla</b> (ribattuta non allontanata), <b>difesa superata</b> (cross, filtrante, inserimento), <b>prodezza</b> (tiro difficile, xG basso). Fonti: ${(D.league || {}).cup ? 'cronaca Opta di ESPN (xG calcolati dalla posizione di ogni tiro) e dati ufficiali UEFA' : 'cronaca Opta di ESPN e xG di ogni tiro di Understat'}.</p></div>`;
 }
 /* andamento: xG accumulati minuto per minuto, con gol ed espulsioni */
 const xgPts = (sh, side, T) => { const pts = [[0, 0]]; let c = 0;
@@ -454,7 +473,7 @@ function readCards(rd) {
     ${rd.sh && rd.sh.length ? `<div class="card"><h3>Andamento della partita <small class="muted">xG accumulati minuto per minuto</small></h3>${xgChart(rd)}
       <p class="small muted">Ogni gradino è un tiro, alto quanto il suo xG. Passa sul grafico per i valori a ogni momento.</p></div>` : ''}
     ${goalsCard(rd)}
-    ${(rd.sh || []).some(x => x[4] != null) ? `<div class="card"><h3>Mappa dei tiri</h3>${shotMap(rd)}<p class="small muted">Tocca un cerchio per minuto, giocatore, xG ed esito (Understat).</p></div>` : ''}
+    ${(rd.sh || []).some(x => x[4] != null) ? `<div class="card"><h3>Mappa dei tiri</h3>${shotMap(rd)}<p class="small muted">Tocca un cerchio per minuto, giocatore, xG ed esito (${rd.src === 'understat' ? 'Understat' : 'posizione dei tiri dalla cronaca Opta di ESPN, xG calcolati come quelli di Understat'}).</p></div>` : ''}
     <div class="card narr"><h3>Come hanno giocato</h3>${rd.game.map(t => `<p>${esc(t)}</p>`).join('')}</div>
     ${(rd.lu || []).length ? `<div class="card narr"><h3>Formazioni</h3>${rd.lu.map(t => `<p>${esc(t)}</p>`).join('')}</div>` : ''}
     ${(rd.ref || []).length ? `<div class="card narr"><h3>Arbitro</h3>${rd.ref.map(t => `<p>${esc(t)}</p>`).join('')}</div>` : ''}
@@ -463,14 +482,14 @@ function readCards(rd) {
 function xgStrip(rd) {
   const tot = (rd.xg[0] + rd.xg[1]) || 1;
   return `<div class="xgs"><span><b>${fx(rd.xg[0], 2)}</b> xG</span><span class="tr" role="img" aria-label="xG ${fx(rd.xg[0], 2)} a ${fx(rd.xg[1], 2)}"><i style="width:${rd.xg[0] / tot * 100}%"></i><i style="width:${rd.xg[1] / tot * 100}%"></i></span><span>xG <b>${fx(rd.xg[1], 2)}</b></span></div>
-    <div class="bl num"><span>${rd.shots[0]} tiri</span><span>${rd.src === 'understat' ? `rigiocata: 1 ${pc(rd.xgp[0])} · X ${pc(rd.xgp[1])} · 2 ${pc(rd.xgp[2])}` : 'xG stimati dalla cronaca'}</span><span>${rd.shots[1]} tiri</span></div>`;
+    <div class="bl num"><span>${rd.shots[0]} tiri</span><span>${rd.src !== 'cronaca' ? `rigiocata: 1 ${pc(rd.xgp[0])} · X ${pc(rd.xgp[1])} · 2 ${pc(rd.xgp[2])}` : 'xG stimati dalla cronaca'}</span><span>${rd.shots[1]} tiri</span></div>`;
 }
 
 /* com'è andata: il pronostico al calcio d'inizio contro la partita vera, e la lettura della partita */
 function vRivedi(id) {
   const it0 = (D.history.items || []).find(i => String(i.id) === String(id));
   const it = it0 && it0.f && it0.result ? it0 : null, rd = (D.reads || {})[String(id)];
-  if (!rd && !it) return back('giornata', 'Giornata') + '<p class="lead" style="margin-top:14px">La lettura di questa partita non è ancora pronta: arriva poco dopo il fischio finale (cronaca di ESPN) e si completa con gli xG di Understat.</p>';
+  if (!rd && !it) return back('giornata', 'Giornata') + '<p class="lead" style="margin-top:14px">La lettura di questa partita non è ancora pronta: arriva poco dopo il fischio finale (cronaca di ESPN)' + ((D.league || {}).cup ? ' e si completa con i dati ufficiali UEFA.</p>' : ' e si completa con gli xG di Understat.</p>');
   if (!it) return `${back('giornata', 'Giornata')}
   <article class="card" style="margin-top:10px">
     <div class="fx-top"><span>${when(rd.start)}${rd.round ? ' · ' + rname(rd.round) : ''}</span><span></span></div>
@@ -762,7 +781,7 @@ function lessonsCard(x) {
   return `<div class="card"><h3>Dalle partite giocate <small class="muted">come segnano e come subiscono</small></h3>
     ${ks.length ? `<ul class="keys">${ks.map(k => `<li><b>${esc(k.t)}</b><small>${esc(k.x)}</small></li>`).join('')}</ul><h4>In stagione</h4>` : ''}
     <ul class="keys">${line(x.home, ph)}${line(x.away, pa)}</ul>
-    <p class="small muted">Dalle letture delle partite giocate (cronaca Opta di ESPN, xG di Understat). Sono indicazioni sul modo in cui le squadre segnano e subiscono: il pronostico non le usa direttamente.</p></div>`;
+    <p class="small muted">Dalle letture delle partite giocate (cronaca Opta di ESPN, ${(D.league || {}).cup ? 'xG dalla posizione dei tiri' : 'xG di Understat'}). Sono indicazioni sul modo in cui le squadre segnano e subiscono: il pronostico non le usa direttamente.</p></div>`;
 }
 function vPartita(id) {
   const x = D.fixtures.find(f => String(f.id) === String(id));
@@ -795,7 +814,7 @@ function vPartita(id) {
     ${refCard(P)}${lineupCard(P, 'home', h)}${lineupCard(P, 'away', a)}
     ${absentCard(P, h, a)}${scorersCard(P, h, a)}${yellowCard(P, h, a)}${heatCard(P, h, a)}
     ${radarCard(h, a)}${mirrorCard(h, a)}${swCard(h, a)}
-    ${(D.league || {}).cup ? `<p class="small muted">Come funziona in Champions: la forza di ogni squadra (attacco e difesa) viene da tutte le sue partite degli ultimi tre anni, nel suo campionato e nelle coppe europee, pesate per quanto sono recenti; ogni squadra è avvicinata alla media del suo campionato e le coppe collegano i campionati tra loro. Provato all'indietro sulle 378 partite di Champions 2024/25 e 2025/26: log loss 0,898 contro 1,014 delle frequenze fisse, esito più probabile azzeccato nel 59% dei casi. Forma, accoppiamenti e stili qui non spostano i gol attesi (in coppa le partite sono troppo poche); restano le assenze. Nei ritorni la probabilità di passare il turno tiene conto dell'andata, dei supplementari e dei rigori.</p>` : `<p class="small muted">Come funziona: per ogni squadra si stima la forza in attacco e in difesa rispetto alla media della ${LGN}: per l'80% dagli xG senza rigori creati e concessi, per il 20% dai gol veri, partendo dalla stagione scorsa e dando sempre più peso a quella in corso. Se l'allenatore è cambiato d'estate la stagione scorsa pesa meno; se è cambiato in corsa, le partite di prima contano un quarto. È la combinazione che ha previsto meglio, provata all'indietro su 1520 partite di Serie A e Premier. Poi si corregge per forma, accoppiamenti tra forze e debolezze, scontro di stili e assenze. I gol attesi alimentano un modello di Poisson con correzione Dixon-Coles.</p>`}
+    ${(D.league || {}).cup ? `<p class="small muted">Come funziona in Champions: la forza di ogni squadra (attacco e difesa) viene da tutte le sue partite degli ultimi tre anni, nel suo campionato e nelle coppe europee, pesate per quanto sono recenti; ogni squadra è avvicinata alla media del suo campionato e le coppe collegano i campionati tra loro. Provato all'indietro sulle 378 partite di Champions 2024/25 e 2025/26: log loss 0,898 contro 1,014 delle frequenze fisse, esito più probabile azzeccato nel 59% dei casi. Forma, accoppiamenti e stili qui non spostano i gol attesi (in coppa le partite sono troppo poche); restano le assenze. Nei ritorni la probabilità di passare il turno tiene conto dell'andata, dei supplementari e dei rigori. Provati anche gli xG al posto dei gol (Understat per i cinque campionati maggiori, la posizione dei tiri per le partite europee): sulle stesse 378 partite non migliorano il pronostico in modo misurabile (0,2%, dentro il margine d'errore), quindi la forza resta calcolata sui gol.</p>` : `<p class="small muted">Come funziona: per ogni squadra si stima la forza in attacco e in difesa rispetto alla media della ${LGN}: per l'80% dagli xG senza rigori creati e concessi, per il 20% dai gol veri, partendo dalla stagione scorsa e dando sempre più peso a quella in corso. Se l'allenatore è cambiato d'estate la stagione scorsa pesa meno; se è cambiato in corsa, le partite di prima contano un quarto. È la combinazione che ha previsto meglio, provata all'indietro su 1520 partite di Serie A e Premier. Poi si corregge per forma, accoppiamenti tra forze e debolezze, scontro di stili e assenze. I gol attesi alimentano un modello di Poisson con correzione Dixon-Coles.</p>`}
   </div>`;
 }
 
@@ -906,7 +925,7 @@ function profileCard(id) {
     <p class="small">${esc(p.segna)} ${esc(p.subisce)}</p>${sp}${zoneRows(p)}
     ${p.note && p.note.length ? `<ul class="sw" style="margin-top:10px">${p.note.map(t => `<li><span class="ic nt" aria-hidden="true">!</span><div>${esc(t)}</div></li>`).join('')}</ul>` : ''}
     ${mine.length ? `<h4>Letture delle ultime partite</h4>${mine.map(x => `<a class="rowlink" href="#r${x.id}"><span>${nm(x.home)} ${x.hs}–${x.as} ${nm(x.away)}</span><span class="muted" style="text-align:right">${esc(x.title)} ›</span></a>`).join('')}` : ''}
-    <p class="small muted">Ogni gol è classificato dalla cronaca Opta (ESPN) e dagli xG di Understat: da dove è nato, non solo chi l'ha segnato.</p></div>`;
+    <p class="small muted">Ogni gol è classificato dalla cronaca Opta (ESPN) e dagli xG ${(D.league || {}).cup ? 'calcolati dalla posizione di ogni tiro' : 'di Understat'}: da dove è nato, non solo chi l'ha segnato.</p></div>`;
 }
 function vSquadra(id) {
   const t = T[id], f = F(id);
@@ -923,13 +942,14 @@ function vSquadra(id) {
     <div style="display:flex;align-items:center;gap:12px">${crest(id)}<div><div class="arch" style="font-size:22px">${esc(t.fullName || t.name)}</div>
       <small class="muted">${r.pos ?? '–'}ª · ${r.pts ?? 0} punti · ${r.w ?? 0}V ${r.d ?? 0}N ${r.l ?? 0}P · gol ${r.gf ?? 0}:${r.ga ?? 0}</small></div></div>
     <div class="chips">${(f.formDet || []).map(g => `<span class="chip"><b class="${g.r === 'V' ? 'ok' : g.r === 'P' ? 'ko' : ''}">${g.r}</b> ${g.gf}–${g.ga} ${g.home ? 'vs' : '@'} ${esc(g.opp)}</span>`).join('')}</div>
+    ${pathChips(id)}
     ${nx[0] ? `<a class="nextlink" href="#p${nx[0].id}">Prossima: ${nx[0].home === String(id) ? 'vs ' + nm(nx[0].away) + ' in casa' : '@ ' + nm(nx[0].home) + ' in trasferta'} · ${when(nx[0].start)} · pronostico ›</a>` : ''}
     <div class="facts">${kp.map(([k, l]) => `<div class="fact"><small>${l}${munit(MK[k])}</small><b class="num">${mval(MK[k], f.m[k])}</b><small>${f.rank[k] ? rankTxt(f, k) : '–'}</small></div>`).join('')}</div>
   </article>
   <div class="stack">
     <div class="card"><h3>Punti di forza</h3><ul class="sw">${s.length ? s.map(M => swItem(f, M, true)).join('') : '<li class="muted">Nessun dato che spicchi nettamente sopra la media</li>'}</ul>
       <h3 style="margin-top:16px">Punti deboli</h3><ul class="sw">${w.length ? w.map(M => swItem(f, M, false)).join('') : '<li class="muted">Nessuna debolezza marcata rispetto al campionato</li>'}</ul></div>
-    ${profileCard(id)}${tacticCard(id)}${coachCard(id)}${rolesCard(id)}${relianceCard(id)}
+    ${profileCard(id)}${uefaTeamCard(id)}${tacticCard(id)}${coachCard(id)}${rolesCard(id)}${relianceCard(id)}
     <div class="card"><h3>Profilo statistico</h3>
       <p class="small muted">La barra indica la posizione tra le ${D.N} squadre: più è lunga, meglio è. Le voci di "Stile" non sono né buone né cattive.</p>
       ${cats.map(c => `<h4>${esc(c)}</h4>${D.metrics.filter(M => M.c === c).map(M => pbar(f, M)).join('')}`).join('')}
@@ -938,6 +958,37 @@ function vSquadra(id) {
     <div class="card"><h3>Ultime partite</h3><table><tbody>${played.map(e => `<tr><td class="l">${team(e.home, true)}</td><td class="num"><b>${e.hs}–${e.as}</b></td><td class="l">${team(e.away, true)}</td><td>${(D.reads || {})[String(e.id)] ? `<a class="plain" href="#r${e.id}" style="color:var(--accent);font-weight:600;font-size:13px">lettura ›</a>` : ''}</td></tr>`).join('') || '<tr><td class="l muted">—</td></tr>'}</tbody></table></div>
     ${nx.length ? `<div class="card"><h3>Prossime partite</h3>${nx.slice(0, 4).map(x => `<a class="rowlink" href="#p${x.id}"><span>${team(x.home, true)}</span><span class="muted">${when(x.start)}</span><span>${team(x.away, true)}</span></a>`).join('')}</div>` : ''}
   </div>`;
+}
+
+// coppa: probabilità della squadra di arrivare a ogni turno (D.proj)
+function pathChips(id) {
+  const q = (D.proj || {})[String(id)];
+  if (!q || q.win == null) return '';
+  const pp = v => v >= .995 ? '100%' : v < .005 ? '–' : pc(v);
+  return `<div class="chips">${[['Ottavi', 'r16'], ['Quarti', 'qf'], ['Semifinale', 'sf'], ['Finale', 'final'], ['Vince', 'win']].map(([l, k]) => `<span class="chip">${l} <b>${pp(q[k])}</b></span>`).join('')}</div>`;
+}
+
+// Champions: come gioca la squadra secondo i dati ufficiali della UEFA (medie a partita e posizione tra le squadre)
+const UEFA_ROWS = [['Intensità', [['km', 'Km percorsi', 1], ['spr', 'Sprint', 0], ['hi', 'Km ad alta intensità', 1], ['kmnp', 'Corsa senza palla (%)', 0]]],
+  ['Pressing e recuperi', [['rec', 'Palloni recuperati', 0], ['reco', '… nella metà campo avversaria', 0], ['recohi', 'Recuperi in avanti (%)', 0], ['tkw', 'Contrasti vinti', 0]]],
+  ['Pallone', [['poss', 'Possesso (%)', 0], ['pa', 'Passaggi', 0], ['pacc', 'Passaggi riusciti (%)', 0], ['plong', 'Lanci lunghi (%)', 0]]],
+  ['Attacco', [['sh', 'Tiri', 1], ['box', 'Tocchi nell\'area avversaria', 0], ['dlv', 'Palloni messi in area', 0], ['cr', 'Cross', 0], ['drbw', 'Dribbling riusciti', 0]]],
+  ['Difesa', [['shc', 'Tiri concessi', 1]]]];
+// tratti che spiccano (tra le prime 4 o le ultime 4): [chiave, se in alto, se in basso]
+const UEFA_TRAITS = [['reco', 'pressa alto: recupera molti palloni nella metà campo avversaria', 'pressa poco in avanti: aspetta più indietro'],
+  ['km', 'corre più di quasi tutte', 'corre meno di quasi tutte'], ['spr', 'fa molti sprint', 'fa pochi sprint'],
+  ['poss', 'tiene il pallone', 'lascia il pallone agli avversari'], ['plong', 'gioca lungo', 'costruisce corto, con pochi lanci'],
+  ['cr', 'cerca molto il cross', ''], ['box', 'sta tanto nell\'area avversaria', 'arriva poco nell\'area avversaria'],
+  ['shc', 'concede molti tiri', 'concede pochissimi tiri']];
+function uefaTeamCard(id) {
+  const u = (D.uefaTeams || {})[String(id)];
+  if (!u || !u.n) return '';
+  const N = u.N, rk = u.rk || {}, a = u.avg || {};
+  const traits = UEFA_TRAITS.map(([k, hi, lo]) => rk[k] && rk[k] <= 4 && hi ? hi : rk[k] && rk[k] > N - 4 && lo ? lo : '').filter(Boolean);
+  return `<div class="card"><h3>Come gioca in Champions <small class="muted">dati ufficiali UEFA</small></h3>
+    ${traits.length ? `<p>${nm(id)} ${traits.slice(0, 4).join('; ')}.</p>` : ''}
+    ${UEFA_ROWS.map(([g, rows]) => `<h4>${g}</h4><div class="tw"><table><tbody>${rows.filter(([k]) => a[k] != null).map(([k, l, dd]) => `<tr><td class="l">${l}</td><td><b>${fx(a[k], dd)}</b></td><td class="l muted">${rk[k]}ª su ${N}</td></tr>`).join('')}</tbody></table></div>`).join('')}
+    <p class="small muted">Medie a partita in ${u.n} ${u.n === 1 ? 'partita' : 'partite'} di questa Champions, dal tracciamento e dalle statistiche ufficiali della UEFA (uefa.com). Posizione: 1ª = il valore più alto.${u.n < 3 ? ' Con così poche partite i numeri cambiano ancora molto.' : ''}</p></div>`;
 }
 
 /* scheda del giocatore */
@@ -1019,7 +1070,28 @@ function vGiocatore(id) {
   return `${backAny}
     <article class="card" style="margin-top:10px"><div class="fx-top"><span>${POSN[pos] || ''}</span><a class="plain" href="#s${tid}">${team(tid, true)}</a></div>
       <h2 style="margin:8px 0 0">${esc(name)}</h2></article>
-    <div class="stack">${next}<div class="card"><h3>Stagione</h3>${season}</div></div>`;
+    <div class="stack">${next}<div class="card"><h3>Stagione</h3>${season}</div>${uefaPlayerCard(id, pos)}</div>`;
+}
+
+// Champions: statistiche ufficiali della UEFA del giocatore (tracciamento compreso), per 90 minuti con la posizione tra
+// i giocatori dello stesso ruolo con almeno 180 minuti
+function uefaPlayerCard(id, pos) {
+  const U = D.uefaPlayers || {}, u = U[String(id)];
+  if (!u || !u.min) return '';
+  const p90 = (x, k) => x.min ? (x[k] || 0) / x.min * 90 : null;
+  const peers = Object.entries(U).filter(([k, x]) => (x.min || 0) >= 180 && (PL[k] || {}).pos === pos).map(([, x]) => x);
+  const enough = u.min >= 180;
+  const rk = (f) => enough ? `${peers.filter(x => f(x) > f(u)).length + 1}° su ${peers.length}` : '';
+  const rows = [['Km percorsi ogni 90\'', x => p90(x, 'km'), 1], ['Velocità massima (km/h)', x => x.vmax || 0, 1], ['Sprint ogni 90\'', x => p90(x, 'spr'), 1],
+    ['Corsa ad alta intensità ogni 90\' (km)', x => p90(x, 'hi'), 2], ['Palloni recuperati ogni 90\'', x => p90(x, 'rec'), 1],
+    ['… nella metà campo avversaria', x => p90(x, 'reco'), 1], ['Tocchi ogni 90\'', x => p90(x, 'tch'), 0], ['Passaggi chiave ogni 90\'', x => p90(x, 'kp'), 1]]
+    .filter(([, f]) => f(u) != null);
+  const pacc = u.pa ? `${Math.round(u.pc / u.pa * 100)}% (${fx(u.pc, 0)} su ${fx(u.pa, 0)})` : '–';
+  return `<div class="card"><h3>In Champions <small class="muted">dati ufficiali UEFA</small></h3>
+    <div class="facts"><div class="fact"><small>Partite</small><b class="num">${u.n}</b></div><div class="fact"><small>Minuti</small><b class="num">${fx(u.min, 0)}</b></div>
+      <div class="fact"><small>Km percorsi</small><b class="num">${fx(u.km, 1)}</b></div><div class="fact"><small>Passaggi riusciti</small><b class="num">${pacc}</b></div></div>
+    <div class="tw"><table><tbody>${rows.map(([l, f, dd]) => `<tr><td class="l">${l}</td><td><b>${fx(f(u), dd)}</b></td><td class="l muted">${rk(f)}${enough ? ' ' + POSP[pos] : ''}</td></tr>`).join('')}</tbody></table></div>
+    <p class="small muted">Dal tracciamento ufficiale della UEFA in questa Champions (uefa.com).${enough ? '' : ' Meno di 180 minuti: niente confronto con gli altri.'}</p></div>`;
 }
 
 /* ricerca di giocatori e squadre */
@@ -1140,7 +1212,7 @@ async function boot() {
   LOGOS = new Set((D.logos || []).map(String));
   MK = Object.fromEntries((D.metrics || []).map(x => [x.k, x]));
   stamp();
-  document.getElementById('foot').textContent = `Versione tascabile di ${LGN}, aggiornata in automatico ogni 30 minuti. Risultati, classifica, formazioni e statistiche delle partite da ESPN; xG da Understat; ${LG.fantacalcio === false ? 'probabili formazioni da OneFootball; allenatori da Wikipedia' : 'voti, probabili formazioni e designazioni arbitrali da Fantacalcio.it'}. I pronostici sono stime statistiche, non certezze.`;
+  document.getElementById('foot').textContent = `Versione tascabile di ${LGN}, aggiornata in automatico ogni 30 minuti. Risultati, classifica, formazioni e statistiche delle partite da ESPN; ${LG.cup ? 'xG dalla posizione dei tiri nella cronaca Opta di ESPN; corsa, pressing, allenatori e migliori in campo dai dati ufficiali UEFA; statistiche dei giocatori nei campionati da Understat' : 'xG da Understat'}; ${LG.fantacalcio === false ? 'probabili formazioni da OneFootball; allenatori da Wikipedia' : 'voti, probabili formazioni e designazioni arbitrali da Fantacalcio.it'}. I pronostici sono stime statistiche, non certezze.`;
   show(location.hash.slice(1) || 'giornata');
 }
 boot();

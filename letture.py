@@ -9,12 +9,13 @@ Understat. Le frasi nascono solo da regole e da questi numeri: niente è inventa
 
 Qui ci sono solo funzioni pure: le richieste le fa server.py.
 """
+import math
 import re
 import unicodedata
 
 # ---------- cronaca ESPN (Opta) ----------
 
-EV_VERSION = 2   # 2: frasi del VAR in fondo ai gol tolte prima di leggere l'assist (le partite vecchie si rileggono)
+EV_VERSION = 3   # 2: frasi del VAR tolte prima di leggere l'assist; 3: coordinate dei tiri (le partite vecchie si rileggono)
 
 ZONE = [("very close range", "a due passi dalla porta", "vicino"), ("six yard box", "dall'area piccola", "vicino"),
         ("more than 35 yards", "da oltre 30 metri", "fuori"), ("long range", "dalla distanza", "fuori"),
@@ -25,8 +26,16 @@ PLACE = [("top left corner", "all'incrocio", "angolo"), ("top right corner", "al
          ("bottom left corner", "nell'angolo basso", "angolo"), ("bottom right corner", "nell'angolo basso", "angolo"),
          ("high centre", "centrale, sotto la traversa", "centro"), ("centre of the goal", "centrale", "centro")]
 BODY = [("right footed", "destro"), ("left footed", "sinistro"), ("header", "colpo di testa")]
-# xG approssimati dalla sola cronaca, se Understat non ha ancora la partita
+# xG approssimati dalla sola cronaca, per i tiri senza coordinate (rarissimi: 2 su 6000)
 EST_XG = {"vicino": .38, "area": .13, "lato": .06, "fuori": .03}
+# xG dalla posizione del tiro (coordinate Opta della cronaca di ESPN, le stesse di Understat), piede o testa, situazione e
+# tipo di assist: regressione logistica tarata il 13/10/2026 sugli xG di Understat di 5000 tiri di Serie A, Premier e Liga
+# (ricerca/xg_modello.py). Sulle 99 partite tenute da parte, xG di squadra: errore medio 0,29 (0,48 con EST_XG),
+# correlazione 0,92 (0,85), totale −3% (−20%). Serve dove Understat non arriva (Champions) e prima che Understat
+# pubblichi la partita. Coefficienti nell'ordine di xg_features.
+XG_W = [-0.7074, -0.0857, -1.2528, 1.7934, -0.33, -0.4819, -0.4363, -0.0977, 0.6513, 0.7448, -0.3667, 0.7684, -0.3012,
+        0.055, -0.2826]
+PEN_XG = .76  # un rigore, come Understat
 
 
 def _minute(disp):
@@ -125,6 +134,31 @@ def _detail(rest):
     return d
 
 
+def xg_features(x, y, head, sit=None, at=None):
+    """Caratteristiche di un tiro per XG_W: x e y sono le coordinate Opta (da 0 a 100, x verso la porta attaccata)."""
+    dx, dy = (100 - x) * 1.05, (y - 50) * .68   # metri dal centro della porta (campo di 105 x 68)
+    dist = max(math.hypot(dx, dy), .5)
+    ang = math.atan2(7.32 * dx, dx * dx + dy * dy - 3.66 ** 2)   # angolo sotto cui si vede la porta
+    if ang < 0:
+        ang += math.pi
+    h, d10 = (1.0 if head else 0.0), dist / 10
+    return [1.0, math.log(dist), d10, ang, h, h * d10, float(sit == "corner"), float(sit == "punizione"),
+            float(sit == "punizione diretta"), float(sit == "contropiede"), float(at == "cross"), float(at == "filtrante"),
+            float(at == "sponda"), d10 * d10, ang * ang]
+
+
+def xg_shot(e):
+    """xG di un tiro della cronaca (evento di parse_espn): dalla posizione se c'è, se no dalla zona."""
+    if e.get("k") == "pens" or e.get("sit") == "rigore":
+        return PEN_XG
+    head = e.get("b") == "colpo di testa"
+    if e.get("cx") is None or e.get("cy") is None:
+        x = EST_XG.get(e.get("z"), .08) * (.6 if head and e.get("z") != "vicino" else 1)
+        return x * (1.3 if e.get("sit") == "contropiede" else 1)
+    z = sum(w * f for w, f in zip(XG_W, xg_features(e["cx"], e["cy"], head, e.get("sit"), e.get("at"))))
+    return 1 / (1 + math.exp(-z))
+
+
 def parse_espn(j):
     """Riepilogo ESPN di una partita finita -> eventi compatti della cronaca, in ordine:
     {"t": minuto, "m": "45'+2'", "p": tempo, "s": "home"/"away", "k": tipo, ...}. Tipi: goal, og (autogol: s è la
@@ -162,6 +196,14 @@ def parse_espn(j):
                 return v
         return None
 
+    # coordinate: dal 2026/27 ESPN le dà da 0 a 100 verso la porta attaccata (come Understat); nelle partite più vecchie
+    # da 0 a 1 in metà campo contando dalla porta attaccata (0,2 = 10 metri), con la larghezza al contrario. Si riconosce
+    # dai tiri della partita (con la scala nuova un tiro non parte mai a meno di un metro dalla propria porta) e si
+    # riporta tutto alla scala nuova: distanze e lati per zona della cronaca («dal lato destro dell'area»...) tornano
+    # uguali nelle due scale (13/10/2026, 9000 tiri di Champions).
+    shot_x = [float((c.get("play") or {}).get("fieldPositionX")) for c in com if (c.get("play") or {}).get("fieldPositionX") is not None
+              and re.match(r"^(Attempt|Goal!)", c["text"])]
+    old_scale = bool(shot_x) and max(shot_x) <= 1.0
     out, period, lines = [], 1, []
     for c in com:
         t = c["text"].strip()
@@ -169,6 +211,12 @@ def parse_espn(j):
         if t.startswith("Second Half begins"):
             period = 2
         e = {"t": _minute(disp), "m": disp, "p": period}
+        play = c.get("play") or {}
+        if play.get("fieldPositionX") is not None and play.get("fieldPositionY") is not None:
+            x, y = float(play["fieldPositionX"]), float(play["fieldPositionY"])
+            if old_scale:
+                x, y = 100 - x * 50, 100 - y * 100
+            e["cx"], e["cy"] = round(x, 1), round(y, 1)
         lines.append(e)   # ogni riga della cronaca, anche quelle che non si salvano (falli, angoli...)
         m = re.match(r"^Goal! .+?\d+, .+?\d+\. (.+?) \(([^)]+)\) (.*)$", t)
         if m:
@@ -285,6 +333,12 @@ def fx(v, d=2):
     return f"{v:.{d}f}".replace(".", ",")
 
 
+def pct_in(p):
+    """«nel 56%», «nell'8%», «in meno dell'1%»."""
+    v = round(p * 100)
+    return "in meno dell'1%" if v < 1 else ("nell'" if str(v)[0] == "8" or v in (1, 11) else "nel ") + f"{v}%"
+
+
 def other(s):
     return "away" if s == "home" else "home"
 
@@ -307,26 +361,46 @@ def xg_outcome(sh_h, sh_a):
     return [p1, px, max(0.0, 1 - p1 - px)]
 
 
-def shots_of(m):
-    """Tiri della partita {home: [(minuto, xG, giocatore, esito, situazione, ultima azione)], away: [...]} e la fonte
-    degli xG: Understat, oppure una stima dalla cronaca se Understat non ha ancora la partita."""
+def us_like(ev):
+    """Tiri della cronaca di ESPN nel formato di Understat (parse_understat), con gli xG di xg_shot: dove Understat non
+    c'è (Champions) o non ha ancora la partita. [minuto, giocatore, xG, esito, situazione, tipo di tiro, ultima azione,
+    assist, X, Y]."""
+    res = {"saved": "SavedShot", "missed": "MissedShots", "blocked": "BlockedShot"}
+    sit_of = {"corner": "FromCorner", "punizione": "SetPiece", "punizione diretta": "DirectFreekick", "rigore": "Penalty"}
+    last_of = {"cross": "Cross", "filtrante": "Throughball", "sponda": "HeadPass"}
+    out = {"home": [], "away": []}
+    for e in ev or []:
+        if e.get("k") not in ("goal", "shot", "wood", "pens") or e.get("s") not in out:
+            continue
+        pen = e["k"] == "pens" or e.get("sit") == "rigore"
+        r = ("Goal" if e["k"] == "goal" else "ShotOnPost" if e["k"] == "wood" else
+             ("SavedShot" if e.get("x") == "parato" else "MissedShots") if e["k"] == "pens" else res.get(e.get("r"), "MissedShots"))
+        x, y = (e.get("cx"), e.get("cy")) if e.get("cx") is not None else ((88.5, 50.0) if pen else (None, None))
+        out[e["s"]].append([int(e.get("t") or 0), e.get("w"), round(xg_shot(e), 3), r, "Penalty" if pen else sit_of.get(e.get("sit"), "OpenPlay"),
+                            {"colpo di testa": "Head", "destro": "RightFoot", "sinistro": "LeftFoot"}.get(e.get("b"), "OtherBodyPart"),
+                            "Rebound" if e.get("rb") else last_of.get(e.get("at")), e.get("a"),
+                            round(x / 100, 3) if x is not None else None, round(y / 100, 3) if y is not None else None])
+    return out
+
+
+def shot_source(m):
+    """Da dove vengono i tiri della partita: ("understat" | "posizione" | "cronaca", tiri nel formato di Understat).
+    "posizione": xG dalle coordinate della cronaca (xg_shot); "cronaca": tiri senza coordinate, xG per zone."""
     us = m.get("us")
     if us and (us.get("home") or us.get("away")):
-        return {s: [(x[0], x[2], x[1], x[3], x[4], x[6], x[8] if len(x) > 9 else None, x[9] if len(x) > 9 else None)
-                    for x in us.get(s) or [] if x[3] != "OwnGoal"] for s in ("home", "away")}, "understat"
-    out = {"home": [], "away": []}
-    res = {"saved": "SavedShot", "missed": "MissedShots", "blocked": "BlockedShot"}
-    for e in (m.get("ev") or {}).get("ev") or []:
-        if e["k"] in ("goal", "shot", "wood") or e["k"] == "pens":
-            if e["k"] == "pens" or e.get("sit") == "rigore":
-                x = .76
-            else:
-                x = EST_XG.get(e.get("z"), .08) * (.6 if e.get("b") == "colpo di testa" and e.get("z") != "vicino" else 1)
-                x *= 1.3 if e.get("sit") == "contropiede" else 1
-            r = ("Goal" if e["k"] == "goal" else "ShotOnPost" if e["k"] == "wood" else
-                 ("SavedShot" if e.get("x") == "parato" else "MissedShots") if e["k"] == "pens" else res.get(e.get("r"), "MissedShots"))
-            out[e["s"]].append((e.get("t") or 0, round(x, 3), e.get("w"), r, "Penalty" if x == .76 else "OpenPlay", None, None, None))
-    return out, "cronaca"
+        return "understat", us
+    sh = us_like((m.get("ev") or {}).get("ev"))
+    allx = [x for s in ("home", "away") for x in sh[s]]
+    pos = XG_W is not None and allx and sum(1 for x in allx if x[8] is not None) >= .9 * len(allx)
+    return ("posizione" if pos else "cronaca"), sh
+
+
+def shots_of(m):
+    """Tiri della partita {home: [(minuto, xG, giocatore, esito, situazione, ultima azione, X, Y)], away: [...]} e la
+    fonte degli xG (shot_source)."""
+    src, us = shot_source(m)
+    return {s: [(x[0], x[2], x[1], x[3], x[4], x[6], x[8] if len(x) > 9 else None, x[9] if len(x) > 9 else None)
+                for x in us.get(s) or [] if x[3] != "OwnGoal"] for s in ("home", "away")}, src
 
 
 # ---------- i gol ----------
@@ -629,10 +703,12 @@ def read_match(m, prof=None):
                 s_ += f" Il possesso {art(nm(top), 'di')} si è tradotto in occasioni ({fx(xg[top])} xG a {fx(xg[lo])})."
         game.append(s_)
     # 2. le occasioni
-    tag = "xG" if src == "understat" else "xG stimati dalla cronaca"
+    tag = {"understat": "xG", "posizione": "xG (dalla posizione dei tiri)"}.get(src, "xG stimati dalla cronaca")
     game.append(f"Occasioni: {nm('home')} {fx(xg['home'])} {tag} con {nsh['home']} tiri, {nm('away')} {fx(xg['away'])} con {nsh['away']}."
-                + (f" Rigiocandola con le stesse occasioni finirebbe 1 nel {round(xgp[0] * 100)}% dei casi, X nel {round(xgp[1] * 100)}%, 2 nel {round(xgp[2] * 100)}%."
-                   if src == "understat" else ""))
+                + (f" Rigiocandola con le stesse occasioni finirebbe 1 {pct_in(xgp[0])} dei casi, X {pct_in(xgp[1])}, 2 {pct_in(xgp[2])}."
+                   if src in ("understat", "posizione") else ""))
+    # 2b. corsa e pressing: i dati ufficiali della UEFA (tracciamento), dove ci sono (Champions)
+    game += uefa_lines(m, nm)
     # 3. le fasi: tra un gol (o un'espulsione) e il successivo, almeno 20 minuti
     marks = sorted([(g["t"] or 0, "g", g) for g in goals] + [(r.get("t") or 0, "r", r) for r in reds], key=lambda x: x[0])
     sc = {"home": 0, "away": 0}
@@ -746,6 +822,29 @@ def read_match(m, prof=None):
         out["verdict"] = verdict(m, xg, xgp, goals, reds, big, nm, shots, not_started)
         out["pred"] = {"p1": f.get("p1"), "px": f.get("px"), "p2": f.get("p2"), "label": (f.get("pick") or {}).get("label"),
                        "lh": f.get("lh"), "la": f.get("la")}
+    return out
+
+
+def uefa_lines(m, nm):
+    """Frasi dai dati ufficiali della UEFA della partita (m["uefa"], solo Champions): corsa, sprint, pressing alto
+    (palloni recuperati nella metà campo avversaria) e il migliore in campo scelto dalla UEFA."""
+    u = m.get("uefa") or {}
+    t = u.get("t") or {}
+    h, a = t.get("home") or {}, t.get("away") or {}
+    out = []
+    if h.get("km") and a.get("km") and h.get("reco") is not None and a.get("reco") is not None:
+        s_ = (f"Corsa e pressing (dati ufficiali UEFA): {nm('home')} {fx(h['km'], 1)} km, {int(h.get('spr') or 0)} sprint e "
+              f"{int(h['reco'])} palloni recuperati nella metà campo avversaria; {nm('away')} {fx(a['km'], 1)} km, "
+              f"{int(a.get('spr') or 0)} sprint e {int(a['reco'])} palloni recuperati in avanti.")
+        hi = "home" if h["reco"] > a["reco"] else "away"
+        if abs(h["reco"] - a["reco"]) >= 6:
+            s_ += f" Ha pressato più alto {art(nm(hi))}."
+        run = "home" if h["km"] > a["km"] else "away"
+        if abs(h["km"] - a["km"]) >= 4:
+            s_ += f" {cap(art(nm(run)))} ha corso {fx(abs(h['km'] - a['km']), 1)} km in più."
+        out.append(s_)
+    if u.get("potm"):
+        out.append(f"Migliore in campo per la UEFA: {u['potm'][1]}.")
     return out
 
 
@@ -1001,7 +1100,7 @@ def profiles(matches):
     """matches: [{"ids": {home, away}, "goals": goals_of(...), "us": tiri Understat, "ev": cronaca}] ->
     {id squadra: {"n": partite, "gf": {categoria: gol}, "ga": {...}, "tf": {etichetta: gol}, "ta": {...},
     "xgf": {situazione: xG}, "xga": {...}, "late": [fatti, subiti dall'80'], "early": [fatti, subiti entro il 15'],
-    "err": {rigori causati, autogol, palle perse}, "fb": [tiri in contropiede fatti, subiti], "nus": partite con Understat}}."""
+    "err": {rigori causati, autogol, palle perse}, "fb": [tiri in contropiede fatti, subiti], "nus": partite con i tiri (Understat o cronaca con le coordinate)}}."""
     P = {}
     for mm in matches:
         ids = mm.get("ids") or {}
@@ -1025,7 +1124,7 @@ def profiles(matches):
             if g.get("lab") == "Errore":
                 key = {"rigore": "rigori causati", "autogol": "autogol"}.get(g["cat"], "palle perse")
                 a["err"][key] = a["err"].get(key, 0) + 1
-        us = mm.get("us") or {}
+        src, us = shot_source(mm)
         if us.get("home") or us.get("away"):
             for s in ("home", "away"):
                 P[str(ids.get(s))]["nus"] += 1
