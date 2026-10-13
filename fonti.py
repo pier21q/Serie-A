@@ -240,7 +240,7 @@ def parse_cambi_en(page):
         cell = lambda g, i: g[i] if i is not None and i < len(g) else ""
         out = []
         for g in grid[1:]:
-            if not cell(g, it) or not cell(g, io):
+            if not cell(g, it) or not cell(g, io) or cell(g, it).lower() == head[it]:   # riga d'intestazione ripetuta
                 continue
             how = cell(g, ih).lower()
             out.append({"team": cell(g, it), "out": clean(cell(g, io)), "how": next((v for k, v in COME.items() if k in how), None),
@@ -262,7 +262,7 @@ def parse_personale_en(page):
             continue
         clean = lambda s: re.sub(r"\s*\((?:caretaker|interim)\)", "", s or "", flags=re.I).strip()
         return {g[it]: [{"name": clean(g[im]), "from": None, "to": None}] for g in grid[1:]
-                if len(g) > max(it, im) and g[it] and clean(g[im])}
+                if len(g) > max(it, im) and g[it] and clean(g[im]) and g[it].lower() != head[it]}   # niente riga d'intestazione
     return {}
 
 

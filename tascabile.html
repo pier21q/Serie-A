@@ -16,21 +16,28 @@
 :root[data-theme="dark"]{
   color-scheme:dark;--ground:#0A1120;--surface:#121B2E;--surface2:#1A2540;--ink:#EEF2F8;--ink2:#C3CCDA;--muted:#93A0B8;--line:#24314D;
   --accent:#A3E635;--on-accent:#0A1120;--home:#6B8CFF;--draw:#4A566E;--away:#FF8A4C;--good:#34C26B;--warn:#E0A63A;--bad:#F07167;--conf:#2DD4BF;}
-/* ogni lega con i suoi colori (data-lega su <html>: lo mette sito.prepara, e boot() nell'anteprima): accento, fascia in
-   alto e una tinta leggera dell'intestazione. Blu e arancione restano di casa e ospiti, in tutte le leghe. */
-:root[data-lega="serie-a"]{--accent:#1565C0;--on-accent:#FFFFFF;--brand:#0B3D91;--band:linear-gradient(90deg,#009246 0 33.4%,#F4F5F0 33.4% 66.6%,#CE2B37 66.6%)}
-:root[data-lega="premier"]{--accent:#37003C;--on-accent:#FFFFFF;--brand:#37003C;--band:linear-gradient(90deg,#37003C,#E90052 45%,#04F5FF 75%,#00FF85)}
-:root[data-lega="liga"]{--accent:#C8231B;--on-accent:#FFFFFF;--brand:#D42A22;--band:linear-gradient(90deg,#AA151B 0 25%,#F1BF00 25% 75%,#AA151B 75%)}
-:root[data-lega="champions"]{--accent:#1B3A8C;--on-accent:#FFFFFF;--brand:#0A1A4A;--band:linear-gradient(90deg,#0A1A4A,#1B3A8C 45%,#D9E2F2)}
+/* ogni lega con i suoi colori (data-lega su <html>: lo mette sito.prepara, e boot() nell'anteprima). L'intestazione è
+   tutta nel colore della lega (--hdr, testo bianco, pulsante attivo --hdr-hi), con in cima una fascia dei colori del
+   paese (--band); nella pagina cambia l'accento. Blu e arancione restano di casa e ospiti, in tutte le leghe. */
+:root[data-lega="serie-a"]{--accent:#1565C0;--on-accent:#FFFFFF;--brand:#0B3D91;--hdr:linear-gradient(120deg,#0B3D91,#1E7BE0);--hdr-ink:#0B3D91;--hdr-hi:#FFFFFF;--hdr-hi-ink:#0B3D91;--band:linear-gradient(90deg,#009246 0 33.4%,#F4F5F0 33.4% 66.6%,#CE2B37 66.6%)}
+:root[data-lega="premier"]{--accent:#37003C;--on-accent:#FFFFFF;--brand:#37003C;--hdr:linear-gradient(120deg,#37003C,#6A1475);--hdr-ink:#37003C;--hdr-hi:#00FF85;--hdr-hi-ink:#37003C;--band:linear-gradient(90deg,#00FF85,#04F5FF 40%,#E90052 75%,#963CFF)}
+:root[data-lega="liga"]{--accent:#C8231B;--on-accent:#FFFFFF;--brand:#D42A22;--hdr:linear-gradient(120deg,#E8382E,#FF6B57);--hdr-ink:#B81E17;--hdr-hi:#F1BF00;--hdr-hi-ink:#5A0B07;--band:linear-gradient(90deg,#AA151B 0 25%,#F1BF00 25% 75%,#AA151B 75%)}
+:root[data-lega="bundesliga"]{--accent:#C8030F;--on-accent:#FFFFFF;--brand:#D20515;--hdr:linear-gradient(120deg,#6B0209,#C8030F);--hdr-ink:#8A030C;--hdr-hi:#FFFFFF;--hdr-hi-ink:#8A030C;--band:linear-gradient(90deg,#000000 0 33.4%,#DD0000 33.4% 66.6%,#FFCE00 66.6%)}
+:root[data-lega="ligue1"]{--accent:#1A3F8F;--on-accent:#FFFFFF;--brand:#091C3E;--hdr:linear-gradient(120deg,#0B1F3A,#1E4D8F);--hdr-ink:#0B1F3A;--hdr-hi:#EF4135;--hdr-hi-ink:#FFFFFF;--band:linear-gradient(90deg,#0055A4 0 33.4%,#F4F5F0 33.4% 66.6%,#EF4135 66.6%)}
+:root[data-lega="champions"]{--accent:#1B3A8C;--on-accent:#FFFFFF;--brand:#0A1A4A;--hdr:radial-gradient(circle at 12% 30%,rgba(255,255,255,.55) 0 1px,transparent 1.6px),radial-gradient(circle at 34% 72%,rgba(255,255,255,.45) 0 1px,transparent 1.6px),radial-gradient(circle at 58% 22%,rgba(255,255,255,.5) 0 1px,transparent 1.6px),radial-gradient(circle at 81% 64%,rgba(255,255,255,.45) 0 1px,transparent 1.6px),radial-gradient(circle at 93% 18%,rgba(255,255,255,.4) 0 1px,transparent 1.6px),linear-gradient(120deg,#030A26,#14236E);--hdr-ink:#0A1A4A;--hdr-hi:#D9E2F2;--hdr-hi-ink:#0A1A4A;--band:linear-gradient(90deg,#0A1A4A,#3B5BB8 45%,#D9E2F2)}
 @media (prefers-color-scheme:dark){
-  :root[data-lega="serie-a"]:not([data-theme="light"]){--accent:#5CB3FF;--on-accent:#06122A;--brand:#1E7BE0}
-  :root[data-lega="premier"]:not([data-theme="light"]){--accent:#00FF85;--on-accent:#37003C;--brand:#7A1F86}
-  :root[data-lega="liga"]:not([data-theme="light"]){--accent:#FF6B5E;--on-accent:#1A0705;--brand:#FF4B44}
-  :root[data-lega="champions"]:not([data-theme="light"]){--accent:#C9D6EE;--on-accent:#0A1A4A;--brand:#3B5BB8}}
-:root[data-lega="serie-a"][data-theme="dark"]{--accent:#5CB3FF;--on-accent:#06122A;--brand:#1E7BE0}
-:root[data-lega="premier"][data-theme="dark"]{--accent:#00FF85;--on-accent:#37003C;--brand:#7A1F86}
-:root[data-lega="liga"][data-theme="dark"]{--accent:#FF6B5E;--on-accent:#1A0705;--brand:#FF4B44}
-:root[data-lega="champions"][data-theme="dark"]{--accent:#C9D6EE;--on-accent:#0A1A4A;--brand:#3B5BB8}
+  :root[data-lega="serie-a"]:not([data-theme="light"]){--accent:#5CB3FF;--on-accent:#06122A}
+  :root[data-lega="premier"]:not([data-theme="light"]){--accent:#00FF85;--on-accent:#37003C}
+  :root[data-lega="liga"]:not([data-theme="light"]){--accent:#FF6B5E;--on-accent:#1A0705}
+  :root[data-lega="bundesliga"]:not([data-theme="light"]){--accent:#FF5A5F;--on-accent:#1A0505}
+  :root[data-lega="ligue1"]:not([data-theme="light"]){--accent:#8DB3FF;--on-accent:#08142E}
+  :root[data-lega="champions"]:not([data-theme="light"]){--accent:#C9D6EE;--on-accent:#0A1A4A}}
+:root[data-lega="serie-a"][data-theme="dark"]{--accent:#5CB3FF;--on-accent:#06122A}
+:root[data-lega="premier"][data-theme="dark"]{--accent:#00FF85;--on-accent:#37003C}
+:root[data-lega="liga"][data-theme="dark"]{--accent:#FF6B5E;--on-accent:#1A0705}
+:root[data-lega="bundesliga"][data-theme="dark"]{--accent:#FF5A5F;--on-accent:#1A0505}
+:root[data-lega="ligue1"][data-theme="dark"]{--accent:#8DB3FF;--on-accent:#08142E}
+:root[data-lega="champions"][data-theme="dark"]{--accent:#C9D6EE;--on-accent:#0A1A4A}
 *{box-sizing:border-box}
 body{background:var(--ground);color:var(--ink);font-family:var(--body);font-size:15px;line-height:1.45}
 .wrap{max-width:720px;margin:0 auto;padding-inline:16px;padding-block:0 40px}
@@ -38,6 +45,18 @@ body{background:var(--ground);color:var(--ink);font-family:var(--body);font-size
 header{position:sticky;top:env(safe-area-inset-top,0px);z-index:5;background:color-mix(in srgb,color-mix(in srgb,var(--brand) 7%,var(--ground)) 90%,transparent);backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);border-bottom:1px solid var(--line)}
 header::before{content:"";display:block;height:4px;background:var(--band)}
 header .wrap{padding-block:0}   /* il margine in fondo serve alla pagina, non all'intestazione */
+/* intestazione nel colore della lega */
+:root[data-lega] header{background:var(--hdr);color:#FFFFFF;border-bottom:0;backdrop-filter:none;-webkit-backdrop-filter:none;box-shadow:0 1px 6px rgba(0,0,0,.18)}
+:root[data-lega] header::before{height:5px}
+:root[data-lega] .logo span{color:rgba(255,255,255,.75)}
+:root[data-lega] .logo .emb{box-shadow:0 0 0 2px rgba(255,255,255,.55)}
+:root[data-lega] .stamp{color:rgba(255,255,255,.82)}
+:root[data-lega] .stamp .warn{color:#FFD58A}
+:root[data-lega] .leghe a{color:rgba(255,255,255,.92);border-color:rgba(255,255,255,.38)}
+:root[data-lega] .leghe a[aria-current="page"]{background:var(--hdr-hi);border-color:var(--hdr-hi);color:var(--hdr-hi-ink)}
+:root[data-lega] nav a{color:rgba(255,255,255,.86)}
+:root[data-lega] nav a[aria-current="page"]{background:#FFFFFF;color:var(--hdr-ink)}
+:root[data-lega] nav a:focus-visible{outline-color:#FFFFFF}
 .logo .emb{width:30px;height:30px;border-radius:8px;vertical-align:-4px;margin-right:9px;box-shadow:0 1px 3px rgba(0,0,0,.18)}
 @media (max-width:420px){.logo span{display:none}}   /* sul telefono basta l'emblema con il nome della lega */
 .bar1{display:flex;align-items:baseline;gap:10px;padding-block:12px 6px}
@@ -95,7 +114,7 @@ td{padding:7px 4px;border-bottom:1px solid var(--line);text-align:right}
 th.l,td.l{text-align:left}
 tr:last-child td{border-bottom:0}
 .pos{display:inline-block;width:22px;text-align:center;font-weight:600;border-left:3px solid transparent;padding-left:2px}
-.z-cl{border-color:var(--home)}.z-el{border-color:var(--away)}.z-co{border-color:var(--conf)}.z-rel{border-color:var(--bad)}
+.z-cl{border-color:var(--home)}.z-el{border-color:var(--away)}.z-co{border-color:var(--conf)}.z-rp{border-color:var(--warn)}.z-rel{border-color:var(--bad)}
 .legend{display:flex;flex-wrap:wrap;gap:12px;margin-top:8px;font-size:12px;color:var(--ink2)}
 .legend i{display:inline-block;width:10px;height:3px;margin-right:5px;vertical-align:middle}
 .seg{display:flex;flex-wrap:wrap;gap:6px}
@@ -336,7 +355,7 @@ function vGiornata() {
       <div class="more">Scheda completa ›</div></a>`).join('')}</div>`).join('');
 }
 
-const ZONE = {'Champions League': ['cl', 'Champions League'], 'Europa League': ['el', 'Europa League'], 'Conference League Qualification': ['co', 'Conference League'], 'Conference League': ['co', 'Conference League'], 'Relegation': ['rel', 'Retrocessione'],
+const ZONE = {'Champions League': ['cl', 'Champions League'], 'Champions League Qualification': ['cl', 'Champions (preliminari)'], 'Europa League': ['el', 'Europa League'], 'Relegation Playoff': ['rp', 'Spareggio salvezza'], 'Conference League Qualification': ['co', 'Conference League'], 'Conference League': ['co', 'Conference League'], 'Relegation': ['rel', 'Retrocessione'],
   'Round of 16': ['cl', 'Ottavi'], 'Playoffs': ['el', 'Spareggi'], 'Eliminated': ['rel', 'Eliminate']};
 function vClassifica() {
   const zones = new Set(), cup = (D.league || {}).cup, pj = D.proj || null;
@@ -346,7 +365,7 @@ function vClassifica() {
   const note = cup ? `Le prime 8 vanno agli ottavi, dalla 9ª alla 24ª agli spareggi (andata e ritorno), le altre sono eliminate.${pj ? ` Top 8 e Top 24: probabilità di finire tra le prime 8 e tra le prime 24, da 5.000 simulazioni delle ${pj._left} partite che mancano con i gol attesi del pronostico.` : ''}`
     : "Zone dei posti sicuri per la prossima stagione. La vincitrice della coppa nazionale va in Europa League e un posto Champions in più va alle due nazioni con i migliori risultati europei di quest'anno: si sanno in primavera e possono far scalare le posizioni.";
   return `<h2>Classifica${cup ? ' <small>fase campionato</small>' : ''}</h2><div class="card tw"><table><thead><tr><th class="l">#</th><th class="l">Squadra</th><th>G</th><th>DR</th><th>Pt</th>${pj ? '<th style="white-space:nowrap">Top 8</th><th style="white-space:nowrap">Top 24</th>' : '<th>Forma</th>'}</tr></thead><tbody>${rows}</tbody></table>
-    ${zones.size ? `<div class="legend">${[...zones].map(z => `<span><i style="background:var(--${{cl: 'home', el: 'away', co: 'conf', rel: 'bad'}[ZONE[z][0]]})"></i>${ZONE[z][1]}</span>`).join('')}</div>
+    ${zones.size ? `<div class="legend">${[...zones].map(z => `<span><i style="background:var(--${{cl: 'home', el: 'away', co: 'conf', rp: 'warn', rel: 'bad'}[ZONE[z][0]]})"></i>${ZONE[z][1]}</span>`).join('')}</div>
       <p class="small muted">${note}</p>` : ''}</div>
     ${pathCard()}
     ${xptsCard()}
@@ -1229,6 +1248,8 @@ async function boot() {
   document.querySelector('.logo').classList.toggle('long', LGN.length > 10);
   const up = LG.dir ? '../' : '';
   document.getElementById('leghe').innerHTML = (D.leagues || []).length > 1 ? D.leagues.map(l => `<a href="${up + (l.dir ? l.dir + '/' : '') || './'}" aria-current="${l.dir === LG.dir ? 'page' : 'false'}">${esc(l.name.replace(/ League$/, ''))}</a>`).join('') : '';   // «Premier», «Champions»: sul telefono ci stanno tutte
+  const cur = document.querySelector('.leghe a[aria-current="page"]');   // con sei leghe la riga scorre: quella aperta in vista
+  if (cur) cur.parentElement.scrollLeft = cur.offsetLeft - 16;
   D.players = D.players || [];
   PL = Object.fromEntries(D.players.map(p => [String(p.id), p]));
   LOGOS = new Set((D.logos || []).map(String));

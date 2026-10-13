@@ -72,6 +72,13 @@ LEGHE = {
     "liga": {"name": "La Liga", "espn": "esp.1", "understat": "La_liga", "wiki_en": "La Liga", "dir": "liga",
              "fantacalcio": False, "onefootball": "laliga-10", "of_comp": "laliga-10", "opta": "la-liga", "port": 8767,
              "calib": NO_F_CALIB, "roles": {}},
+    # dal 14/10/2026, allo stesso modo della Liga
+    "bundesliga": {"name": "Bundesliga", "espn": "ger.1", "understat": "Bundesliga", "wiki_en": "Bundesliga", "dir": "bundesliga",
+                   "fantacalcio": False, "onefootball": "bundesliga-1", "of_comp": "bundesliga-1", "opta": "bundesliga", "port": 8769,
+                   "calib": NO_F_CALIB, "roles": {}},
+    "ligue1": {"name": "Ligue 1", "espn": "fra.1", "understat": "Ligue_1", "wiki_en": "Ligue 1", "dir": "ligue1",
+               "fantacalcio": False, "onefootball": "ligue-1-23", "of_comp": "ligue-1-23", "opta": "ligue-1", "port": 8770,
+               "calib": NO_F_CALIB, "roles": {}},
     # dal 13/10/2026. Coppa: squadre di campionati diversi, quindi la forza viene da europa.py (campionati e coppe
     # europee insieme), non dalle partite della Champions; niente Understat né Wikipedia della competizione
     "champions": {"name": "Champions League", "espn": "uefa.champions", "understat": None, "wiki_en": None, "dir": "champions",
@@ -86,6 +93,10 @@ LEGHE = {
 ZONE_RULES = {"serie-a": [(1, 4, "Champions League"), (5, 5, "Europa League"), (6, 6, "Conference League")],
               "premier": [(1, 4, "Champions League"), (5, 5, "Europa League")],
               "liga": [(1, 4, "Champions League"), (5, 5, "Europa League"), (6, 6, "Conference League")],
+              "bundesliga": [(1, 4, "Champions League"), (5, 5, "Europa League"), (6, 6, "Conference League")],
+              # Francia quinta nel ranking UEFA: tre posti diretti in Champions, il quarto ai preliminari
+              "ligue1": [(1, 3, "Champions League"), (4, 4, "Champions League Qualification"), (5, 5, "Europa League"),
+                         (6, 6, "Conference League")],
               # Champions: le prime 8 agli ottavi, dalla 9ª alla 24ª agli spareggi, le altre fuori
               "champions": [(1, 8, "Round of 16"), (9, 24, "Playoffs"), (25, 36, "Eliminated")]}
 LEGA_KEY = os.environ.get("SERIEA_LEGA") or "serie-a"
@@ -221,7 +232,9 @@ def match_entry(e):
 
 # nomi da ricondurre a quelli di ESPN: squadre e giocatori che le fonti scrivono in modo diverso (Understat inverte nome
 # e cognome di Fatawu Issahaku)
-ALIASES = {"internazionale": "inter", "inter milan": "inter", "hellas verona": "verona", "abdul fatawu": "fatawu issahaku"}
+ALIASES = {"internazionale": "inter", "inter milan": "inter", "hellas verona": "verona", "abdul fatawu": "fatawu issahaku",
+           # Bundesliga: i nomi tedeschi di Wikipedia e quelli inglesi di ESPN
+           "koln": "cologne", "hamburger": "hamburg"}
 STOP = {"fc", "ac", "as", "ss", "us", "calcio", "sc", "cfc", "bc", "afc", "club", "ssc", "acf", "1913", "1907"}
 ESPN_STATUS_IT = {"STATUS_FIRST_HALF": ("inprogress", "1° tempo", 6), "STATUS_HALFTIME": ("inprogress", "Intervallo", 31),
                   "STATUS_SECOND_HALF": ("inprogress", "2° tempo", 7), "STATUS_FULL_TIME": ("finished", "Finale", 100),
@@ -404,11 +417,19 @@ ZONE_CANON = (("champions", "Champions League"), ("europa", "Europa League"), ("
               ("relegat", "Relegation"))
 
 
+# in fondo alla classifica: (retrocesse direttamente, allo spareggio). In Germania e in Francia la terzultima gioca lo
+# spareggio con la terza della serie B
+RELEGATION = {"bundesliga": (2, 1), "ligue1": (2, 1)}
+
+
 def zone_at(pos, n=20):
     """Zona della classifica di una posizione, con le regole della lega (ZONE_RULES): nei campionati le ultime tre
-    retrocedono, in coppa no."""
-    if not CUP and pos and pos > n - 3:
+    retrocedono (in Germania e in Francia due, e la terzultima va allo spareggio), in coppa no."""
+    down, playoff = RELEGATION.get(LEGA_KEY, (3, 0))
+    if not CUP and pos and pos > n - down:
         return "Relegation"
+    if not CUP and pos and pos > n - down - playoff:
+        return "Relegation Playoff"
     return next((z for a, b, z in ZONE_RULES.get(LEGA_KEY, []) if a <= (pos or 0) <= b), None)
 
 
@@ -2682,7 +2703,13 @@ READS = {"key": None}
 PRETTY = {"Man City": "Manchester City", "Man United": "Manchester United", "Spurs": "Tottenham", "C Palace": "Crystal Palace",
           "Nottm Forest": "Nottingham Forest", "Wolves": "Wolverhampton",
           # Liga: i nomi che in italiano si dicono così
-          "Barcelona": "Barcellona", "Sevilla": "Siviglia", "Atlético": "Atlético Madrid", "Mallorca": "Maiorca"}
+          "Barcelona": "Barcellona", "Sevilla": "Siviglia", "Atlético": "Atlético Madrid", "Mallorca": "Maiorca",
+          # Bundesliga e Ligue 1
+          "Bayern": "Bayern Monaco", "Cologne": "Colonia", "Stuttgart": "Stoccarda", "Freiburg": "Friburgo",
+          "Hamburg": "Amburgo", "Bremen": "Werder Brema", "Frankfurt": "Eintracht Francoforte", "RB Leipzig": "Lipsia",
+          "Gladbach": "Borussia Mönchengladbach", "Dortmund": "Borussia Dortmund", "Leverkusen": "Bayer Leverkusen",
+          "Marseille": "Marsiglia", "Lyon": "Lione", "Nice": "Nizza", "Strasbourg": "Strasburgo", "Toulouse": "Tolosa",
+          "Le Havre AC": "Le Havre"}
 
 
 def team_names(d):
@@ -3224,7 +3251,7 @@ async def replace_old_server():
 
 # logo ufficiale della lega, solo per la pagina del Mac (non va sul sito: è un marchio e il sito è pubblico). Icone di
 # OneFootball, aggiornate (ESPN ha ancora il vecchio logo «Serie A TIM»).
-LEAGUE_LOGO = {"serie-a": 13, "premier": 9, "liga": 10, "champions": 5}
+LEAGUE_LOGO = {"serie-a": 13, "premier": 9, "liga": 10, "bundesliga": 1, "ligue1": 23, "champions": 5}
 
 
 def png_alpha_bbox(data):
