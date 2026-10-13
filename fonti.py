@@ -187,17 +187,21 @@ def coach_at(tenures, rnd):
 
 def table_grid(table):
     """Righe di una tabella HTML come liste di testi, ripetendo le celle unite (rowspan e colspan)."""
-    grid, carry = [], {}   # carry: colonna -> (testo, righe che restano)
+    grid, carry = [], {}   # carry: colonna -> (testo, righe che restano, viene dall'intestazione)
     for r in re.findall(r"<tr[^>]*>(.*?)</tr>", table, re.S):
-        cells = re.findall(r"<t[hd]([^>]*)>(.*?)</t[hd]>", r, re.S)
+        cells = re.findall(r"<t([hd])([^>]*)>(.*?)</t[hd]>", r, re.S)
+        if any(c[0] == "d" for c in cells):
+            # un'intestazione non scende nelle righe dei dati (nella pagina della Liga 2026/27 «Date of vacancy» ha
+            # rowspan=2 per errore e spostava tutte le colonne della prima riga)
+            carry = {c: v for c, v in carry.items() if not v[2]}
         row, col, k = [], 0, 0
         while k < len(cells) or col in carry:
             if col in carry:
-                text, left = carry.pop(col)
+                text, left, head = carry.pop(col)
                 if left > 1:
-                    carry[col] = (text, left - 1)
+                    carry[col] = (text, left - 1, head)
             else:
-                attrs, body = cells[k]
+                kind, attrs, body = cells[k]
                 k += 1
                 text = re.sub(r"\[[^\]]*\]", "", _text(body)).strip()
                 wide = re.search(r'colspan="?(\d+)', attrs)
@@ -206,7 +210,7 @@ def table_grid(table):
                     row.append(text)
                     col += 1
                 if down and int(down.group(1)) > 1:
-                    carry[col] = (text, int(down.group(1)) - 1)
+                    carry[col] = (text, int(down.group(1)) - 1, kind == "h" and all(c[0] == "h" for c in cells))
             row.append(text)
             col += 1
         grid.append(row)

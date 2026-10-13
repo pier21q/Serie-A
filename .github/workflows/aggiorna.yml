@@ -1,5 +1,5 @@
 # Aggiorna il sito di Serie A Live sui computer di GitHub, anche con il Mac spento: prima la Serie A (in cima al sito),
-# poi la Premier League (in /premier/, dati nella cartella premier del ramo "dati").
+# poi la Premier League (in /premier/, dati nella cartella premier del ramo "dati") e la Liga (in /liga/, cartella liga).
 # Ogni 30 minuti: riscarica tutte le fonti (ESPN, Understat, Fantacalcio.it, Wikipedia), ricalcola statistiche e
 # pronostici, ripubblica il sito nel ramo "sito" (anche se non è cambiato niente) e salva i dati nel ramo "dati".
 # GitHub salta gran parte delle esecuzioni programmate (il 28/09 ne ha fatte 4 su 96): per questo una sveglia
@@ -56,7 +56,7 @@ jobs:
           except Exception:
               at = 0
           nxt = []
-          for f in ("dati/cache/data.json", "dati/premier/cache/data.json"):   # tutte le leghe
+          for f in ("dati/cache/data.json", "dati/premier/cache/data.json", "dati/liga/cache/data.json"):   # tutte le leghe
               try:
                   nxt += json.load(open(f)).get("next") or []
               except Exception:
@@ -93,11 +93,11 @@ jobs:
         if: steps.serve.outputs.ok == 'true'
         run: pip install -r app/requirements.txt
       - name: Dati Opta dal Mac
-        # Opta Analyst non risponde ai computer di GitHub (403): i dati Opta li carica il Mac nei rami opta e opta-premier
+        # Opta Analyst non risponde ai computer di GitHub (403): i dati Opta li carica il Mac nei rami opta, opta-premier e opta-liga
         if: steps.serve.outputs.ok == 'true'
         continue-on-error: true
         run: |
-          for b in opta:cache opta-premier:premier/cache; do
+          for b in opta:cache opta-premier:premier/cache opta-liga:liga/cache; do
             br=${b%%:*}; dir=${b#*:}
             if git -C dati fetch -q --depth=1 origin "$br" 2>/dev/null; then
               mkdir -p "dati/$dir" && git -C dati show FETCH_HEAD:opta.json > "dati/$dir/opta.json" && echo "Dati Opta presi dal ramo $br"
@@ -111,6 +111,7 @@ jobs:
           ok=0
           python -u app/server.py --cloud || ok=1
           SERIEA_LEGA=premier python -u app/server.py --cloud || ok=1
+          SERIEA_LEGA=liga python -u app/server.py --cloud || ok=1
           exit $ok
       - name: Tieni attiva la programmazione
         # GitHub sospende le programmazioni dei repository fermi da 60 giorni: una volta al giorno la riattiva

@@ -14,6 +14,8 @@ import unicodedata
 
 # ---------- cronaca ESPN (Opta) ----------
 
+EV_VERSION = 2   # 2: frasi del VAR in fondo ai gol tolte prima di leggere l'assist (le partite vecchie si rileggono)
+
 ZONE = [("very close range", "a due passi dalla porta", "vicino"), ("six yard box", "dall'area piccola", "vicino"),
         ("more than 35 yards", "da oltre 30 metri", "fuori"), ("long range", "dalla distanza", "fuori"),
         ("outside the box", "da fuori area", "fuori"), ("difficult angle", "da posizione defilata", "lato"),
@@ -40,7 +42,7 @@ def _norm(s):
 
 # squadre «femminili» (la Roma, l'Inter, l'Udinese...): per articoli e accordi
 FEM = {"fiorentina", "roma", "lazio", "juventus", "atalanta", "sampdoria", "salernitana", "cremonese", "reggiana", "inter",
-       "udinese", "spal", "ternana", "triestina", "carrarese", "virtus"}
+       "udinese", "spal", "ternana", "triestina", "carrarese", "virtus", "real sociedad"}
 PREP = {"di": ("del", "dello", "dell'", "della"), "a": ("al", "allo", "all'", "alla"), "da": ("dal", "dallo", "dall'", "dalla"),
         "su": ("sul", "sullo", "sull'", "sulla"), "in": ("nel", "nello", "nell'", "nella"), "con": ("con il", "con lo", "con l'", "con la")}
 
@@ -99,6 +101,10 @@ def _detail(rest):
         if k in rest:
             d["pl"], d["plt"] = z, v
             break
+    if re.search(r"following VAR [Rr]eview", rest):
+        d["var"] = 1
+    # le frasi del VAR attaccate in fondo («...with a headed pass.Goal awarded following VAR Review.») vanno tolte
+    rest = re.sub(r"\.?\s*(?:Goal|Penalty|Card|Decision)[^.]*(?:VAR|[Rr]eview)[^.]*\.?\s*$", ".", rest).strip()
     m = re.search(r"Assisted by (.+?)(?: with a (cross|through ball|headed pass))?(?: following a (corner|set piece situation|fast break))?\.?$", rest)
     if m:
         d["a"] = m.group(1).strip()
@@ -229,7 +235,7 @@ def parse_espn(j):
             e.update(k="var", x=m.group(1))
             out.append(e)
     # un rigore si trasforma in un «Goal!» con «converts the penalty»: lì la situazione è già «rigore»
-    return {"ev": [{k: v for k, v in e.items() if v is not None} for e in out if e.get("k") == "var" or e.get("s")]}
+    return {"ev": [{k: v for k, v in e.items() if v is not None} for e in out if e.get("k") == "var" or e.get("s")], "v": EV_VERSION}
 
 
 

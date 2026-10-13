@@ -65,7 +65,19 @@ LEGHE = {
     "premier": {"name": "Premier League", "espn": "eng.1", "understat": "EPL", "wiki_en": "Premier League", "dir": "premier",
                 "fantacalcio": False, "onefootball": "premier-league-9", "of_comp": "premier-league-9", "opta": "premier-league", "port": 8766,
                 "calib": NO_F_CALIB, "roles": {"lamG": {"D": .80}, "lamY": {"F": 1.15}}},
+    # dal 13/10/2026; correzioni per ruolo da fissare con taratura.py quando ci sono abbastanza partite con formazione ESPN
+    "liga": {"name": "La Liga", "espn": "esp.1", "understat": "La_liga", "wiki_en": "La Liga", "dir": "liga",
+             "fantacalcio": False, "onefootball": "laliga-10", "of_comp": "laliga-10", "opta": "la-liga", "port": 8767,
+             "calib": NO_F_CALIB, "roles": {}},
 }
+# zone della classifica per posizione: solo i posti sicuri per la stagione dopo (Champions, Europa, Conference), più
+# la retrocessione. Le note di ESPN non vanno bene: segnavano la vincitrice della coppa della stagione scorsa (Athletic
+# decimo in Europa League) e il quinto posto Champions solo per alcune leghe. La coppa nazionale (Europa League; in
+# Inghilterra la coppa di Lega va in Conference) e il quinto posto Champions alle due nazioni con i migliori risultati
+# europei della stagione si sanno in primavera e possono far scalare le posizioni: lo spiega la nota sotto la classifica.
+ZONE_RULES = {"serie-a": [(1, 4, "Champions League"), (5, 5, "Europa League"), (6, 6, "Conference League")],
+              "premier": [(1, 4, "Champions League"), (5, 5, "Europa League")],
+              "liga": [(1, 4, "Champions League"), (5, 5, "Europa League"), (6, 6, "Conference League")]}
 LEGA_KEY = os.environ.get("SERIEA_LEGA") or "serie-a"
 LEGA = LEGHE[LEGA_KEY]
 model.LEAGUE = LEGA["name"]
@@ -368,6 +380,13 @@ ZONE_CANON = (("champions", "Champions League"), ("europa", "Europa League"), ("
               ("relegat", "Relegation"))
 
 
+def zone_at(pos, n=20):
+    """Zona della classifica di una posizione, con le regole della lega (ZONE_RULES): le ultime tre retrocedono."""
+    if pos and pos > n - 3:
+        return "Relegation"
+    return next((z for a, b, z in ZONE_RULES.get(LEGA_KEY, []) if a <= (pos or 0) <= b), None)
+
+
 def canon_zone(desc):
     """Zona della classifica con un nome unico: ESPN la scrive in modi diversi (Relegated, Relegation,
     Conference League qualifying...), le pagine riconoscono questi quattro."""
@@ -380,10 +399,7 @@ async def espn_standings(d):
     j = await espn_get(ESPN_STAND)
     ch = j.get("children") or []
     entries = ((ch[0].get("standings") if ch else j.get("standings")) or {}).get("entries") or []
-    # le zone (Champions, Europa, Conference, retrocessione) vanno con la posizione, non con la squadra: si prendono
-    # dalla nota di ESPN di ogni riga; solo se ESPN non ne manda nessuna si tengono quelle di prima, per posizione
-    prev_pos = {r["pos"]: r.get("zone") for r in d["standings"].get("total") or []}
-    notes = any((e.get("note") or {}).get("description") for e in entries)
+    # le zone (Champions, Europa, Conference, retrocessione) vanno con la posizione: zone_at, non le note di ESPN
     rows = []
     for e in entries:
         sid = map_team(e.get("team") or {}, teams)
@@ -393,7 +409,7 @@ async def espn_standings(d):
         num = lambda k: int(S.get(k) or 0)
         rows.append({"team": teams[sid], "pos": num("rank"), "p": num("gamesPlayed"), "w": num("wins"), "d": num("ties"),
                      "l": num("losses"), "gf": num("pointsFor"), "ga": num("pointsAgainst"), "pts": num("points"),
-                     "zone": canon_zone((e.get("note") or {}).get("description")) if notes else prev_pos.get(num("rank"))})
+                     "zone": zone_at(num("rank"), len(entries))})
     if len(rows) >= 18:
         d["standings"]["total"] = sorted(rows, key=lambda r: r["pos"])
         d["updatedAt"] = time.time()
@@ -587,7 +603,8 @@ def summaries_due(d, now):
             due.append((0, e))
     for e in d.get("played") or []:
         x = MATCHES.get(str(e["id"])) or {}
-        missing = "cards" not in x or "roles" not in x or "box" not in x or "ev" not in x
+        missing = ("cards" not in x or "roles" not in x or "box" not in x
+                   or (x.get("ev") or {}).get("v") != letture.EV_VERSION)   # cronaca letta con una versione vecchia
         # l'arbitro a volte ESPN lo aggiunge giorni dopo (in Premier): si riprova ogni 6 ore per tre giorni
         noref = not (x.get("referee") or {}).get("name") and now - e["start"] < 3 * 86400
         wait = 120 if missing else 3600 if not x.get("final") else 6 * 3600
@@ -630,7 +647,7 @@ def espn_table(j, teams):
         S = {s.get("name"): s.get("value") for s in e.get("stats") or []}
         n = lambda k: int(S.get(k) or 0)
         rows.append({"team": teams[tid], "pos": n("rank"), "p": n("gamesPlayed"), "w": n("wins"), "d": n("ties"), "l": n("losses"),
-                     "gf": n("pointsFor"), "ga": n("pointsAgainst"), "pts": n("points"), "zone": canon_zone((e.get("note") or {}).get("description"))})
+                     "gf": n("pointsFor"), "ga": n("pointsAgainst"), "pts": n("points"), "zone": zone_at(n("rank"))})
     return sorted(rows, key=lambda r: r["pos"])
 
 
@@ -1897,7 +1914,9 @@ async def cloud_main():
 READS = {"key": None}
 # nomi brevi di ESPN che nel racconto suonano male
 PRETTY = {"Man City": "Manchester City", "Man United": "Manchester United", "Spurs": "Tottenham", "C Palace": "Crystal Palace",
-          "Nottm Forest": "Nottingham Forest", "Wolves": "Wolverhampton"}
+          "Nottm Forest": "Nottingham Forest", "Wolves": "Wolverhampton",
+          # Liga: i nomi che in italiano si dicono così
+          "Barcelona": "Barcellona", "Sevilla": "Siviglia", "Atlético": "Atlético Madrid", "Mallorca": "Maiorca"}
 
 
 def team_names(d):
