@@ -253,7 +253,9 @@ def match_entry(e):
 # e cognome di Fatawu Issahaku)
 ALIASES = {"internazionale": "inter", "inter milan": "inter", "hellas verona": "verona", "abdul fatawu": "fatawu issahaku",
            # Bundesliga: i nomi tedeschi di Wikipedia e quelli inglesi di ESPN
-           "koln": "cologne", "hamburger": "hamburg"}
+           "koln": "cologne", "hamburger": "hamburg",
+           # Süper Lig: Wikipedia «Amedspor» ed «Erzurumspor», ESPN «Amed SFK» ed «Erzurum BB»
+           "amedspor": "amed", "erzurumspor": "erzurum"}
 STOP = {"fc", "ac", "as", "ss", "us", "calcio", "sc", "cfc", "bc", "afc", "club", "ssc", "acf", "1913", "1907"}
 ESPN_STATUS_IT = {"STATUS_FIRST_HALF": ("inprogress", "1° tempo", 6), "STATUS_HALFTIME": ("inprogress", "Intervallo", 31),
                   "STATUS_SECOND_HALF": ("inprogress", "2° tempo", 7), "STATUS_FULL_TIME": ("finished", "Finale", 100),
