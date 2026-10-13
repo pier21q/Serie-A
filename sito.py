@@ -23,7 +23,9 @@ ROOT = Path(__file__).resolve().parent
 ICON = ROOT / "Icona Serie A.png"
 # quello che serve a GitHub Actions per aggiornare il sito: va nel ramo main
 CODICE = ["server.py", "model.py", "fonti.py", "statistiche.py", "letture.py", "europa.py", "sito.py", "tascabile.html", "Icona Serie A.png",
-          "requirements.txt"]
+          "requirements.txt"] + [f"icone/{k}-{n}.png" for k in ("serie-a", "premier", "liga", "champions") for n in (180, 192, 512)]
+# colore della barra del browser e della schermata Home per lega (il resto dei colori sta in tascabile.html)
+THEME = {"serie-a": "#0B3D91", "premier": "#37003C", "liga": "#C8231B", "champions": "#0A1A4A"}
 CLOUD_FILES = {"cloud/aggiorna.yml": ".github/workflows/aggiorna.yml", "cloud/README.md": "README.md"}
 # i dati da cui riparte ogni aggiornamento su GitHub: vanno nel ramo "dati". Le rose del fanta no: il fanta sta solo
 # sul Mac (scelta dell'utente del 30/09/2026) e il repository è pubblico
@@ -96,16 +98,21 @@ def prepara(site, snap, img_dir=None, league="Serie A"):
     page = (ROOT / "tascabile.html").read_text().replace("__DATI__", "null")
     page = page.replace("<title>Serie A Tascabile</title>", f"<title>{league} Tascabile</title>")
     page = re.sub(r'\s*<div class="icona">.*?</div>', "", page, count=1, flags=re.S)   # sul sito l'icona c'è già
-    head = HEAD.replace('content="Serie A">', f'content="{short}">')
+    key = (snap.get("league") or {}).get("key") or "serie-a"
+    head = HEAD.replace('content="Serie A">', f'content="{short}">').replace('<html lang="it">', f'<html lang="it" data-lega="{key}">')
+    head = head.replace('<meta name="theme-color" content="#0F1B2D">', f'<meta name="theme-color" content="{THEME.get(key, "#0F1B2D")}">')
     (site / "index.html").write_text(head + page + TAIL)
     (site / "dati.json").write_text(json.dumps(snap, ensure_ascii=False))
-    manifest = dict(MANIFEST, name=f"{league} Tascabile", short_name=short)
+    manifest = dict(MANIFEST, name=f"{league} Tascabile", short_name=short, theme_color=THEME.get(key, "#0F1B2D"))
     (site / "manifest.webmanifest").write_text(json.dumps(manifest, ensure_ascii=False, indent=1))
     (site / ".nojekyll").write_text("")
     (site / "robots.txt").write_text("User-agent: *\nDisallow: /\n")
-    for size in (180, 192, 512):
-        out = site / f"icona-{size}.png"
-        if not out.exists() and ICON.exists():
+    for size in (180, 192, 512):   # l'icona della lega (emblemi.py), se no quella dell'app
+        out, src = site / f"icona-{size}.png", ROOT / "icone" / f"{key}-{size}.png"
+        if src.exists():
+            if not out.exists() or out.read_bytes() != src.read_bytes():
+                shutil.copyfile(src, out)
+        elif not out.exists() and ICON.exists():
             riduci(ICON, out, size, square=True)
 
 
@@ -193,6 +200,7 @@ def pubblica_codice(remote):
         git(dest, "config", "user.email", "serie-a-live@users.noreply.github.com")
         git(dest, "rm", "-rq", "--ignore-unmatch", ".")   # nel ramo main ci va solo il codice
         for name in CODICE:
+            (dest / name).parent.mkdir(parents=True, exist_ok=True)
             shutil.copyfile(ROOT / name, dest / name)
         for src, name in CLOUD_FILES.items():
             (dest / name).parent.mkdir(parents=True, exist_ok=True)

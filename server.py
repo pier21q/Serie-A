@@ -3222,8 +3222,94 @@ async def replace_old_server():
     return False
 
 
+# logo ufficiale della lega, solo per la pagina del Mac (non va sul sito: è un marchio e il sito è pubblico). Icone di
+# OneFootball, aggiornate (ESPN ha ancora il vecchio logo «Serie A TIM»).
+LEAGUE_LOGO = {"serie-a": 13, "premier": 9, "liga": 10, "champions": 5}
+
+
+def png_alpha_bbox(data):
+    """Riquadro della parte visibile di un PNG (non trasparente): (x0, y0, x1, y1), o None se il formato non è uno di
+    quelli delle icone (8 bit, con tavolozza o RGBA, non interlacciato)."""
+    import struct
+    if data[:8] != b"\x89PNG\r\n\x1a\n":
+        return None
+    i, idat, trns, ihdr = 8, b"", b"", None
+    while i < len(data):
+        n = struct.unpack(">I", data[i:i + 4])[0]
+        t, c = data[i + 4:i + 8], data[i + 8:i + 8 + n]
+        i += 12 + n
+        if t == b"IHDR":
+            ihdr = struct.unpack(">IIBBBBB", c)
+        elif t == b"IDAT":
+            idat += c
+        elif t == b"tRNS":
+            trns = c
+    if not ihdr or ihdr[2] != 8 or ihdr[3] not in (3, 6) or ihdr[6]:
+        return None
+    w, h, bpp = ihdr[0], ihdr[1], 1 if ihdr[3] == 3 else 4
+    raw, stride, prev, p, pts = zlib.decompress(idat), w * bpp, bytearray(w * bpp), 0, []
+    for y in range(h):
+        f, line = raw[p], bytearray(raw[p + 1:p + 1 + stride])
+        p += 1 + stride
+        for x in range(stride):
+            a, b, c = (line[x - bpp] if x >= bpp else 0), prev[x], (prev[x - bpp] if x >= bpp else 0)
+            if f == 1:
+                line[x] = (line[x] + a) & 255
+            elif f == 2:
+                line[x] = (line[x] + b) & 255
+            elif f == 3:
+                line[x] = (line[x] + (a + b) // 2) & 255
+            elif f == 4:
+                pa, pb, pc = abs(b - c), abs(a - c), abs(a + b - 2 * c)
+                line[x] = (line[x] + (a if pa <= pb and pa <= pc else b if pb <= pc else c)) & 255
+        prev = line
+        for x in range(w):
+            al = (trns[line[x]] if line[x] < len(trns) else 255) if bpp == 1 else line[x * 4 + 3]
+            if al > 24:
+                pts.append((x, y))
+    if not pts:
+        return None
+    xs, ys = [q[0] for q in pts], [q[1] for q in pts]
+    return min(xs), min(ys), max(xs), max(ys)
+
+
+async def h_league_logo(_):
+    """Logo ufficiale della lega senza i margini vuoti (le icone di OneFootball ne hanno molti: quella della Serie A
+    occupa metà dell'immagine), così nella pagina del Mac si vede grande."""
+    f = CACHE / "lega-logo-ritagliato.png"
+    if not f.exists() and LEAGUE_LOGO.get(LEGA_KEY):
+        try:
+            url = f"https://images.onefootball.com/icons/leagueColoredCompetition/128/{LEAGUE_LOGO[LEGA_KEY]}.png"
+            async with HTTP["web"].get(url, timeout=aiohttp.ClientTimeout(total=15)) as r:
+                if r.status == 200 and r.headers.get("Content-Type", "").startswith("image/"):
+                    data = await r.read()
+                    src = CACHE / "lega-logo.png"
+                    src.write_bytes(data)
+                    bb = png_alpha_bbox(data)
+                    if bb:   # quadrato intorno alla parte visibile, con un margine di 2 pixel
+                        side = max(bb[2] - bb[0], bb[3] - bb[1]) + 5
+                        cx, cy = (bb[0] + bb[2]) // 2, (bb[1] + bb[3]) // 2
+                        subprocess.run(["sips", "-c", str(side), str(side), "--cropOffset", str(max(0, cy - side // 2)),
+                                        str(max(0, cx - side // 2)), str(src), "--out", str(f)], capture_output=True)
+                    if not f.exists():
+                        f.write_bytes(data)
+        except (aiohttp.ClientError, asyncio.TimeoutError):
+            pass
+    if not f.exists():
+        raise web.HTTPNotFound()
+    return web.Response(body=f.read_bytes(), content_type="image/png", headers={"Cache-Control": "max-age=86400"})
+
+
 async def h_favicon(_):
-    """Icona della scheda del browser: il pallone dell'app, ritagliato perché si veda anche piccolo."""
+    """Icona della scheda del browser: l'emblema della lega (emblemi.py), o il pallone dell'app ritagliato perché si
+    veda anche piccolo."""
+    emb = ROOT / "icone" / f"{LEGA_KEY}-192.png"
+    if emb.exists():
+        fav = CACHE / f"favicon-{LEGA_KEY}-64.png"
+        if not fav.exists() or fav.stat().st_mtime < emb.stat().st_mtime:
+            subprocess.run(["sips", "-z", "64", "64", str(emb), "--out", str(fav)], capture_output=True)
+        if fav.exists():
+            return web.Response(body=fav.read_bytes(), content_type="image/png", headers={"Cache-Control": "max-age=3600"})
     fav = CACHE / "favicon-64.png"
     src = ROOT / "Icona Serie A.png"
     if not fav.exists() and src.exists():
@@ -3248,6 +3334,7 @@ async def main():
     app = web.Application()
     app.router.add_get("/", h_index)
     app.router.add_get("/favicon.png", h_favicon)
+    app.router.add_get("/lega.png", h_league_logo)
     app.router.add_get("/favicon.ico", h_favicon)
     app.router.add_get("/api/data", h_data)
     app.router.add_get("/api/match/{id}", h_match)

@@ -7,26 +7,46 @@
   /* palette «Notte di stadio», scelta dall'utente il 09/10/2026: blu notte e verde lime */
   --ground:#F3F5F9;--surface:#FFFFFF;--surface2:#E8ECF3;--ink:#0F1B2D;--ink2:#3B4659;--muted:#5B6678;--line:#DCE2EC;
   --accent:#4D7C0F;--on-accent:#FFFFFF;--home:#2F5BEA;--draw:#A9B2C3;--away:#E8590C;--good:#15803D;--warn:#B45309;--bad:#C0392B;
+  --conf:#0D9488;--brand:var(--ground);--band:none;
   --display:"Barlow Condensed","Arial Narrow",system-ui,sans-serif;--body:"Barlow",system-ui,-apple-system,"Segoe UI",sans-serif;
 }
 @media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
   color-scheme:dark;--ground:#0A1120;--surface:#121B2E;--surface2:#1A2540;--ink:#EEF2F8;--ink2:#C3CCDA;--muted:#93A0B8;--line:#24314D;
-  --accent:#A3E635;--on-accent:#0A1120;--home:#6B8CFF;--draw:#4A566E;--away:#FF8A4C;--good:#34C26B;--warn:#E0A63A;--bad:#F07167;}}
+  --accent:#A3E635;--on-accent:#0A1120;--home:#6B8CFF;--draw:#4A566E;--away:#FF8A4C;--good:#34C26B;--warn:#E0A63A;--bad:#F07167;--conf:#2DD4BF;}}
 :root[data-theme="dark"]{
   color-scheme:dark;--ground:#0A1120;--surface:#121B2E;--surface2:#1A2540;--ink:#EEF2F8;--ink2:#C3CCDA;--muted:#93A0B8;--line:#24314D;
-  --accent:#A3E635;--on-accent:#0A1120;--home:#6B8CFF;--draw:#4A566E;--away:#FF8A4C;--good:#34C26B;--warn:#E0A63A;--bad:#F07167;}
+  --accent:#A3E635;--on-accent:#0A1120;--home:#6B8CFF;--draw:#4A566E;--away:#FF8A4C;--good:#34C26B;--warn:#E0A63A;--bad:#F07167;--conf:#2DD4BF;}
+/* ogni lega con i suoi colori (data-lega su <html>: lo mette sito.prepara, e boot() nell'anteprima): accento, fascia in
+   alto e una tinta leggera dell'intestazione. Blu e arancione restano di casa e ospiti, in tutte le leghe. */
+:root[data-lega="serie-a"]{--accent:#1565C0;--on-accent:#FFFFFF;--brand:#0B3D91;--band:linear-gradient(90deg,#009246 0 33.4%,#F4F5F0 33.4% 66.6%,#CE2B37 66.6%)}
+:root[data-lega="premier"]{--accent:#37003C;--on-accent:#FFFFFF;--brand:#37003C;--band:linear-gradient(90deg,#37003C,#E90052 45%,#04F5FF 75%,#00FF85)}
+:root[data-lega="liga"]{--accent:#C8231B;--on-accent:#FFFFFF;--brand:#D42A22;--band:linear-gradient(90deg,#AA151B 0 25%,#F1BF00 25% 75%,#AA151B 75%)}
+:root[data-lega="champions"]{--accent:#1B3A8C;--on-accent:#FFFFFF;--brand:#0A1A4A;--band:linear-gradient(90deg,#0A1A4A,#1B3A8C 45%,#D9E2F2)}
+@media (prefers-color-scheme:dark){
+  :root[data-lega="serie-a"]:not([data-theme="light"]){--accent:#5CB3FF;--on-accent:#06122A;--brand:#1E7BE0}
+  :root[data-lega="premier"]:not([data-theme="light"]){--accent:#00FF85;--on-accent:#37003C;--brand:#7A1F86}
+  :root[data-lega="liga"]:not([data-theme="light"]){--accent:#FF6B5E;--on-accent:#1A0705;--brand:#FF4B44}
+  :root[data-lega="champions"]:not([data-theme="light"]){--accent:#C9D6EE;--on-accent:#0A1A4A;--brand:#3B5BB8}}
+:root[data-lega="serie-a"][data-theme="dark"]{--accent:#5CB3FF;--on-accent:#06122A;--brand:#1E7BE0}
+:root[data-lega="premier"][data-theme="dark"]{--accent:#00FF85;--on-accent:#37003C;--brand:#7A1F86}
+:root[data-lega="liga"][data-theme="dark"]{--accent:#FF6B5E;--on-accent:#1A0705;--brand:#FF4B44}
+:root[data-lega="champions"][data-theme="dark"]{--accent:#C9D6EE;--on-accent:#0A1A4A;--brand:#3B5BB8}
 *{box-sizing:border-box}
 body{background:var(--ground);color:var(--ink);font-family:var(--body);font-size:15px;line-height:1.45}
 .wrap{max-width:720px;margin:0 auto;padding-inline:16px;padding-block:0 40px}
 .num{font-variant-numeric:tabular-nums}
-header{position:sticky;top:env(safe-area-inset-top,0px);z-index:5;background:color-mix(in srgb,var(--ground) 90%,transparent);backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);border-bottom:1px solid var(--line)}
+header{position:sticky;top:env(safe-area-inset-top,0px);z-index:5;background:color-mix(in srgb,color-mix(in srgb,var(--brand) 7%,var(--ground)) 90%,transparent);backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);border-bottom:1px solid var(--line)}
+header::before{content:"";display:block;height:4px;background:var(--band)}
+header .wrap{padding-block:0}   /* il margine in fondo serve alla pagina, non all'intestazione */
+.logo .emb{width:30px;height:30px;border-radius:8px;vertical-align:-4px;margin-right:9px;box-shadow:0 1px 3px rgba(0,0,0,.18)}
+@media (max-width:420px){.logo span{display:none}}   /* sul telefono basta l'emblema con il nome della lega */
 .bar1{display:flex;align-items:baseline;gap:10px;padding-block:12px 6px}
-.logo.long{font-size:24px}.logo.long span{display:none}
+.logo.long{font-size:23px}.logo.long span{display:none}
 .leghe{display:flex;gap:6px;padding-block:0 4px;overflow-x:auto;scrollbar-width:none}.leghe:empty{display:none}
 .leghe::-webkit-scrollbar{display:none}
 .leghe a{flex:none;white-space:nowrap;font-size:12px;font-weight:600;text-decoration:none;color:var(--ink2);border:1px solid var(--line);border-radius:999px;padding:2px 10px}
 .leghe a[aria-current="page"]{background:var(--accent);border-color:var(--accent);color:var(--on-accent)}
-.logo{font-family:var(--display);font-weight:700;font-size:28px;letter-spacing:.01em;line-height:1}
+.logo{font-family:var(--display);font-weight:700;font-size:28px;letter-spacing:.01em;line-height:1;white-space:nowrap}
 .logo span{color:var(--accent)}
 .stamp{margin-left:auto;font-size:12px;color:var(--muted);text-align:right;line-height:1.3}
 .stamp .warn{color:var(--warn);font-weight:600}
@@ -75,7 +95,7 @@ td{padding:7px 4px;border-bottom:1px solid var(--line);text-align:right}
 th.l,td.l{text-align:left}
 tr:last-child td{border-bottom:0}
 .pos{display:inline-block;width:22px;text-align:center;font-weight:600;border-left:3px solid transparent;padding-left:2px}
-.z-cl{border-color:var(--home)}.z-el{border-color:var(--away)}.z-co{border-color:var(--accent)}.z-rel{border-color:var(--bad)}
+.z-cl{border-color:var(--home)}.z-el{border-color:var(--away)}.z-co{border-color:var(--conf)}.z-rel{border-color:var(--bad)}
 .legend{display:flex;flex-wrap:wrap;gap:12px;margin-top:8px;font-size:12px;color:var(--ink2)}
 .legend i{display:inline-block;width:10px;height:3px;margin-right:5px;vertical-align:middle}
 .seg{display:flex;flex-wrap:wrap;gap:6px}
@@ -325,8 +345,8 @@ function vClassifica() {
       <td>${r.p}</td><td>${r.gf - r.ga > 0 ? '+' : ''}${r.gf - r.ga}</td><td><b>${r.pts}</b></td>${pj ? `<td>${q ? pc(q.top8) : '–'}</td><td>${q ? pc(q.top8 + q.po) : '–'}</td>` : `<td>${dots((T[r.team] || {}).form)}</td>`}</tr>`; }).join('');
   const note = cup ? `Le prime 8 vanno agli ottavi, dalla 9ª alla 24ª agli spareggi (andata e ritorno), le altre sono eliminate.${pj ? ` Top 8 e Top 24: probabilità di finire tra le prime 8 e tra le prime 24, da 5.000 simulazioni delle ${pj._left} partite che mancano con i gol attesi del pronostico.` : ''}`
     : "Zone dei posti sicuri per la prossima stagione. La vincitrice della coppa nazionale va in Europa League e un posto Champions in più va alle due nazioni con i migliori risultati europei di quest'anno: si sanno in primavera e possono far scalare le posizioni.";
-  return `<h2>Classifica${cup ? ' <small>fase campionato</small>' : ''}</h2><div class="card tw"><table><thead><tr><th class="l">#</th><th class="l">Squadra</th><th>G</th><th>DR</th><th>Pt</th>${pj ? '<th>Top 8</th><th>Top 24</th>' : '<th>Forma</th>'}</tr></thead><tbody>${rows}</tbody></table>
-    ${zones.size ? `<div class="legend">${[...zones].map(z => `<span><i style="background:var(--${{cl: 'home', el: 'away', co: 'accent', rel: 'bad'}[ZONE[z][0]]})"></i>${ZONE[z][1]}</span>`).join('')}</div>
+  return `<h2>Classifica${cup ? ' <small>fase campionato</small>' : ''}</h2><div class="card tw"><table><thead><tr><th class="l">#</th><th class="l">Squadra</th><th>G</th><th>DR</th><th>Pt</th>${pj ? '<th style="white-space:nowrap">Top 8</th><th style="white-space:nowrap">Top 24</th>' : '<th>Forma</th>'}</tr></thead><tbody>${rows}</tbody></table>
+    ${zones.size ? `<div class="legend">${[...zones].map(z => `<span><i style="background:var(--${{cl: 'home', el: 'away', co: 'conf', rel: 'bad'}[ZONE[z][0]]})"></i>${ZONE[z][1]}</span>`).join('')}</div>
       <p class="small muted">${note}</p>` : ''}</div>
     ${pathCard()}
     ${xptsCard()}
@@ -1203,7 +1223,9 @@ async function boot() {
   T = D.teams;
   // lega di questa pagina e collegamenti alle altre (la Serie A in cima al sito, le altre in una sottocartella)
   LG = D.league || {name: 'Serie A', dir: ''}; LGN = LG.name || 'Serie A';
-  document.querySelector('.logo').innerHTML = `${esc(LGN)} <span>tascabile</span>`;
+  document.documentElement.dataset.lega = LG.key || 'serie-a';   // colori della lega (sul sito c'è già da sito.prepara)
+  // emblema della lega: l'icona della cartella (emblemi.py); nell'anteprima senza icone sparisce
+  document.querySelector('.logo').innerHTML = `<img class="emb" src="icona-192.png" alt="" onerror="this.remove()">${esc(LGN)} <span>tascabile</span>`;
   document.querySelector('.logo').classList.toggle('long', LGN.length > 10);
   const up = LG.dir ? '../' : '';
   document.getElementById('leghe').innerHTML = (D.leagues || []).length > 1 ? D.leagues.map(l => `<a href="${up + (l.dir ? l.dir + '/' : '') || './'}" aria-current="${l.dir === LG.dir ? 'page' : 'false'}">${esc(l.name.replace(/ League$/, ''))}</a>`).join('') : '';   // «Premier», «Champions»: sul telefono ci stanno tutte
