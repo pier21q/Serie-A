@@ -399,7 +399,9 @@ function xgChart(rd) {
   if (!sh.length) return '';
   const T = Math.max(93, ...sh.map(x => x[0] + 1), ...mk.g.map(g => g[0] + 1));
   const top = Math.max(cumAt(sh, 0, 999), cumAt(sh, 1, 999), .5), step = top > 3 ? 1 : .5, Y = Math.ceil(top / step) * step;
-  const W = 640, H = 220, L = 34, R = 12, Tp = 12, B = 26, X = m => L + m / T * (W - L - R), Yp = v => H - B - v / Y * (H - Tp - B);
+  // sul telefono il grafico si disegna già stretto, così le scritte restano leggibili
+  const W = innerWidth < 560 ? 360 : 640, H = innerWidth < 560 ? 200 : 220, L = 30, R = 10, Tp = 12, B = 24,
+    X = m => L + m / T * (W - L - R), Yp = v => H - B - v / Y * (H - Tp - B);
   const path = pts => 'M' + pts.map(([m, v]) => `${X(m).toFixed(1)},${Yp(v).toFixed(1)}`).join('L');
   const grid = []; for (let v = 0; v <= Y + 1e-9; v += step) grid.push(`<line class="gl" x1="${L}" x2="${W - R}" y1="${Yp(v)}" y2="${Yp(v)}"/><text x="${L - 6}" y="${Yp(v) + 4}" text-anchor="end">${fx(v, step < 1 ? 1 : 0)}</text>`);
   const xt = [0, 15, 30, 45, 60, 75, 90].map(m => `<text x="${X(m)}" y="${H - 8}" text-anchor="middle">${m}'</text>`).join('');

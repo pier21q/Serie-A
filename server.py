@@ -574,7 +574,10 @@ def summaries_due(d, now):
     for e in d.get("played") or []:
         x = MATCHES.get(str(e["id"])) or {}
         missing = "cards" not in x or "roles" not in x or "box" not in x or "ev" not in x
-        if e.get("espn") and (not x.get("final") or missing) and now - x.get("espnAt", 0) >= (120 if missing else 3600):
+        # l'arbitro a volte ESPN lo aggiunge giorni dopo (in Premier): si riprova ogni 6 ore per tre giorni
+        noref = not (x.get("referee") or {}).get("name") and now - e["start"] < 3 * 86400
+        wait = 120 if missing else 3600 if not x.get("final") else 6 * 3600
+        if e.get("espn") and (not x.get("final") or missing or noref) and now - x.get("espnAt", 0) >= wait:
             due.append((1, e))
     return [e for _, e in sorted(due, key=lambda t: t[0])]
 
