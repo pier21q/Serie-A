@@ -364,12 +364,26 @@ async def espn_schedule(d, months):
     return ended
 
 
+ZONE_CANON = (("champions", "Champions League"), ("europa", "Europa League"), ("conference", "Conference League"),
+              ("relegat", "Relegation"))
+
+
+def canon_zone(desc):
+    """Zona della classifica con un nome unico: ESPN la scrive in modi diversi (Relegated, Relegation,
+    Conference League qualifying...), le pagine riconoscono questi quattro."""
+    d = (desc or "").lower()
+    return next((v for k, v in ZONE_CANON if k in d), None)
+
+
 async def espn_standings(d):
     teams = cur_teams(d)
     j = await espn_get(ESPN_STAND)
     ch = j.get("children") or []
     entries = ((ch[0].get("standings") if ch else j.get("standings")) or {}).get("entries") or []
-    prev = {str(r["team"]["id"]): r for r in d["standings"].get("total") or []}
+    # le zone (Champions, Europa, Conference, retrocessione) vanno con la posizione, non con la squadra: si prendono
+    # dalla nota di ESPN di ogni riga; solo se ESPN non ne manda nessuna si tengono quelle di prima, per posizione
+    prev_pos = {r["pos"]: r.get("zone") for r in d["standings"].get("total") or []}
+    notes = any((e.get("note") or {}).get("description") for e in entries)
     rows = []
     for e in entries:
         sid = map_team(e.get("team") or {}, teams)
@@ -379,7 +393,7 @@ async def espn_standings(d):
         num = lambda k: int(S.get(k) or 0)
         rows.append({"team": teams[sid], "pos": num("rank"), "p": num("gamesPlayed"), "w": num("wins"), "d": num("ties"),
                      "l": num("losses"), "gf": num("pointsFor"), "ga": num("pointsAgainst"), "pts": num("points"),
-                     "zone": (prev.get(sid) or {}).get("zone") or ((e.get("note") or {}).get("description"))})
+                     "zone": canon_zone((e.get("note") or {}).get("description")) if notes else prev_pos.get(num("rank"))})
     if len(rows) >= 18:
         d["standings"]["total"] = sorted(rows, key=lambda r: r["pos"])
         d["updatedAt"] = time.time()
@@ -616,7 +630,7 @@ def espn_table(j, teams):
         S = {s.get("name"): s.get("value") for s in e.get("stats") or []}
         n = lambda k: int(S.get(k) or 0)
         rows.append({"team": teams[tid], "pos": n("rank"), "p": n("gamesPlayed"), "w": n("wins"), "d": n("ties"), "l": n("losses"),
-                     "gf": n("pointsFor"), "ga": n("pointsAgainst"), "pts": n("points"), "zone": (e.get("note") or {}).get("description")})
+                     "gf": n("pointsFor"), "ga": n("pointsAgainst"), "pts": n("points"), "zone": canon_zone((e.get("note") or {}).get("description"))})
     return sorted(rows, key=lambda r: r["pos"])
 
 
