@@ -11,6 +11,9 @@ Qui ci sono solo le funzioni che leggono i dati e li sommano: le richieste le fa
 import html
 import json
 import re
+from datetime import datetime, timezone
+
+import letture
 
 UNDERSTAT = "https://understat.com/getLeagueData/Serie_A/{year}"
 UNDERSTAT_REF = "https://understat.com/league/Serie_A/{year}"
@@ -105,6 +108,78 @@ def understat_parse(j):
     return {"teams": teams, "players": players}
 
 
+def understat_from_espn(results, shots, boxes, names):
+    """Una stagione nel formato di Understat (getLeagueData: squadre partita per partita e totali dei giocatori), fatta
+    con le partite ESPN, per i campionati che Understat non copre (Eredivisie, Portogallo, Turchia). Gli xG di ogni
+    tiro vengono dalla sua posizione nella cronaca (letture.xg_shot, tarato sugli xG di Understat); gol, assist, tiri,
+    minuti e cartellini dai tabellini ESPN; i punti attesi dagli xG dei tiri. ESPN non ha i passaggi vicino all'area
+    («deep») né il pressing (PPDA): restano fuori.
+    results: partite finite {id, start, home/away {id}, hs, as}; shots: {id partita: letture.us_like(...)};
+    boxes: {id partita: box}; names: {id squadra: nome}."""
+    teams, players, dates = {}, {}, []
+    for e in sorted(results, key=lambda e: e["start"]):
+        mid = str(e["id"])
+        sh, b = shots.get(mid), boxes.get(mid)
+        if e.get("hs") is None or not sh or not (sh.get("home") or sh.get("away")):
+            continue
+        day = datetime.fromtimestamp(e["start"], timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
+        xg = {s: sum(x[2] for x in sh.get(s) or []) for s in ("home", "away")}
+        npx = {s: sum(x[2] for x in sh.get(s) or [] if x[4] != "Penalty") for s in ("home", "away")}
+        p1, px, p2 = letture.xg_outcome([x[2] for x in sh.get("home") or []], [x[2] for x in sh.get("away") or []])
+        gh, ga = e["hs"], e["as"]
+        for s, o, gf, gc, xp in (("home", "away", gh, ga, 3 * p1 + px), ("away", "home", ga, gh, 3 * p2 + px)):
+            tid = str(e[s]["id"])
+            res = "w" if gf > gc else "d" if gf == gc else "l"
+            t = teams.setdefault(tid, {"id": tid, "title": names.get(tid) or tid, "history": []})
+            t["history"].append({"h_a": s[0], "xG": round(xg[s], 4), "xGA": round(xg[o], 4), "npxG": round(npx[s], 4),
+                                 "npxGA": round(npx[o], 4), "scored": gf, "missed": gc, "xpts": round(xp, 4), "result": res,
+                                 "date": day, "wins": int(res == "w"), "draws": int(res == "d"), "loses": int(res == "l"),
+                                 "pts": 3 if res == "w" else 1 if res == "d" else 0})
+        dates.append({"id": mid, "isResult": True, "datetime": day, "h": {"id": str(e["home"]["id"]), "title": names.get(str(e["home"]["id"]))},
+                      "a": {"id": str(e["away"]["id"]), "title": names.get(str(e["away"]["id"]))},
+                      "goals": {"h": gh, "a": ga}, "xG": {"h": round(xg["home"], 4), "a": round(xg["away"], 4)}})
+        # giocatori: dal tabellino (minuti, gol, assist, tiri, cartellini) e dai tiri della cronaca (xG, xA, passaggi chiave)
+        roster = {s: {pid: st for pid, st in ((b or {}).get("players") or {}).items() if st.get("side") == s} for s in ("home", "away")}
+
+        def who(name, s):
+            r = roster[s]
+            return next((pid for pid, st in r.items() if st.get("name") == name), None) or \
+                next((pid for pid, st in r.items() if letture.same_name(st.get("name"), name)), None)
+        for s in ("home", "away"):
+            tid = str(e[s]["id"])
+            for pid, st in roster[s].items():
+                if not st.get("min"):
+                    continue
+                q = players.setdefault(pid, {"id": pid, "player_name": st.get("name"), "games": 0, "time": 0, "goals": 0, "assists": 0,
+                                             "shots": 0, "key_passes": 0, "yellow_cards": 0, "red_cards": 0, "xG": 0.0, "xA": 0.0,
+                                             "npg": 0, "npxG": 0.0, "position": st.get("pos") or "", "team_title": ""})
+                q["games"] += 1
+                q["time"] += st.get("min") or 0
+                q["goals"] += st.get("goals") or 0
+                q["assists"] += st.get("assists") or 0
+                q["shots"] += st.get("shots") or 0
+                q["yellow_cards"] += st.get("yc") or 0
+                q["red_cards"] += st.get("rc") or 0
+                q["team_title"] = names.get(tid) or tid
+                if st.get("pos") and st["pos"] != "SUB":
+                    q["position"] = st["pos"]
+            for x in sh.get(s) or []:
+                pid = who(x[1], s)
+                if pid in players:
+                    players[pid]["xG"] += x[2]
+                    if x[4] != "Penalty":
+                        players[pid]["npxG"] += x[2]
+                        players[pid]["npg"] += x[3] == "Goal"
+                aid = who(x[7], s) if x[7] else None
+                if aid in players:
+                    players[aid]["xA"] += x[2]
+                    players[aid]["key_passes"] += 1
+    for q in players.values():
+        for k in ("xG", "xA", "npxG"):
+            q[k] = round(q[k], 4)
+    return {"teams": teams, "players": list(players.values()), "dates": dates, "source": "espn"}
+
+
 # ---------- Fantacalcio.it ----------
 
 def parse_fc_stats(page):
@@ -166,9 +241,11 @@ def team_season(results, boxes, us_teams, team_of_title, us_players=None):
         for h in hist:
             for src, dst in (("xG", "expectedGoals"), ("xGA", "expectedGoalsAgainst"), ("npxG", "npxG"), ("npxGA", "npxGA"),
                              ("deep", "deep"), ("deep_allowed", "deepAllowed"), ("xpts", "xpts")):
-                t[dst] = t.get(dst, 0) + (num(h.get(src)) or 0)
-            t["_ppdaAtt"] = t.get("_ppdaAtt", 0) + (num((h.get("ppda") or {}).get("att")) or 0)
-            t["_ppdaDef"] = t.get("_ppdaDef", 0) + (num((h.get("ppda") or {}).get("def")) or 0)
+                if h.get(src) is not None:   # «deep» e il PPDA mancano negli xG fatti dalla cronaca (understat_from_espn)
+                    t[dst] = t.get(dst, 0) + (num(h.get(src)) or 0)
+            if h.get("ppda"):
+                t["_ppdaAtt"] = t.get("_ppdaAtt", 0) + (num(h["ppda"].get("att")) or 0)
+                t["_ppdaDef"] = t.get("_ppdaDef", 0) + (num(h["ppda"].get("def")) or 0)
             t["usMatches"] = t.get("usMatches", 0) + 1
     # passaggi chiave: somma dei giocatori Understat (chi ha giocato in due squadre non si può dividere)
     for p in us_players or []:

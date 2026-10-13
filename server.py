@@ -81,6 +81,17 @@ LEGHE = {
                "calib": NO_F_CALIB, "roles": {}},
     # dal 13/10/2026. Coppa: squadre di campionati diversi, quindi la forza viene da europa.py (campionati e coppe
     # europee insieme), non dalle partite della Champions; niente Understat né Wikipedia della competizione
+    # dal 14/10/2026. Understat e Opta Analyst non li coprono: gli xG di squadre e giocatori vengono dalla posizione dei
+    # tiri nella cronaca ESPN (statistiche.understat_from_espn, ESPN_XG); niente statistiche Opta dei giocatori
+    "eredivisie": {"name": "Eredivisie", "espn": "ned.1", "understat": None, "wiki_en": "Eredivisie", "dir": "eredivisie",
+                   "fantacalcio": False, "onefootball": "eredivisie-36", "of_comp": "eredivisie-36", "opta": None, "port": 8771,
+                   "calib": NO_F_CALIB, "roles": {}, "minor": True},
+    "portugal": {"name": "Liga Portugal", "espn": "por.1", "understat": None, "wiki_en": "Primeira Liga", "dir": "portugal",
+                 "fantacalcio": False, "onefootball": "liga-portugal-35", "of_comp": "liga-portugal-35", "opta": None, "port": 8772,
+                 "calib": NO_F_CALIB, "roles": {}, "minor": True},
+    "superlig": {"name": "Süper Lig", "espn": "tur.1", "understat": None, "wiki_en": "Süper Lig", "dir": "superlig",
+                 "fantacalcio": False, "onefootball": "sueper-lig-8", "of_comp": "sueper-lig-8", "opta": None, "port": 8773,
+                 "calib": NO_F_CALIB, "roles": {}, "minor": True},
     "champions": {"name": "Champions League", "espn": "uefa.champions", "understat": None, "wiki_en": None, "dir": "champions",
                   "fantacalcio": False, "onefootball": "uefa-champions-league-5", "of_comp": "uefa-champions-league-5",
                   "opta": "uefa-champions-league", "port": 8768, "calib": NO_F_CALIB, "roles": {}, "cup": True},
@@ -97,6 +108,13 @@ ZONE_RULES = {"serie-a": [(1, 4, "Champions League"), (5, 5, "Europa League"), (
               # Francia quinta nel ranking UEFA: tre posti diretti in Champions, il quarto ai preliminari
               "ligue1": [(1, 3, "Champions League"), (4, 4, "Champions League Qualification"), (5, 5, "Europa League"),
                          (6, 6, "Conference League")],
+              # Olanda sesta nel ranking UEFA, Portogallo e Turchia più giù: le posizioni come le note di ESPN
+              "eredivisie": [(1, 2, "Champions League"), (3, 3, "Champions League Qualification"),
+                             (4, 4, "Europa League Qualification"), (5, 5, "Conference League Qualification")],
+              "portugal": [(1, 1, "Champions League"), (2, 2, "Champions League Qualification"),
+                           (3, 3, "Europa League Qualification"), (4, 4, "Conference League Qualification")],
+              "superlig": [(1, 1, "Champions League"), (2, 2, "Champions League Qualification"),
+                           (3, 3, "Europa League Qualification"), (4, 4, "Conference League Qualification")],
               # Champions: le prime 8 agli ottavi, dalla 9ª alla 24ª agli spareggi, le altre fuori
               "champions": [(1, 8, "Round of 16"), (9, 24, "Playoffs"), (25, 36, "Eliminated")]}
 LEGA_KEY = os.environ.get("SERIEA_LEGA") or "serie-a"
@@ -105,6 +123,7 @@ model.LEAGUE = LEGA["name"]
 model.F_CALIB = dict(model.F_CALIB, **(LEGA.get("calib") or {}))
 model.ROLE_CALIB = LEGA.get("roles") or {}
 CUP = bool(LEGA.get("cup"))
+ESPN_XG = not LEGA["understat"] and not CUP   # campionato senza Understat: i suoi dati nello stesso formato, fatti con ESPN
 if LEGA["understat"]:
     statistiche.UNDERSTAT = statistiche.UNDERSTAT.replace("Serie_A", LEGA["understat"])
     statistiche.UNDERSTAT_REF = statistiche.UNDERSTAT_REF.replace("Serie_A", LEGA["understat"])
@@ -419,7 +438,7 @@ ZONE_CANON = (("champions", "Champions League"), ("europa", "Europa League"), ("
 
 # in fondo alla classifica: (retrocesse direttamente, allo spareggio). In Germania e in Francia la terzultima gioca lo
 # spareggio con la terza della serie B
-RELEGATION = {"bundesliga": (2, 1), "ligue1": (2, 1)}
+RELEGATION = {"bundesliga": (2, 1), "ligue1": (2, 1), "eredivisie": (2, 1), "portugal": (2, 1)}   # in Turchia ne scendono tre
 
 
 def zone_at(pos, n=20):
@@ -1333,6 +1352,8 @@ async def prior_ref_step(limit, skip=None):
             continue
         rc[str(eid)] = {"ref": fonti.espn_referee(j), "cards": fonti.espn_cards(j), "roles": match_roles(j) or {},
                         "box": statistiche.box_from_summary(j) or {}}
+        if ESPN_XG:   # tiri della cronaca (con gli xG dalla posizione), per gli xG della stagione scorsa
+            rc[str(eid)]["shots"] = {s: [x[:8] for x in v] for s, v in letture.us_like(letture.parse_espn(j)["ev"]).items()}
         n += 1
     if n:
         save_json(PRIOR_FILE, PRIOR)
@@ -1434,6 +1455,8 @@ def us_ppda(d, u, e):
 async def us_matches_step(d, now):
     """Tiri di ogni partita finita da Understat (xG, situazione, ultima azione prima del tiro) e pressing della partita:
     servono alle letture. Una volta per partita, quando Understat l'ha già elaborata."""
+    if not LEGA["understat"]:   # coppa o campionato che Understat non copre: le letture usano i tiri della cronaca
+        return
     u = load_json(us_file(season_year(d)), {}) or {}
     dates = u.get("dates") or []
     # anche le partite scaricate con una versione vecchia (senza le coordinate dei tiri)
@@ -2143,6 +2166,8 @@ def cup_projection(d, A, sims=5000):
 
 async def sources_step(d, now):
     """Understat (xG, xA, pressing, minuti) e Fantacalcio.it (media voto): ogni 6 ore e dopo le partite."""
+    if ESPN_XG:   # i dati «Understat» li fa rebuild_stats con le partite ESPN
+        return False
     last_end = max((e["start"] + 2.25 * 3600 for e in d.get("played") or []), default=0)
     at = EXTRA.get("usAt", 0)
     if now - at < US_EVERY and not (at < last_end + 3600 <= now):
@@ -2350,9 +2375,45 @@ def build_players(results, boxes, us, team_of_title, current):
     return out
 
 
+def espn_understat(d, y):
+    """Campionato senza Understat: la stagione y (in corso o scorsa) nel formato di Understat, fatta con le partite ESPN
+    (statistiche.understat_from_espn). La scorsa solo quando ci sono i tiri di quasi tutte le partite."""
+    if y == season_year(d):
+        results = [e for e in d.get("played") or [] if e.get("hs") is not None]
+        shots = {str(e["id"]): letture.us_like(((MATCHES.get(str(e["id"])) or {}).get("ev") or {}).get("ev")) for e in results}
+        boxes = {str(e["id"]): (MATCHES.get(str(e["id"])) or {}).get("box") for e in results}
+        names = {str(r["team"]["id"]): r["team"]["name"] for r in (d.get("standings") or {}).get("total") or []}
+    else:
+        rc = PRIOR.get("refCards") or {}
+        results = [x for x in PRIOR.get("results") or [] if x.get("hs") is not None]
+        if not results or sum(1 for x in results if "shots" in rc.get(str(x.get("espn")), {})) < .95 * len(results):
+            return None
+        shots = {str(x["id"]): rc.get(str(x.get("espn")), {}).get("shots") for x in results}
+        boxes = {str(x["id"]): rc.get(str(x.get("espn")), {}).get("box") for x in results}
+        names = {str(r["team"]["id"]): r["team"]["name"] for r in (PRIOR.get("standings") or {}).get("total") or []}
+    out = statistiche.understat_from_espn(results, {k: v for k, v in shots.items() if v}, boxes, names)
+    return out if out["teams"] else None   # senza cronaca tiro per tiro (Turchia) niente xG: meglio nessun dato che zeri
+
+
+def no_xg():
+    """Campionato senza xG: né Understat né la cronaca tiro per tiro di ESPN (in Turchia ESPN ha solo gol, cartellini
+    e cambi). I pronostici usano gol e tiri in porta, e le letture delle partite non ci sono."""
+    return ESPN_XG and not us_file(season_year(STATE["data"] or {})).exists()
+
+
 def rebuild_stats(d):
     """Ricalcola le statistiche della stagione in corso (e della scorsa, quando ci sono tutte le partite)."""
     y = season_year(d)
+    if ESPN_XG:
+        cur = espn_understat(d, y)
+        if cur:
+            save_json(us_file(y), cur)
+        else:
+            us_file(y).unlink(missing_ok=True)
+        if not us_file(y - 1).exists():
+            prev = espn_understat(d, y - 1)
+            if prev:
+                save_json(us_file(y - 1), prev)
     us = statistiche.understat_parse(load_json(us_file(y), {})) if us_file(y).exists() else None
     fc = (load_json(FC_STATS_FILE, {}) or {}).get("players") or []
     results = [e for e in d.get("played") or [] if e.get("hs") is not None]
@@ -2709,7 +2770,14 @@ PRETTY = {"Man City": "Manchester City", "Man United": "Manchester United", "Spu
           "Hamburg": "Amburgo", "Bremen": "Werder Brema", "Frankfurt": "Eintracht Francoforte", "RB Leipzig": "Lipsia",
           "Gladbach": "Borussia Mönchengladbach", "Dortmund": "Borussia Dortmund", "Leverkusen": "Bayer Leverkusen",
           "Marseille": "Marsiglia", "Lyon": "Lione", "Nice": "Nizza", "Strasbourg": "Strasburgo", "Toulouse": "Tolosa",
-          "Le Havre AC": "Le Havre"}
+          "Le Havre AC": "Le Havre",
+          # Eredivisie, Liga Portugal e Süper Lig
+          "FC Twente": "Twente", "FC Groningen": "Groningen", "FC Utrecht": "Utrecht", "Fortuna": "Fortuna Sittard",
+          "Sparta": "Sparta Rotterdam", "NEC": "NEC Nijmegen", "FC Porto": "Porto", "Vitória ": "Vitória Guimarães",
+          "Vitória": "Vitória Guimarães", "Maritimo": "Marítimo", "FC Famalicao": "Famalicão", "Estrela": "Estrela Amadora",
+          "Besiktas": "Beşiktaş", "Fenerbahce": "Fenerbahçe", "Caykur Rizespor": "Rizespor", "Istanbul BB": "Başakşehir",
+          "Genclerbirli": "Gençlerbirliği", "Goztepe": "Göztepe", "Kasimpasa": "Kasımpaşa", "Eyupspor": "Eyüpspor",
+          "Erzurum": "Erzurumspor"}
 
 
 def team_names(d):
@@ -2731,6 +2799,10 @@ def readings():
     for e in played:
         x = MATCHES.get(str(e["id"])) or {}
         if not x.get("ev"):
+            continue
+        # senza i tiri (né Understat né la cronaca tiro per tiro: in Turchia ESPN ha solo gol, cartellini e cambi) la
+        # lettura direbbe cose sbagliate («0 tiri», «partita combattuta»): meglio non farla
+        if not x.get("us") and not any(v.get("k") in ("shot", "goal", "wood", "pens") for v in x["ev"].get("ev") or []):
             continue
         h, a = str(e["home"]["id"]), str(e["away"]["id"])
         it = HISTORY.get("matches", {}).get(str(e["id"])) or {}
@@ -2893,12 +2965,13 @@ def snapshot():
         # letture delle partite: come sono nati i gol, come hanno giocato, perché il pronostico è andato così
         "reads": reads, "rounds": {str(k): R["rounds"][k] for k in rr}, "profiles": profiles_out(R),
         "league": {"yellowGame": _r(A["L"].get("yellowGame"), 2), "key": LEGA_KEY, "name": LEGA["name"], "dir": LEGA["dir"],
-                   "fantacalcio": LEGA["fantacalcio"], "cup": CUP},
+                   "fantacalcio": LEGA["fantacalcio"], "cup": CUP, "noXg": no_xg(), "xgEspn": ESPN_XG and not no_xg()},
         # coppa: nomi dei turni («Ottavi – andata»), proiezione della fase campionato, campionato di ogni squadra
         "roundNames": round_names(d), "proj": an.get("proj"),
         # coppa: dati ufficiali della UEFA (medie delle squadre e statistiche dei giocatori in Champions)
         **(uefa_out(d) if CUP else {}),
-        "leagues": [{"key": k, "name": v["name"], "dir": v["dir"]} for k, v in LEGHE.items()],
+        # "minor": nel selettore stanno nel menu «Altri campionati» (richiesta dell'utente del 14/10)
+        "leagues": [{"key": k, "name": v["name"], "dir": v["dir"], "minor": bool(v.get("minor"))} for k, v in LEGHE.items()],
     }
 
 
@@ -2939,10 +3012,12 @@ async def h_data(_):
                               "reads": {k: v for k, v in R["reads"].items() if v.get("round") in rr},
                               "rounds": {str(k): R["rounds"][k] for k in rr}, "profiles": profiles_out(R),
                               "evidenza": an["evidenza"],
-                              "league": {"key": LEGA_KEY, "name": LEGA["name"], "fantacalcio": LEGA["fantacalcio"], "cup": CUP},
+                              "league": {"key": LEGA_KEY, "name": LEGA["name"], "fantacalcio": LEGA["fantacalcio"], "cup": CUP,
+                                         "noXg": no_xg(), "xgEspn": ESPN_XG and not no_xg()},
                               "roundNames": round_names(STATE["data"]), "proj": an.get("proj"),
                               **(uefa_out(STATE["data"]) if CUP else {}),
-                              "leagues": [{"key": k, "name": v["name"], "port": v["port"]} for k, v in LEGHE.items()],
+                              "leagues": [{"key": k, "name": v["name"], "port": v["port"], "minor": bool(v.get("minor"))}
+                                          for k, v in LEGHE.items()],
                               "fantaTeams": len(FANTA.get("teams", [])), "status": status_public(), "now": time.time()})
 
 
@@ -3251,7 +3326,8 @@ async def replace_old_server():
 
 # logo ufficiale della lega, solo per la pagina del Mac (non va sul sito: è un marchio e il sito è pubblico). Icone di
 # OneFootball, aggiornate (ESPN ha ancora il vecchio logo «Serie A TIM»).
-LEAGUE_LOGO = {"serie-a": 13, "premier": 9, "liga": 10, "bundesliga": 1, "ligue1": 23, "champions": 5}
+LEAGUE_LOGO = {"serie-a": 13, "premier": 9, "liga": 10, "bundesliga": 1, "ligue1": 23, "eredivisie": 36, "portugal": 35,
+               "superlig": 8, "champions": 5}
 
 
 def png_alpha_bbox(data):

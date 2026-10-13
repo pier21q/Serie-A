@@ -23,10 +23,11 @@ ROOT = Path(__file__).resolve().parent
 ICON = ROOT / "Icona Serie A.png"
 # quello che serve a GitHub Actions per aggiornare il sito: va nel ramo main
 CODICE = ["server.py", "model.py", "fonti.py", "statistiche.py", "letture.py", "europa.py", "sito.py", "tascabile.html", "Icona Serie A.png",
-          "requirements.txt"] + [f"icone/{k}-{n}.png" for k in ("serie-a", "premier", "liga", "bundesliga", "ligue1", "champions") for n in (180, 192, 512)]
+          "requirements.txt"] + [f"icone/{k}-{n}.png" for k in ("serie-a", "premier", "liga", "bundesliga", "ligue1", "eredivisie", "portugal", "superlig", "champions")
+                            for n in (180, 192, 512)]
 # colore della barra del browser e della schermata Home per lega (il resto dei colori sta in tascabile.html)
 THEME = {"serie-a": "#0B3D91", "premier": "#37003C", "liga": "#C8231B", "bundesliga": "#B0040F", "ligue1": "#091C3E",
-         "champions": "#0A1A4A"}
+         "eredivisie": "#E65100", "portugal": "#00553A", "superlig": "#16161C", "champions": "#0A1A4A"}
 CLOUD_FILES = {"cloud/aggiorna.yml": ".github/workflows/aggiorna.yml", "cloud/README.md": "README.md"}
 # i dati da cui riparte ogni aggiornamento su GitHub: vanno nel ramo "dati". Le rose del fanta no: il fanta sta solo
 # sul Mac (scelta dell'utente del 30/09/2026) e il repository è pubblico

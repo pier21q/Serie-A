@@ -1,6 +1,7 @@
 # Aggiorna il sito di Serie A Live sui computer di GitHub, anche con il Mac spento: prima la Serie A (in cima al sito),
 # poi la Premier League (in /premier/, dati nella cartella premier del ramo "dati"), la Liga (in /liga/, cartella liga)
-# la Champions League (in /champions/, cartella champions), la Bundesliga (/bundesliga/) e la Ligue 1 (/ligue1/).
+# la Champions League (in /champions/, cartella champions), la Bundesliga (/bundesliga/), la Ligue 1 (/ligue1/),
+# l'Eredivisie (/eredivisie/), la Liga Portugal (/portugal/) e la Süper Lig (/superlig/).
 # Ogni 30 minuti: riscarica tutte le fonti (ESPN, Understat, Fantacalcio.it, Wikipedia), ricalcola statistiche e
 # pronostici, ripubblica il sito nel ramo "sito" (anche se non è cambiato niente) e salva i dati nel ramo "dati".
 # GitHub salta gran parte delle esecuzioni programmate (il 28/09 ne ha fatte 4 su 96): per questo una sveglia
@@ -59,7 +60,8 @@ jobs:
           nxt = []
           for f in ("dati/cache/data.json", "dati/premier/cache/data.json", "dati/liga/cache/data.json",
                     "dati/champions/cache/data.json", "dati/bundesliga/cache/data.json",
-                    "dati/ligue1/cache/data.json"):   # tutte le leghe
+                    "dati/ligue1/cache/data.json", "dati/eredivisie/cache/data.json", "dati/portugal/cache/data.json",
+                    "dati/superlig/cache/data.json"):   # tutte le leghe
               try:
                   nxt += json.load(open(f)).get("next") or []
               except Exception:
@@ -118,6 +120,9 @@ jobs:
           SERIEA_LEGA=liga python -u app/server.py --cloud || ok=1
           SERIEA_LEGA=bundesliga python -u app/server.py --cloud || ok=1
           SERIEA_LEGA=ligue1 python -u app/server.py --cloud || ok=1
+          SERIEA_LEGA=eredivisie python -u app/server.py --cloud || ok=1
+          SERIEA_LEGA=portugal python -u app/server.py --cloud || ok=1
+          SERIEA_LEGA=superlig python -u app/server.py --cloud || ok=1
           SERIEA_LEGA=champions python -u app/server.py --cloud || ok=1
           exit $ok
       - name: Tieni attiva la programmazione

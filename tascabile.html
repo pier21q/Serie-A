@@ -24,6 +24,9 @@
 :root[data-lega="liga"]{--accent:#C8231B;--on-accent:#FFFFFF;--brand:#D42A22;--hdr:linear-gradient(120deg,#E8382E,#FF6B57);--hdr-ink:#B81E17;--hdr-hi:#F1BF00;--hdr-hi-ink:#5A0B07;--band:linear-gradient(90deg,#AA151B 0 25%,#F1BF00 25% 75%,#AA151B 75%)}
 :root[data-lega="bundesliga"]{--accent:#C8030F;--on-accent:#FFFFFF;--brand:#D20515;--hdr:linear-gradient(120deg,#6B0209,#C8030F);--hdr-ink:#8A030C;--hdr-hi:#FFFFFF;--hdr-hi-ink:#8A030C;--band:linear-gradient(90deg,#000000 0 33.4%,#DD0000 33.4% 66.6%,#FFCE00 66.6%)}
 :root[data-lega="ligue1"]{--accent:#1A3F8F;--on-accent:#FFFFFF;--brand:#091C3E;--hdr:linear-gradient(120deg,#0B1F3A,#1E4D8F);--hdr-ink:#0B1F3A;--hdr-hi:#EF4135;--hdr-hi-ink:#FFFFFF;--band:linear-gradient(90deg,#0055A4 0 33.4%,#F4F5F0 33.4% 66.6%,#EF4135 66.6%)}
+:root[data-lega="eredivisie"]{--accent:#C24E00;--on-accent:#FFFFFF;--brand:#E65100;--hdr:linear-gradient(120deg,#E65100,#FF8A1F);--hdr-ink:#B23F00;--hdr-hi:#FFFFFF;--hdr-hi-ink:#B23F00;--band:linear-gradient(90deg,#AE1C28 0 33.4%,#F4F5F0 33.4% 66.6%,#21468B 66.6%)}
+:root[data-lega="portugal"]{--accent:#00754A;--on-accent:#FFFFFF;--brand:#00553A;--hdr:linear-gradient(120deg,#00553A,#00874E);--hdr-ink:#00553A;--hdr-hi:#E4202E;--hdr-hi-ink:#FFFFFF;--band:linear-gradient(90deg,#006600 0 40%,#FF0000 40%)}
+:root[data-lega="superlig"]{--accent:#C8102E;--on-accent:#FFFFFF;--brand:#16161C;--hdr:linear-gradient(120deg,#16161C,#3A0A10 55%,#C8102E);--hdr-ink:#16161C;--hdr-hi:#E30A17;--hdr-hi-ink:#FFFFFF;--band:linear-gradient(90deg,#E30A17 0 30%,#F4F5F0 30% 70%,#E30A17 70%)}
 :root[data-lega="champions"]{--accent:#1B3A8C;--on-accent:#FFFFFF;--brand:#0A1A4A;--hdr:radial-gradient(circle at 12% 30%,rgba(255,255,255,.55) 0 1px,transparent 1.6px),radial-gradient(circle at 34% 72%,rgba(255,255,255,.45) 0 1px,transparent 1.6px),radial-gradient(circle at 58% 22%,rgba(255,255,255,.5) 0 1px,transparent 1.6px),radial-gradient(circle at 81% 64%,rgba(255,255,255,.45) 0 1px,transparent 1.6px),radial-gradient(circle at 93% 18%,rgba(255,255,255,.4) 0 1px,transparent 1.6px),linear-gradient(120deg,#030A26,#14236E);--hdr-ink:#0A1A4A;--hdr-hi:#D9E2F2;--hdr-hi-ink:#0A1A4A;--band:linear-gradient(90deg,#0A1A4A,#3B5BB8 45%,#D9E2F2)}
 @media (prefers-color-scheme:dark){
   :root[data-lega="serie-a"]:not([data-theme="light"]){--accent:#5CB3FF;--on-accent:#06122A}
@@ -31,12 +34,18 @@
   :root[data-lega="liga"]:not([data-theme="light"]){--accent:#FF6B5E;--on-accent:#1A0705}
   :root[data-lega="bundesliga"]:not([data-theme="light"]){--accent:#FF5A5F;--on-accent:#1A0505}
   :root[data-lega="ligue1"]:not([data-theme="light"]){--accent:#8DB3FF;--on-accent:#08142E}
+  :root[data-lega="eredivisie"]:not([data-theme="light"]){--accent:#FF9A4D;--on-accent:#2A1000}
+  :root[data-lega="portugal"]:not([data-theme="light"]){--accent:#3DDC97;--on-accent:#00261A}
+  :root[data-lega="superlig"]:not([data-theme="light"]){--accent:#FF5A6A;--on-accent:#1A0408}
   :root[data-lega="champions"]:not([data-theme="light"]){--accent:#C9D6EE;--on-accent:#0A1A4A}}
 :root[data-lega="serie-a"][data-theme="dark"]{--accent:#5CB3FF;--on-accent:#06122A}
 :root[data-lega="premier"][data-theme="dark"]{--accent:#00FF85;--on-accent:#37003C}
 :root[data-lega="liga"][data-theme="dark"]{--accent:#FF6B5E;--on-accent:#1A0705}
 :root[data-lega="bundesliga"][data-theme="dark"]{--accent:#FF5A5F;--on-accent:#1A0505}
 :root[data-lega="ligue1"][data-theme="dark"]{--accent:#8DB3FF;--on-accent:#08142E}
+:root[data-lega="eredivisie"][data-theme="dark"]{--accent:#FF9A4D;--on-accent:#2A1000}
+:root[data-lega="portugal"][data-theme="dark"]{--accent:#3DDC97;--on-accent:#00261A}
+:root[data-lega="superlig"][data-theme="dark"]{--accent:#FF5A6A;--on-accent:#1A0408}
 :root[data-lega="champions"][data-theme="dark"]{--accent:#C9D6EE;--on-accent:#0A1A4A}
 *{box-sizing:border-box}
 body{background:var(--ground);color:var(--ink);font-family:var(--body);font-size:15px;line-height:1.45}
@@ -58,7 +67,11 @@ header .wrap{padding-block:0}   /* il margine in fondo serve alla pagina, non al
 :root[data-lega] nav a[aria-current="page"]{background:#FFFFFF;color:var(--hdr-ink)}
 :root[data-lega] nav a:focus-visible{outline-color:#FFFFFF}
 .logo .emb{width:30px;height:30px;border-radius:8px;vertical-align:-4px;margin-right:9px;box-shadow:0 1px 3px rgba(0,0,0,.18)}
-@media (max-width:420px){.logo span{display:none}}   /* sul telefono basta l'emblema con il nome della lega */
+@media (max-width:420px){.logo span{display:none}}
+.leghe select{flex:none;-webkit-appearance:none;appearance:none;font:inherit;font-size:12px;font-weight:600;border-radius:999px;padding:2px 24px 2px 10px;border:1px solid var(--line);color:var(--ink2);background:transparent url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M1 1l4 4 4-4' fill='none' stroke='%23888' stroke-width='1.6'/%3E%3C/svg%3E") no-repeat right 9px center;cursor:pointer}
+.leghe select option{color:#111;background:#fff}
+:root[data-lega] .leghe select{color:rgba(255,255,255,.92);border-color:rgba(255,255,255,.38);background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M1 1l4 4 4-4' fill='none' stroke='white' stroke-width='1.6'/%3E%3C/svg%3E")}
+:root[data-lega] .leghe select.cur{background-color:var(--hdr-hi);border-color:var(--hdr-hi);color:var(--hdr-hi-ink);background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M1 1l4 4 4-4' fill='none' stroke='%23888' stroke-width='1.6'/%3E%3C/svg%3E")}   /* sul telefono basta l'emblema con il nome della lega */
 .bar1{display:flex;align-items:baseline;gap:10px;padding-block:12px 6px}
 .logo.long{font-size:23px}.logo.long span{display:none}
 .leghe{display:flex;gap:6px;padding-block:0 4px;overflow-x:auto;scrollbar-width:none}.leghe:empty{display:none}
@@ -355,7 +368,7 @@ function vGiornata() {
       <div class="more">Scheda completa ›</div></a>`).join('')}</div>`).join('');
 }
 
-const ZONE = {'Champions League': ['cl', 'Champions League'], 'Champions League Qualification': ['cl', 'Champions (preliminari)'], 'Europa League': ['el', 'Europa League'], 'Relegation Playoff': ['rp', 'Spareggio salvezza'], 'Conference League Qualification': ['co', 'Conference League'], 'Conference League': ['co', 'Conference League'], 'Relegation': ['rel', 'Retrocessione'],
+const ZONE = {'Champions League': ['cl', 'Champions League'], 'Champions League Qualification': ['cl', 'Champions (preliminari)'], 'Europa League': ['el', 'Europa League'], 'Europa League Qualification': ['el', 'Europa League (preliminari)'], 'Relegation Playoff': ['rp', 'Spareggio salvezza'], 'Conference League Qualification': ['co', 'Conference League (preliminari)'], 'Conference League': ['co', 'Conference League'], 'Relegation': ['rel', 'Retrocessione'],
   'Round of 16': ['cl', 'Ottavi'], 'Playoffs': ['el', 'Spareggi'], 'Eliminated': ['rel', 'Eliminate']};
 function vClassifica() {
   const zones = new Set(), cup = (D.league || {}).cup, pj = D.proj || null;
@@ -853,7 +866,7 @@ function vPartita(id) {
     ${refCard(P)}${lineupCard(P, 'home', h)}${lineupCard(P, 'away', a)}
     ${absentCard(P, h, a)}${scorersCard(P, h, a)}${yellowCard(P, h, a)}${heatCard(P, h, a)}
     ${radarCard(h, a)}${mirrorCard(h, a)}${swCard(h, a)}
-    ${(D.league || {}).cup ? `<p class="small muted">Come funziona in Champions: la forza di ogni squadra (attacco e difesa) viene da tutte le sue partite degli ultimi tre anni, nel suo campionato e nelle coppe europee, pesate per quanto sono recenti; ogni squadra è avvicinata alla media del suo campionato e le coppe collegano i campionati tra loro. Provato all'indietro sulle 378 partite di Champions 2024/25 e 2025/26: log loss 0,898 contro 1,014 delle frequenze fisse, esito più probabile azzeccato nel 59% dei casi. Forma, accoppiamenti e stili qui non spostano i gol attesi (in coppa le partite sono troppo poche); restano le assenze. Nei ritorni la probabilità di passare il turno tiene conto dell'andata, dei supplementari e dei rigori. Provati anche gli xG al posto dei gol (Understat per i cinque campionati maggiori, la posizione dei tiri per le partite europee): sulle stesse 378 partite non migliorano il pronostico in modo misurabile (0,2%, dentro il margine d'errore), quindi la forza resta calcolata sui gol.</p>` : `<p class="small muted">Come funziona: per ogni squadra si stima la forza in attacco e in difesa rispetto alla media della ${LGN}: per l'80% dagli xG senza rigori creati e concessi, per il 20% dai gol veri, partendo dalla stagione scorsa e dando sempre più peso a quella in corso. Se l'allenatore è cambiato d'estate la stagione scorsa pesa meno; se è cambiato in corsa, le partite di prima contano un quarto. È la combinazione che ha previsto meglio, provata all'indietro su 1520 partite di Serie A e Premier. Poi si corregge per forma, accoppiamenti tra forze e debolezze, scontro di stili e assenze. I gol attesi alimentano un modello di Poisson con correzione Dixon-Coles.</p>`}
+    ${(D.league || {}).cup ? `<p class="small muted">Come funziona in Champions: la forza di ogni squadra (attacco e difesa) viene da tutte le sue partite degli ultimi tre anni, nel suo campionato e nelle coppe europee, pesate per quanto sono recenti; ogni squadra è avvicinata alla media del suo campionato e le coppe collegano i campionati tra loro. Provato all'indietro sulle 378 partite di Champions 2024/25 e 2025/26: log loss 0,898 contro 1,014 delle frequenze fisse, esito più probabile azzeccato nel 59% dei casi. Forma, accoppiamenti e stili qui non spostano i gol attesi (in coppa le partite sono troppo poche); restano le assenze. Nei ritorni la probabilità di passare il turno tiene conto dell'andata, dei supplementari e dei rigori. Provati anche gli xG al posto dei gol (Understat per i cinque campionati maggiori, la posizione dei tiri per le partite europee): sulle stesse 378 partite non migliorano il pronostico in modo misurabile (0,2%, dentro il margine d'errore), quindi la forza resta calcolata sui gol.</p>` : `<p class="small muted">Come funziona: per ogni squadra si stima la forza in attacco e in difesa rispetto alla media della ${LGN}: per l'80% dagli xG senza rigori creati e concessi, per il 20% dai gol veri, partendo dalla stagione scorsa e dando sempre più peso a quella in corso. Se l'allenatore è cambiato d'estate la stagione scorsa pesa meno; se è cambiato in corsa, le partite di prima contano un quarto. È la combinazione che ha previsto meglio, provata all'indietro su 1520 partite di Serie A e Premier. Poi si corregge per forma, accoppiamenti tra forze e debolezze, scontro di stili e assenze. I gol attesi alimentano un modello di Poisson con correzione Dixon-Coles.${LG.noXg ? ' In questo campionato Understat non arriva e ESPN non ha la cronaca tiro per tiro (solo gol, cartellini e cambi): la forza delle squadre viene dai gol e dai tiri in porta, senza xG, e le letture delle partite non ci sono.' : LG.xgEspn ? ' Understat non copre questo campionato: gli xG di squadre e giocatori sono calcolati dalla posizione di ogni tiro nella cronaca Opta di ESPN, con il modello tarato sugli xG di Understat (errore medio 0,29 a partita).' : ''}</p>`}
   </div>`;
 }
 
@@ -1247,15 +1260,20 @@ async function boot() {
   document.querySelector('.logo').innerHTML = `<img class="emb" src="icona-192.png" alt="" onerror="this.remove()">${esc(LGN)} <span>tascabile</span>`;
   document.querySelector('.logo').classList.toggle('long', LGN.length > 10);
   const up = LG.dir ? '../' : '';
-  document.getElementById('leghe').innerHTML = (D.leagues || []).length > 1 ? D.leagues.map(l => `<a href="${up + (l.dir ? l.dir + '/' : '') || './'}" aria-current="${l.dir === LG.dir ? 'page' : 'false'}">${esc(l.name.replace(/ League$/, ''))}</a>`).join('') : '';   // «Premier», «Champions»: sul telefono ci stanno tutte
-  const cur = document.querySelector('.leghe a[aria-current="page"]');   // con sei leghe la riga scorre: quella aperta in vista
+  // leghe principali come pulsanti, i campionati minori (Eredivisie, Portogallo, Turchia) nel menu «Altri»
+  const href = l => up + (l.dir ? l.dir + '/' : '') || './', LL = D.leagues || [];
+  const minor = LL.filter(l => l.minor), curMinor = minor.find(l => l.dir === LG.dir);
+  document.getElementById('leghe').innerHTML = LL.length > 1 ? LL.filter(l => !l.minor).map(l => `<a href="${href(l)}" aria-current="${l.dir === LG.dir ? 'page' : 'false'}">${esc(l.name.replace(/ League$/, ''))}</a>`).join('')   // «Premier», «Champions»
+    + (minor.length ? `<select class="altre${curMinor ? ' cur' : ''}" aria-label="Altri campionati" onchange="if (this.value) location.href = this.value">
+        ${curMinor ? '' : '<option value="" selected>Altri campionati</option>'}${minor.map(l => `<option value="${href(l)}"${l === curMinor ? ' selected' : ''}>${esc(l.name)}</option>`).join('')}</select>` : '') : '';
+  const cur = document.querySelector('.leghe a[aria-current="page"], .leghe select.cur');   // la riga scorre: quella aperta in vista
   if (cur) cur.parentElement.scrollLeft = cur.offsetLeft - 16;
   D.players = D.players || [];
   PL = Object.fromEntries(D.players.map(p => [String(p.id), p]));
   LOGOS = new Set((D.logos || []).map(String));
   MK = Object.fromEntries((D.metrics || []).map(x => [x.k, x]));
   stamp();
-  document.getElementById('foot').textContent = `Versione tascabile di ${LGN}, aggiornata in automatico ogni 30 minuti. Risultati, classifica, formazioni e statistiche delle partite da ESPN; ${LG.cup ? 'xG dalla posizione dei tiri nella cronaca Opta di ESPN; corsa, pressing, allenatori e migliori in campo dai dati ufficiali UEFA; statistiche dei giocatori nei campionati da Understat' : 'xG da Understat'}; ${LG.fantacalcio === false ? 'probabili formazioni da OneFootball; allenatori da Wikipedia' : 'voti, probabili formazioni e designazioni arbitrali da Fantacalcio.it'}. I pronostici sono stime statistiche, non certezze.`;
+  document.getElementById('foot').textContent = `Versione tascabile di ${LGN}, aggiornata in automatico ogni 30 minuti. Risultati, classifica, formazioni e statistiche delle partite da ESPN; ${LG.cup ? 'xG dalla posizione dei tiri nella cronaca Opta di ESPN; corsa, pressing, allenatori e migliori in campo dai dati ufficiali UEFA; statistiche dei giocatori nei campionati da Understat' : LG.noXg ? 'niente xG (Understat non copre il campionato e ESPN non ha la cronaca tiro per tiro)' : LG.xgEspn ? 'xG dalla posizione dei tiri nella cronaca Opta di ESPN' : 'xG da Understat'}; ${LG.fantacalcio === false ? 'probabili formazioni da OneFootball; allenatori da Wikipedia' : 'voti, probabili formazioni e designazioni arbitrali da Fantacalcio.it'}. I pronostici sono stime statistiche, non certezze.`;
   show(location.hash.slice(1) || 'giornata');
 }
 boot();

@@ -241,10 +241,13 @@ def rating(m, L, npx=None):
     if npx and npx[0] is not None and npx[1] is not None and L.get("npxg"):
         return {"att": W_GOALS * gpm / mu + (1 - W_GOALS) * npx[0] / L["npxg"],
                 "de": W_GOALS * gapm / mu + (1 - W_GOALS) * npx[1] / L["npxg"], "xg": xg}
-    sotA = m.get("sotA") if m.get("sotA") is not None else L["sotA"]
-    bcA = m.get("bcA") if m.get("bcA") is not None else L["bcA"]
+    sotA = m.get("sotA") if m.get("sotA") is not None else L.get("sotA")
+    bcA = m.get("bcA") if m.get("bcA") is not None else L.get("bcA")
     att = (.55 * gpm + .45 * xg) / mu
-    de = .55 * gapm / mu + .45 * (.5 * sotA / L["sotA"] + .5 * bcA / L["bcA"])
+    # tiri in porta e palloni vicino all'area concessi, quelli che ci sono (nei campionati senza Understat, finché non
+    # ci sono i tiri della stagione scorsa, i secondi mancano): con nessuno dei due, solo i gol subiti
+    parts = [v / L[k] for v, k in ((sotA, "sotA"), (bcA, "bcA")) if v is not None and L.get(k)]
+    de = .55 * gapm / mu + .45 * sum(parts) / len(parts) if parts else gapm / mu
     return {"att": att, "de": de, "xg": xg}
 
 
