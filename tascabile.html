@@ -93,6 +93,8 @@ details.acc[open] .acc-ch{transform:rotate(90deg)}
 .logo span{color:var(--accent)}
 .stamp{margin-left:auto;font-size:12px;color:var(--muted);text-align:right;line-height:1.3}
 .stamp .warn{color:var(--warn);font-weight:600}
+.stamp .ckl{color:inherit;text-decoration:none;white-space:nowrap}
+.bl.mk{color:var(--muted);margin-top:2px}
 nav{display:flex;gap:4px;overflow-x:auto;scrollbar-width:none;padding-block:4px 10px}
 nav::-webkit-scrollbar{display:none}
 nav a{flex:none;text-decoration:none;color:var(--ink2);font-family:var(--display);font-weight:600;font-size:17px;letter-spacing:.02em;padding:4px 12px;border-radius:999px;text-transform:uppercase}
@@ -461,8 +463,29 @@ function vStorico() {
       <span style="width:1.2em;text-align:center">${i.ok == null ? '' : i.ok ? '<b class="ok">✓</b>' : '<b class="ko">✗</b>'}</span>`;
     return i.f ? `<a class="card cardlink ev" href="#r${i.id}">${inner}</a>` : `<div class="card ev" style="display:flex;align-items:center;gap:10px;padding:10px 14px">${inner}</div>`;
   };
-  return `<h2>Storico pronostici</h2>${tiles}${cal}${plc}${items.length ? `<div class="list evl" style="margin-top:10px">${items.map(row).join('')}</div>
+  const mk = s.market;
+  const mkc = mk && mk.n ? `<div class="card" style="margin-top:10px"><h3>Il pronostico contro il mercato <small class="muted">${mk.n} partite</small></h3>
+    <div class="facts">${[['Esito azzeccato', pc(mk.pick), pc(mk.pickMk)], ['Log loss', fx(mk.ll, 3), fx(mk.llMk, 3)], ['Brier', fx(mk.brier, 3), fx(mk.brierMk, 3)]].map(([l, a, b]) =>
+      `<div class="fact"><small>${l} · pronostico · mercato</small><b class="num">${a} · ${b}</b></div>`).join('')}</div>
+    <p class="small muted">Le stesse partite: le probabilità del pronostico al calcio d'inizio e quelle delle quote dei bookmaker (${esc((mk.src || []).join(', '))}) senza il loro margine. Log loss e Brier: più bassi è meglio. Il mercato è il riferimento più difficile da battere: sulle 3500 partite 2024-2026 dei cinque campionati maggiori ha fatto meglio del modello (log loss 0,970 contro 0,981).</p></div>` : '';
+  return `<h2>Storico pronostici</h2>${tiles}${cal}${mkc}${plc}${checksCard()}${items.length ? `<div class="list evl" style="margin-top:10px">${items.map(row).join('')}</div>
       <p class="small muted">Tocca una partita giocata per vedere com'è andata rispetto al pronostico.</p>` : ''}`;
+}
+
+// controlli automatici a ogni aggiornamento (controlli.py): incoerenze, valori fuori scala, fonti a confronto
+function checksCard() {
+  const ck = D.checks;
+  if (!ck) return '';
+  const issues = [...(ck.data || []), ...(ck.pred || [])];
+  const srcs = (ck.compare || []).map(s => `<tr><td class="l">${esc(s.src)}</td><td class="num">${s.n}</td><td class="num">${s.same}</td><td class="num">${s.nDiff}</td></tr>`).join('');
+  const diffs = (ck.compare || []).flatMap(s => (s.diff || []).slice(0, 6).map(x => `<li><b>${esc(x.name)}</b> (${nm(x.team)}): ${x.d.map(([k, e, o]) => `${k} ${fx(e, 0)} per ESPN, ${fx(o, 0)} per ${esc(s.src)}`).join('; ')}</li>`));
+  return `<div class="card" style="margin-top:10px" id="controlli"><h3>Controlli dei dati</h3>
+    <p>${ck.ok ? '<b class="ok">✓</b> Tutto torna' : `<b class="ko">!</b> ${ck.n} ${ck.n === 1 ? 'cosa' : 'cose'} da verificare`} <small class="muted">controllo automatico a ogni aggiornamento</small></p>
+    ${issues.length ? `<ul class="small">${issues.slice(0, 10).map(x => `<li>${esc(x)}</li>`).join('')}</ul>` : ''}
+    ${srcs ? `<h4>Fonti a confronto</h4><div class="tw"><table><thead><tr><th class="l">Fonte</th><th>Giocatori</th><th>Uguali a ESPN</th><th>Diversi</th></tr></thead><tbody>${srcs}</tbody></table></div>
+      ${diffs.length ? `<details class="acc"><summary>Le differenze</summary><ul class="small">${diffs.join('')}</ul></details>` : ''}` : ''}
+    ${ck.links ? `<p class="small muted">Giocatori di Understat riconosciuti anche dai minuti di ogni partita (non solo dal nome): ${ck.links.minutes} su ${ck.links.players}.</p>` : ''}
+    <p class="small muted">Si controlla che la classifica torni con i risultati, i gol dei giocatori con quelli delle squadre, le letture con i punteggi, che nessuna partita sia doppia e nessun pronostico fuori scala (falli, gialli, gol, tiri). Minuti, gol, assist e cartellini dei tabellini ESPN si confrontano con le altre fonti: gol e cartellini devono essere uguali, gli assist entro 1 (le fonti li contano in modo diverso). Chi ha giocato nelle ultime 36 ore aspetta: alcune fonti si aggiornano una volta al giorno.</p></div>`;
 }
 
 /* letture delle partite: come sono nati i gol, come hanno giocato, perché il pronostico è andato così */
@@ -702,7 +725,7 @@ function clashCard(P, h, a) {
     <div class="legend"><span><i style="background:var(--home)"></i>${nm(h)}</span><span><i style="background:var(--away)"></i>${nm(a)}</span><span>posizione tra le ${D.N} squadre (0-100)</span></div>
     <ul class="keys" style="margin-top:12px">${items || '<li class="muted">Nessuno scontro di stili marcato: le due squadre non si ostacolano né si favoriscono in modo netto.</li>'}</ul>
     ${h2h ? `<h4>Precedenti</h4><div class="small">${h2h}</div>` : ''}
-    <p class="small muted">Lo scontro di stili sposta i gol attesi al massimo del 6% per squadra e il ritmo della partita dell'8%; i cartellini attesi salgono fino al 20% nelle partite più intense.${st.matches ? ` I precedenti tra stili si basano su ${st.matches} partite di ${LGN}.` : ''}</p></div>`;
+    <p class="small muted">Lo scontro di stili descrive come si incontrano i due modi di giocare. Provato su 3500 partite dei cinque campionati maggiori, non migliora il pronostico: non sposta i gol attesi, fa solo salire un po' i cartellini attesi (fino al 5%) nelle partite più intense.${st.matches ? ` I precedenti tra stili si basano su ${st.matches} partite di ${LGN}.` : ''}</p></div>`;
 }
 function adjCard(P, h, a) {
   const block = (id, base, fin) => {
@@ -851,6 +874,17 @@ function lessonsCard(x) {
     <ul class="keys">${line(x.home, ph)}${line(x.away, pa)}</ul>
     <p class="small muted">Dalle letture delle partite giocate (cronaca Opta di ESPN, ${(D.league || {}).cup ? 'xG dalla posizione dei tiri' : 'xG di Understat'}). Sono indicazioni sul modo in cui le squadre segnano e subiscono: il pronostico non le usa direttamente.</p></div>`;
 }
+// il mercato: le quote dei bookmaker trasformate in probabilità, togliendo il loro margine
+function mkLine(M, P, h, a) {
+  if (!M) return '';
+  const ks = ['p1', 'px', 'p2'], k = ks.reduce((b, c) => Math.abs(P[c] - M[c]) > Math.abs(P[b] - M[b]) ? c : b);
+  const lab = {p1: `la vittoria di ${nm(h)}`, px: 'il pareggio', p2: `la vittoria di ${nm(a)}`}[k];
+  const far = Math.abs(P[k] - M[k]) >= .1;
+  return `<div class="bl num mk"><span>mercato 1 · ${pc(M.p1)}</span><span>X · ${pc(M.px)}</span><span>2 · ${pc(M.p2)}</span></div>
+    <p class="small muted" style="margin:4px 0 0">Mercato: quote ${esc(M.src || 'dei bookmaker')} senza il margine del bookmaker.${far
+    ? ` <span class="warn">Il pronostico se ne discosta su ${lab}: ${pc(P[k])} contro ${pc(M[k])}.</span> Di solito il mercato sa qualcosa in più (notizie dell'ultima ora, motivazioni), a volte il modello vede qualcosa nei numeri.` : ''}</p>`;
+}
+
 function vPartita(id) {
   const x = D.fixtures.find(f => String(f.id) === String(id));
   if (!x || !x.P) return back('giornata', 'Giornata') + '<p class="lead" style="margin-top:14px">Questa partita non è nella fotografia attuale.</p>';
@@ -864,6 +898,7 @@ function vPartita(id) {
     <div class="fx-teams">${side(h, '')}<div class="pick"><div class="sc num">${P.pick.score.i}–${P.pick.score.j}</div><small>${esc(P.pick.label)}</small><small>${pc(P.pick.p)}</small></div>${side(a, 'r')}</div>
     <div class="bars" role="img" aria-label="1 ${pc(P.p1)}, X ${pc(P.px)}, 2 ${pc(P.p2)}"><i class="h" style="width:${P.p1 * 100}%"></i><i class="x" style="width:${P.px * 100}%"></i><i class="a" style="width:${P.p2 * 100}%"></i></div>
     <div class="bl num"><span>1 · ${pc(P.p1)}</span><span>X · ${pc(P.px)}</span><span>2 · ${pc(P.p2)}</span></div>
+    ${mkLine(P.market, P, h, a)}
     <div class="facts">
       <div class="fact"><small>Gol attesi</small><b class="num">${fx(P.lh, 2)}–${fx(P.la, 2)}</b></div>
       <div class="fact"><small>Over 2,5</small><b>${pc(P.over25)}</b></div>
@@ -882,7 +917,7 @@ function vPartita(id) {
     ${refCard(P)}${lineupCard(P, 'home', h)}${lineupCard(P, 'away', a)}
     ${absentCard(P, h, a)}${scorersCard(P, h, a)}${yellowCard(P, h, a)}${heatCard(P, h, a)}
     ${radarCard(h, a)}${mirrorCard(h, a)}${swCard(h, a)}
-    ${(D.league || {}).cup ? `<p class="small muted">Come funziona in Champions: la forza di ogni squadra (attacco e difesa) viene da tutte le sue partite degli ultimi tre anni, nel suo campionato e nelle coppe europee, pesate per quanto sono recenti; ogni squadra è avvicinata alla media del suo campionato e le coppe collegano i campionati tra loro. Provato all'indietro sulle 378 partite di Champions 2024/25 e 2025/26: log loss 0,898 contro 1,014 delle frequenze fisse, esito più probabile azzeccato nel 59% dei casi. Forma, accoppiamenti e stili qui non spostano i gol attesi (in coppa le partite sono troppo poche); restano le assenze. Nei ritorni la probabilità di passare il turno tiene conto dell'andata, dei supplementari e dei rigori. Provati anche gli xG al posto dei gol (Understat per i cinque campionati maggiori, la posizione dei tiri per le partite europee): sulle stesse 378 partite non migliorano il pronostico in modo misurabile (0,2%, dentro il margine d'errore), quindi la forza resta calcolata sui gol.</p>` : `<p class="small muted">Come funziona: per ogni squadra si stima la forza in attacco e in difesa rispetto alla media della ${LGN}: per l'80% dagli xG senza rigori creati e concessi, per il 20% dai gol veri, partendo dalla stagione scorsa e dando sempre più peso a quella in corso. Se l'allenatore è cambiato d'estate la stagione scorsa pesa meno; se è cambiato in corsa, le partite di prima contano un quarto. È la combinazione che ha previsto meglio, provata all'indietro su 1520 partite di Serie A e Premier. Poi si corregge per forma, accoppiamenti tra forze e debolezze, scontro di stili e assenze. I gol attesi alimentano un modello di Poisson con correzione Dixon-Coles.${LG.noXg ? ' In questo campionato Understat non arriva e ESPN non ha la cronaca tiro per tiro (solo gol, cartellini e cambi): la forza delle squadre viene dai gol e dai tiri in porta, senza xG, e le letture delle partite non ci sono.' : LG.xgEspn ? ' Understat non copre questo campionato: gli xG di squadre e giocatori sono calcolati dalla posizione di ogni tiro nella cronaca Opta di ESPN, con il modello tarato sugli xG di Understat (errore medio 0,29 a partita).' : ''}</p>`}
+    ${(D.league || {}).cup ? `<p class="small muted">Come funziona in Champions: la forza di ogni squadra (attacco e difesa) viene da tutte le sue partite degli ultimi tre anni, nel suo campionato e nelle coppe europee, pesate per quanto sono recenti; ogni squadra è avvicinata alla media del suo campionato e le coppe collegano i campionati tra loro. Provato all'indietro sulle 378 partite di Champions 2024/25 e 2025/26: log loss 0,898 contro 1,014 delle frequenze fisse, esito più probabile azzeccato nel 59% dei casi. Forma, accoppiamenti e stili qui non spostano i gol attesi (in coppa le partite sono troppo poche); restano le assenze. Nei ritorni la probabilità di passare il turno tiene conto dell'andata, dei supplementari e dei rigori. Provati anche gli xG al posto dei gol (Understat per i cinque campionati maggiori, la posizione dei tiri per le partite europee): sulle stesse 378 partite non migliorano il pronostico in modo misurabile (0,2%, dentro il margine d'errore), quindi la forza resta calcolata sui gol.</p>` : `<p class="small muted">Come funziona: per ogni squadra si stima la forza in attacco e in difesa rispetto alla media della ${LGN}: per l'80% dagli xG senza rigori creati e concessi, per il 20% dai gol veri, partendo dalla stagione scorsa e dando sempre più peso a quella in corso. Se l'allenatore è cambiato d'estate la stagione scorsa pesa meno; se è cambiato in corsa, le partite di prima contano un quarto. È la combinazione che ha previsto meglio, provata all'indietro su 1520 partite di Serie A e Premier. Poi si corregge per le assenze. Provato su 3500 partite dei cinque campionati maggiori (2024-2026, usando solo le partite giocate prima di ognuna): forma, accoppiamenti e scontro di stili non migliorano il pronostico, quindi li trovi come descrizioni ma non spostano i gol attesi. Le assenze sì: spostano i gol attesi da una squadra all'altra, lasciando uguale il totale. I gol attesi alimentano un modello di Poisson con correzione Dixon-Coles.${LG.noXg ? ' In questo campionato Understat non arriva e ESPN non ha la cronaca tiro per tiro (solo gol, cartellini e cambi): la forza delle squadre viene dai gol e dai tiri in porta, senza xG, e le letture delle partite non ci sono.' : LG.xgEspn ? ' Understat non copre questo campionato: gli xG di squadre e giocatori sono calcolati dalla posizione di ogni tiro nella cronaca Opta di ESPN, con il modello tarato sugli xG di Understat (errore medio 0,29 a partita).' : ''}</p>`}
   </div>`;
 }
 
@@ -1245,7 +1280,7 @@ document.addEventListener('click', e => {
   if (m) { emode = m.dataset.em; document.getElementById('evidenza').innerHTML = vEvidenza(); }
 });
 window.addEventListener('hashchange', () => { if (D) show(location.hash.slice(1)); });
-const FONTE = {'statistiche': 'Understat', 'letture': 'tiri delle partite (Understat)', 'fantacalcio.it': 'Fantacalcio.it', 'sito': 'pubblicazione del sito',
+const FONTE = {'marcatori (Wikipedia)': 'classifica marcatori (Wikipedia)', 'statistiche': 'Understat', 'letture': 'tiri delle partite (Understat)', 'fantacalcio.it': 'Fantacalcio.it', 'sito': 'pubblicazione del sito',
                'storico': 'copia dello storico', 'designazioni': 'designazioni arbitrali (Fantacalcio.it)',
                'arbitri': 'arbitri della scorsa stagione (Fantacalcio.it)'};
 function stamp() {
@@ -1254,7 +1289,8 @@ function stamp() {
   const late = Date.now() / 1000 - D.generatedAt > 70 * 60;
   document.getElementById('stamp').innerHTML = `Aggiornato il ${day(D.generatedAt)}`
     + (late ? `<br><span class="warn">nessun aggiornamento da più di un'ora</span>` : '')
-    + (errs.length ? `<br><span class="warn">non risponde: ${esc(errs.join(', '))}</span>` : '');
+    + (errs.length ? `<br><span class="warn">non risponde: ${esc(errs.join(', '))}</span>` : '')
+    + (D.checks ? `<br><a class="ckl" href="#storico" title="Controlli automatici dei dati: il dettaglio è nello storico">${D.checks.ok ? '✓ dati controllati' : `<span class="warn">! ${D.checks.n} dati da verificare</span>`}</a>` : '');
 }
 async function boot() {
   const box = document.getElementById('giornata');

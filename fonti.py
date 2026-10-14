@@ -474,3 +474,78 @@ def espn_subs(summary):
         if len(ps) >= 2:
             out.append((str((k.get("team") or {}).get("id")), ps[0], ps[1]))
     return out
+
+
+def _dec_frac(v):
+    """Quota frazionaria ("31/10") o decimale ("4.1") -> decimale."""
+    try:
+        s = str(v).strip()
+        if "/" in s:
+            a, b = s.split("/")
+            return 1 + float(a) / float(b)
+        return float(s)
+    except (ValueError, ZeroDivisionError):
+        return None
+
+
+def _dec_us(ml):
+    """Quota americana (+130, -200) -> decimale."""
+    try:
+        ml = float(ml)
+    except (TypeError, ValueError):
+        return None
+    if ml >= 100:
+        return 1 + ml / 100
+    if ml <= -100:
+        return 1 + 100 / -ml
+    return None
+
+
+# bookmaker in ordine di preferenza: le loro quote nei riepiloghi ESPN sono quelle di prima della partita. Unibet e
+# Betfair no: sulle partite 2023-2026 dei cinque campionati maggiori «indovinano» troppo (log loss 0,76 e 0,80 contro
+# 0,92-0,99 degli altri), cioè sono quote aggiornate durante la partita
+ODDS_BOOKS = ["bet 365", "bet365", "draftkings", "espn bet", "titanbets", "sugarhouse", "draftkings (old)"]
+
+
+def espn_odds(summary):
+    """Quote 1X2 di prima della partita nel riepilogo ESPN -> probabilità senza il margine del bookmaker:
+    {"p1", "px", "p2", "book", "src"} (book = somma delle probabilità implicite, il margine), o None.
+    Bet365 ha le quote «preMatch» frazionarie; DraftKings ed ESPN BET le americane di chiusura. Le «Live Odds» sono
+    quelle durante la partita e non si usano (dopo il fischio d'inizio sanno già come sta andando)."""
+    best = None
+    for o in summary.get("odds") or summary.get("pickcenter") or []:
+        name = ((o.get("provider") or {}).get("name") or "").strip()
+        if "live" in name.lower() or name.lower() not in ODDS_BOOKS:
+            continue
+        tm = ((o.get("bettingOdds") or {}).get("teamOdds")) or {}
+        d = None
+        if tm.get("preMatchFullTimeResultHome"):
+            d = [_dec_frac((tm.get(f"preMatchFullTimeResult{k}") or {}).get("value")) for k in ("Home", "Draw", "Away")]
+        elif (o.get("homeTeamOdds") or {}).get("moneyLine") is not None:
+            d = [_dec_us((o.get(k) or {}).get("moneyLine")) for k in ("homeTeamOdds", "drawOdds", "awayTeamOdds")]
+        if not d or any(x is None or x <= 1 for x in d):
+            continue
+        inv = [1 / x for x in d]
+        book = sum(inv)
+        if not 1.0 <= book <= 1.25:   # quote strane (sospese, sbagliate): meglio niente
+            continue
+        cand = {"p1": inv[0] / book, "px": inv[1] / book, "p2": inv[2] / book, "book": round(book, 4), "src": name}
+        if best is None or ODDS_BOOKS.index(name.lower()) < ODDS_BOOKS.index(best["src"].lower()):
+            best = cand
+    return best
+
+
+def parse_marcatori_en(page):
+    """Tabella «Top goalscorers» di una stagione su Wikipedia in inglese -> [[giocatore, squadra, gol]]. Le righe
+    riassuntive («Twelve players») si saltano."""
+    tab = re.search(r"<table.*?</table>", page or "", re.S)
+    out = []
+    for row in table_grid(tab.group(0)) if tab else []:
+        if len(row) < 4 or not row[-1].strip().isdigit() and not (len(row) >= 5 and row[3].strip().isdigit()):
+            continue
+        goals = row[3] if len(row) >= 5 and row[3].strip().isdigit() else row[-1]
+        name, club = row[1].strip(), row[2].strip()
+        if not goals.strip().isdigit() or name.lower().endswith("players") or not name:
+            continue
+        out.append([name, club, int(goals)])
+    return out

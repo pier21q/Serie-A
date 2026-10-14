@@ -22,7 +22,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent
 ICON = ROOT / "Icona Serie A.png"
 # quello che serve a GitHub Actions per aggiornare il sito: va nel ramo main
-CODICE = ["server.py", "model.py", "fonti.py", "statistiche.py", "letture.py", "europa.py", "sito.py", "tascabile.html", "Icona Serie A.png",
+CODICE = ["server.py", "model.py", "fonti.py", "statistiche.py", "letture.py", "europa.py", "controlli.py", "sito.py", "tascabile.html", "Icona Serie A.png",
           "requirements.txt"] + [f"icone/{k}-{n}.png" for k in ("serie-a", "premier", "liga", "bundesliga", "ligue1", "eredivisie", "portugal", "superlig", "champions")
                             for n in (180, 192, 512)]
 # colore della barra del browser e della schermata Home per lega (il resto dei colori sta in tascabile.html)

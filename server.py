@@ -46,6 +46,7 @@ from aiohttp import web
 
 import europa
 import fonti
+import controlli
 import letture
 import model
 import sito
@@ -632,11 +633,27 @@ def match_roles(j):
     return out
 
 
+def keep_odds(x, e, j):
+    """Quote 1X2 del mercato (fonti.espn_odds): prima del fischio d'inizio si aggiornano fino all'ultima (la chiusura);
+    dopo restano quelle. Per una partita già giocata senza quote salvate valgono quelle di chiusura del riepilogo. La
+    chiave c'è sempre dopo il primo tentativo (anche None, se ESPN non le ha) così non si riscarica all'infinito."""
+    now = time.time()
+    od = fonti.espn_odds(j)
+    if now < e["start"]:
+        if od:
+            x["odds"] = dict(od, at=round(now))
+        else:
+            x.setdefault("odds", None)
+    elif e.get("status") == "finished" and not x.get("odds"):
+        x["odds"] = dict(od, at=round(now), close=True) if od else None
+
+
 async def espn_summary(e):
     """Formazioni ufficiali e arbitro di una partita, da ESPN."""
     j = await espn_get(ESPN_SITE + "/summary", event=e["espn"])
     x = match_entry(e)
     x["espnAt"] = time.time()
+    keep_odds(x, e, j)
     ros = {r.get("homeAway"): r for r in j.get("rosters") or []}
     if ros.get("home", {}).get("roster") and ros.get("away", {}).get("roster"):
         miss = {s: ((x.get("lineups") or {}).get(s) or {}).get("missing") or [] for s in ("home", "away")}
@@ -683,6 +700,8 @@ def summaries_due(d, now):
         wait = 120 if missing else 3600 if not x.get("final") else 6 * 3600
         if e.get("espn") and (not x.get("final") or missing or noref) and now - x.get("espnAt", 0) >= wait:
             due.append((1, e))
+        elif e.get("espn") and "odds" not in x and now - x.get("espnAt", 0) >= 120:   # quote di chiusura
+            due.append((2, e))
     return [e for _, e in sorted(due, key=lambda t: t[0])]
 
 
@@ -1230,6 +1249,91 @@ async def wiki_table(year):
     return fonti.parse_allenatori(await web_text(fonti.WIKI.format(a=year, b=year + 1), headers={"User-Agent": WIKI_UA}))
 
 
+SCORERS_FILE = CACHE / "marcatori.json"   # classifica marcatori di Wikipedia in inglese, seconda fonte per i gol
+SCORERS_EVERY = 6 * 3600
+
+
+async def wiki_scorers_step(d, now):
+    """Classifica marcatori della stagione da Wikipedia in inglese («Top goalscorers»): una seconda fonte per i gol,
+    anche dove non ci sono né Understat né Opta (Eredivisie, Portogallo, Turchia, Champions). Ogni 6 ore."""
+    if now - EXTRA.get("scorersAt", 0) < SCORERS_EVERY:
+        return
+    EXTRA["scorersAt"] = now - SCORERS_EVERY + 1800   # se va male, si riprova tra mezz'ora
+    save_json(EXTRA_FILE, EXTRA)
+    y = season_year(d)
+    title = (f"{y}–{(y + 1) % 100:02d} UEFA Champions League" if CUP
+             else fonti.WIKI_EN_TITLE.format(a=y, b=(y + 1) % 100))
+    base = {"action": "parse", "page": title, "format": "json", "formatversion": "2"}
+    get = lambda **p: web_text(fonti.WIKI_EN + "?" + urlencode(dict(base, **p)), headers={"User-Agent": WIKI_UA})
+    secs = json.loads(await get(prop="sections")).get("parse", {}).get("sections") or []
+    sec = next((x["index"] for x in secs if "scorer" in x["line"].lower()), None)
+    rows = fonti.parse_marcatori_en(json.loads(await get(prop="text", section=sec))["parse"]["text"]) if sec else []
+    save_json(SCORERS_FILE, {"at": now, "page": title, "rows": rows})
+    EXTRA["scorersAt"] = now
+    save_json(EXTRA_FILE, EXTRA)
+
+
+SRC_NAMES = {"srcUs": "Understat", "srcOpta": "Opta", "srcFc": "Fantacalcio.it", "srcUefa": "UEFA"}
+SRC_KEYS = (("minuti", 45), ("gol", 0), ("assist", 1), ("gialli", 0), ("rossi", 0))   # nome e tolleranza
+
+
+def sources_compare(d):
+    """Seconda fonte per i numeri base dei giocatori: minuti, gol, assist e cartellini dei tabellini ESPN contro
+    Understat, Opta, Fantacalcio.it (Serie A), la UEFA (Champions) e la classifica marcatori di Wikipedia. Gol e
+    cartellini devono essere uguali, gli assist entro 1 (le fonti li contano in modo diverso), i minuti entro 45.
+    Chi ha giocato nelle ultime 36 ore non si confronta: Opta e Wikipedia si aggiornano dopo.
+    -> {"at", "sources": [{"src", "n" (giocatori confrontati), "same", "nDiff", "diff": [...]}]}"""
+    now = time.time()
+    recent = set()
+    for e in d.get("played") or []:
+        if now - e["start"] < 36 * 3600:
+            for pid in (((MATCHES.get(str(e["id"])) or {}).get("box") or {}).get("players") or {}):
+                if REG["espn"].get(str(pid)) is not None:
+                    recent.add(str(REG["espn"][str(pid)]))
+    uefa = uefa_players(d) if CUP else {}
+    players = [p for p in d.get("players") or [] if p.get("minutesEspn") is not None and str(p["id"]) not in recent]
+    out = []
+    for key, name in SRC_NAMES.items():
+        if key == "srcUs" and SHOT_XG:   # lì i dati «Understat» li fa l'app con ESPN: non sono un'altra fonte
+            continue
+        n = same = 0
+        diff = []
+        for p in players:
+            u = uefa.get(str(p["id"])) if key == "srcUefa" else None
+            other = [u.get("min"), u.get("g"), u.get("a"), None, None] if u else p.get(key)
+            if not other:
+                continue
+            espn = [p.get("minutesEspn"), p.get("goalsEspn"), p.get("assistsEspn"), p.get("yellowCardsEspn"), p.get("redCardsEspn")]
+            bad = [[lab, espn[i], other[i]] for i, (lab, tol) in enumerate(SRC_KEYS)
+                   if espn[i] is not None and other[i] is not None and abs(espn[i] - other[i]) > tol]
+            n += 1
+            if bad:
+                diff.append({"id": p["id"], "name": p.get("name"), "team": str(p.get("teamId")), "d": bad})
+            else:
+                same += 1
+        if n:
+            out.append({"src": name, "n": n, "same": same, "nDiff": len(diff), "diff": diff[:40]})
+    # classifica marcatori di Wikipedia: solo i gol, solo chi c'è in classifica
+    wk = load_json(SCORERS_FILE, {}) or {}
+    byid = {str(p["id"]): p for p in players}
+    n = same = 0
+    diff = []
+    for name, club, goals in wk.get("rows") or []:
+        tid = team_by_name(d, club)
+        cid = reg_find(name, [tid]) if tid else None
+        p = byid.get(str(cid)) if cid else None
+        if not p:
+            continue
+        n += 1
+        if (p.get("goalsEspn") or 0) != goals:
+            diff.append({"id": p["id"], "name": p.get("name"), "team": str(p.get("teamId")), "d": [["gol", p.get("goalsEspn"), goals]]})
+        else:
+            same += 1
+    if n:
+        out.append({"src": "Wikipedia (marcatori)", "n": n, "same": same, "nDiff": len(diff), "diff": diff[:40]})
+    return {"at": now, "sources": out, "recent": len(recent)}
+
+
 async def wiki_coaches(d, now):
     """Allenatori da Wikipedia, con le giornate in panchina (anche quelli della scorsa stagione)."""
     if now - EXTRA.get("wikiAt", 0) < WIKI_EVERY and EXTRA.get("wikiCur"):
@@ -1320,12 +1424,15 @@ async def espn_prematch(d, now, limit):
             break
         x = MATCHES.get(str(e["id"])) or {}
         h = (e["start"] - now) / 3600
+        odds_old = now - ((x.get("odds") or {}).get("at") or 0) > 3 * 3600
         if (e.get("status") != "notstarted" or not e.get("espn") or not 1.5 < h <= 72
-                or now - x.get("preAt", 0) < PRE_EVERY or (x.get("h2h") and (x.get("referee") or {}).get("name"))):
+                or now - x.get("preAt", 0) < PRE_EVERY
+                or (x.get("h2h") and (x.get("referee") or {}).get("name") and not odds_old)):
             continue
         j = await espn_get(ESPN_SITE + "/summary", event=e["espn"])
         x = match_entry(e)
         x["preAt"] = now
+        keep_odds(x, e, j)
         done += 1
         games = fonti.espn_h2h(j)
         if games and not x.get("h2h"):
@@ -1460,6 +1567,72 @@ def us_ppda(d, u, e):
     return out
 
 
+def us_rosters(j):
+    """Formazioni di una partita su Understat: {"home"/"away": [[id Understat, minuti, gol, assist, gialli, rossi]]}."""
+    num = lambda v: int(float(v or 0))
+    return {side: [[str(r.get("player_id")), num(r.get("time")), num(r.get("goals")), num(r.get("assists")),
+                    num(r.get("yellow_card")), num(r.get("red_card"))]
+                   for r in ((j.get("rosters") or {}).get(k) or {}).values() if num(r.get("time")) > 0]
+            for k, side in (("h", "home"), ("a", "away"))}
+
+
+def us_links_by_minutes(d):
+    """Understat -> anagrafica senza guardare i nomi: per ogni giocatore di Understat, il giocatore ESPN della stessa
+    squadra con gli stessi minuti partita per partita (le due fonti differiscono di 1-3 minuti di recupero), e quando
+    i minuti non bastano (due difensori sempre in campo 90') con gol e cartellini; il nome solo come spareggio. Un
+    giocatore che gioca quando l'altro non c'è non è lui. -> {id Understat: id dell'anagrafica}, solo i casi sicuri."""
+    apps, team_games, espn = {}, {}, {}
+    for e in d.get("played") or []:
+        x = MATCHES.get(str(e["id"])) or {}
+        usr, box = x.get("usr"), (x.get("box") or {}).get("players") or {}
+        if not usr or not box:
+            continue
+        for side in ("home", "away"):
+            key = (str(e["id"]), side)
+            team_games.setdefault(str(e[side]["id"]), []).append(key)
+            espn[key] = {str(pid): p for pid, p in box.items() if p.get("side") == side and (p.get("min") or 0) > 0}
+            for r in usr.get(side) or []:
+                apps.setdefault(r[0], []).append((key, str(e[side]["id"]), r))
+    names = {str(u.get("usId")): u.get("name") for u in (statistiche.understat_parse(load_json(us_file(season_year(d)), {})) or {}).get("players") or []}
+    out = {}
+    for uid, rows in apps.items():
+        teams = {t for _, t, _ in rows}
+        mine = {k for k, _, _ in rows}
+        if len(rows) < 3:   # con una o due partite basta una coincidenza di minuti (14/10: Schuster preso per Schade)
+            continue
+        score, agree = {}, {}
+        for pid in {pid for key, _, _ in rows for pid in espn[key]}:
+            sc, ag = 0.0, 0
+            for key, _, r in rows:
+                p = espn[key].get(pid)
+                if not p:   # non ha giocato quando il giocatore di Understat c'era
+                    sc -= 2.0
+                    continue
+                dm = abs((p.get("min") or 0) - r[1])
+                same = (p.get("goals") or 0) == r[2] and (p.get("yc") or 0) == r[4] and (p.get("rc") or 0) == r[5]
+                if dm <= 4:
+                    ag += 1
+                sc += (1.25 if same else .25) if dm <= 4 else -2.0 if dm > 10 else 0.0
+            for t in teams:   # ha giocato quando il giocatore di Understat non c'era
+                sc -= 2.0 * sum(1 for key in team_games.get(t, []) if key not in mine and pid in espn.get(key, {}))
+            score[pid], agree[pid] = sc, ag
+        ranked = sorted(score.items(), key=lambda kv: -kv[1])
+        if not ranked or ranked[0][1] < 3.0 or agree[ranked[0][0]] < 3:
+            continue
+        top = [pid for pid, sc in ranked if sc > ranked[0][1] - 2.0]
+        if len(top) > 1:   # stesse partite e stessi minuti: decide il nome
+            fit = sorted(((reg_score(names.get(uid) or "", REG["info"].get(REG["espn"].get(pid) or "", {})), pid) for pid in top), reverse=True)
+            if fit[0][0] < 4.0 or fit[0][0] == fit[1][0]:
+                continue
+            best = fit[0][1]
+        else:
+            best = top[0]
+        cid = REG["espn"].get(best)
+        if cid is not None:
+            out[uid] = cid
+    return out
+
+
 async def us_matches_step(d, now):
     """Tiri di ogni partita finita da Understat (xG, situazione, ultima azione prima del tiro) e pressing della partita:
     servono alle letture. Una volta per partita, quando Understat l'ha già elaborata."""
@@ -1468,8 +1641,10 @@ async def us_matches_step(d, now):
     u = load_json(us_file(season_year(d)), {}) or {}
     dates = u.get("dates") or []
     # anche le partite scaricate con una versione vecchia (senza le coordinate dei tiri)
+    # (e quelle senza le formazioni di Understat, che servono a collegare i giocatori con i minuti: us_links_by_minutes)
     todo = sorted((e for e in d.get("played") or [] if e.get("status") == "finished" and e.get("hs") is not None
-                   and (MATCHES.get(str(e["id"])) or {}).get("usv") != letture.US_VERSION), key=lambda e: -e["start"])
+                   and ((MATCHES.get(str(e["id"])) or {}).get("usv") != letture.US_VERSION
+                        or "usr" not in (MATCHES.get(str(e["id"])) or {}))), key=lambda e: -e["start"])
     n, left = 0, 0
     for e in todo:
         uid = us_match_id(d, e, dates)
@@ -1484,7 +1659,7 @@ async def us_matches_step(d, now):
                 raise RuntimeError(f"Understat (partita) HTTP {r.status}")
             j = json.loads(await r.text())
         x = match_entry(e)
-        x.update(us=letture.parse_understat(j), usId=uid, ppda=us_ppda(d, u, e), usv=letture.US_VERSION)
+        x.update(us=letture.parse_understat(j), usId=uid, ppda=us_ppda(d, u, e), usv=letture.US_VERSION, usr=us_rosters(j))
         n += 1
     STATUS["_usPending"] = left   # altre partite pronte su Understat: il prossimo giro arriva presto
     if n:
@@ -2577,6 +2752,8 @@ def build_players(results, boxes, us, team_of_title, current):
                                  "teamId": int(team_of_title(u["team"].split(",")[-1]) or x.get("teamId") or 0)})
         p.update({k: u[k] for k in US_FIELDS if u.get(k) is not None})
         p["appearances"] = max(p.get("appearances") or 0, int(u.get("appearances") or 0))
+        # i conti di Understat come li dà Understat (sources_compare li confronta con ESPN e le altre fonti)
+        p["srcUs"] = [u.get("minutesPlayed"), u.get("goals"), u.get("assists"), u.get("yellowCards"), u.get("redCards")]
         linked.add(cid)
 
     linked, pending = set(), []
@@ -2615,6 +2792,7 @@ def build_players(results, boxes, us, team_of_title, current):
             # duelli...) si dividono per i minuti di Opta (minutesOpta)
             om = o.get("mins_played")
             p["minutesOpta"] = om
+            p["srcOpta"] = [om, o.get("goals"), o.get("assists"), o.get("yellows"), o.get("reds")]
             same = om is not None and abs(om - (p.get("minutesPlayed") or 0)) <= 45
             for k, ok in (("expectedGoals", "xg"), ("expectedAssists", "xa")):
                 if o.get(ok) is not None:
@@ -2736,6 +2914,31 @@ def rebuild_stats(d):
     boxes = {str(e["id"]): (MATCHES.get(str(e["id"])) or {}).get("box") for e in results}
     boxes = {k: v for k, v in boxes.items() if v}
     team_of = lambda title: team_by_name(d, title)
+    if LEGA["understat"]:   # collegamenti Understat confermati (o corretti) dai minuti di ogni partita
+        exact = us_links_by_minutes(d)
+        us_names = {u["usId"]: u.get("name") for u in (us or {}).get("players") or []}
+        conflicts = []
+        for uid, cid in exact.items():
+            old = REG["us"].get(uid)
+            if old is not None and old != cid and reg_score(us_names.get(uid) or "", REG["info"].get(str(old)) or {}) >= 8:
+                # nome identico nella stessa anagrafica: i minuti non lo scavalcano, si segnala
+                conflicts.append(f"{us_names.get(uid)}: per nome è {(REG['info'].get(str(old)) or {}).get('name')}, "
+                                 f"per minuti {(REG['info'].get(cid) or {}).get('name')}")
+                continue
+            if old != cid:
+                rivals = [k for k, c in REG["us"].items() if c == cid and k != uid and k not in exact]
+                strong = [k for k in rivals if reg_score(us_names.get(k) or "", REG["info"].get(cid) or {}) >= 8]
+                if strong:   # il giocatore ha già un Understat con il suo stesso nome: si segnala, non si stacca
+                    conflicts.append(f"{us_names.get(uid)}: per minuti è {(REG['info'].get(cid) or {}).get('name')}, "
+                                     f"che per nome è già {us_names.get(strong[0])}")
+                    continue
+                for k in rivals:
+                    del REG["us"][k]   # un altro id Understat sullo stesso giocatore: i minuti dicono di no
+                log(f"Anagrafica: Understat {uid} collegato a {(REG['info'].get(cid) or {}).get('name')} con i minuti "
+                    f"(prima {(REG['info'].get(str(REG['us'].get(uid))) or {}).get('name')})")
+                REG["us"][uid] = cid
+        played_us = sum(1 for u in (us or {}).get("players") or [] if (u.get("minutesPlayed") or 0) > 0)
+        STATUS["usLinks"] = {"minutes": len(exact) - len(conflicts), "players": played_us, "conflicts": conflicts[:10]}
     ts = statistiche.team_season(results, boxes, (us or {}).get("teams"), team_of, (us or {}).get("players"))
     for tid, o in (d.get("teams") or {}).items():
         o["stats"] = ts.get(tid) or {"matches": 0}
@@ -2751,9 +2954,14 @@ def rebuild_stats(d):
         if cid in players:
             voted = bool(f.get("pv"))   # senza partite a voto Fantacalcio.it scrive 0: non è un voto
             players[cid].update(rating=f.get("mv") if voted else None, ratingPV=f.get("pv"),
-                                fantamedia=f.get("fm") if voted else None, fcRole=f.get("role"))
+                                fantamedia=f.get("fm") if voted else None, fcRole=f.get("role"),
+                                srcFc=[None, f.get("gol"), f.get("ass"), f.get("amm"), f.get("esp")])
     d["players"] = sorted(players.values(), key=lambda p: -(p.get("minutesPlayed") or 0))
     team_extra_stats(d)
+    try:
+        d["compare"] = sources_compare(d)
+    except Exception as ex:
+        log(f"Confronto tra le fonti non fatto: {errtxt(ex)}")
     if CUP:   # la base dei giocatori sono i loro campionati (al posto della stagione scorsa della competizione)
         PRIOR["players"] = cup_prior_players(d)
         PRIOR["statsV"] = 2
@@ -2890,7 +3098,7 @@ async def refresher():
                     await espn_schedule(d, old[:1])
                     EXTRA.setdefault("monthsDone", []).append(old[0])
                     save_json(EXTRA_FILE, EXTRA)
-                for e in summaries_due(d, now)[:(3 if window else 10)]:
+                for e in summaries_due(d, now)[:(3 if window else 25 if CLOUD else 10)]:
                     if await espn_summary(e) and e.get("status") != "finished":
                         log(f"Formazioni ufficiali (ESPN): {e['home']['name']} - {e['away']['name']}")
                     VERSION["matches"] += 1
@@ -2921,7 +3129,7 @@ async def refresher():
                      if LEGA["fantacalcio"] else (("OneFootball", onefootball_step),))
             steps += ((("forza europea", mondo_step), ("UEFA", uefa_step), ("allenatori", cup_coaches)) if CUP
                       else (("Wikipedia", wiki_coaches),))
-            for name, step in steps + (("foto", of_photos_step), ("Opta", opta_step)):
+            for name, step in steps + (("foto", of_photos_step), ("Opta", opta_step), ("marcatori (Wikipedia)", wiki_scorers_step)):
                 try:
                     await step(d, now)
                     STATUS.pop(f"err_{name}", None)
@@ -2954,7 +3162,11 @@ async def refresher():
             save_json(DATA_FILE, d)
             update_history()
             try:
-                save_json(SNAPSHOT_FILE, snapshot())
+                snap = snapshot()
+                save_json(SNAPSHOT_FILE, snap)
+                ck = snap.get("checks") or {}
+                if CLOUD and ck and not ck.get("ok"):   # nelle note dell'esecuzione di GitHub, leggibili senza accesso
+                    gh_note(f"{LEGA['name']}: {ck.get('n')} controlli da guardare: " + "; ".join((ck.get("data") or []) + (ck.get("pred") or []))[:900], "warning")
             except Exception as e:
                 log(f"Fotografia per la versione tascabile non salvata: {errtxt(e)}")
             try:
@@ -3243,7 +3455,8 @@ def snapshot():
         fixtures.append({"id": e["id"], "round": e.get("round"), "start": e["start"], "home": str(e["home"]["id"]),
                          "away": str(e["away"]["id"]), "p1": round(P["p1"], 3), "px": round(P["px"], 3), "p2": round(P["p2"], 3),
                          "lh": round(P["lh"], 2), "la": round(P["la"], 2), "over25": round(P["over25"], 3), "btts": round(P["btts"], 3),
-                         "pick": P["pick"], "clash": [{"title": i["title"], "text": i["text"]} for i in P["style"]["items"] if i["kind"] == "rule"][:3],
+                         "pick": P["pick"], "mk": P.get("market"),
+                         "clash": [{"title": i["title"], "text": i["text"]} for i in P["style"]["items"] if i["kind"] == "rule"][:3],
                          "lineups": P["lineups"]["home"]["source"], "referee": (P.get("referee") or {}).get("name"),
                          "scorers": [{"name": p["name"], "team": str(t), "p": round(p["pGoal"], 2)}
                                      for t, key in ((e["home"]["id"], "home"), (e["away"]["id"], "away"))
@@ -3266,7 +3479,7 @@ def snapshot():
                    "gp": p.get("goalsPrevented"), "xgot": p.get("xgotConceded"), "mo": p.get("minutesOpta")}, 2)
                for p in d.get("players") or [] if (p.get("minutesPlayed") or 0) > 0]
     players = [{k: v for k, v in p.items() if v is not None} for p in players]   # più leggero: niente campi vuoti
-    return {
+    snap = {
         "generatedAt": time.time(), "statsAt": d.get("fullAt"), "season": d.get("season"), "errors": source_errors(),
         "standings": [{"team": str(r["team"]["id"]), "pos": r["pos"], "p": r["p"], "w": r["w"], "d": r["d"], "l": r["l"],
                        "gf": r["gf"], "ga": r["ga"], "pts": r["pts"], "zone": r.get("zone")} for r in d["standings"]["total"]],
@@ -3296,6 +3509,12 @@ def snapshot():
         # "minor": nel selettore stanno nel menu «Altri campionati» (richiesta dell'utente del 14/10)
         "leagues": [{"key": k, "name": v["name"], "dir": v["dir"], "minor": bool(v.get("minor"))} for k, v in LEGHE.items()],
     }
+    # controlli automatici (controlli.py): incoerenze tra le parti, valori fuori scala, fonti a confronto
+    try:
+        snap["checks"] = STATE["checks"] = _r(dict(controlli.summary(d, snap, HISTORY, MATCHES, STATUS.get("usLinks")), at=time.time()), 3)
+    except Exception as ex:
+        log(f"Controlli automatici non fatti: {errtxt(ex)}")
+    return snap
 
 
 def xpts_table(d):
@@ -3332,6 +3551,7 @@ async def h_data(_):
     R = readings()
     rr = recent_rounds(R, 3)
     return web.json_response({**STATE["data"], "analysis": an["pub"], "fixtures": an["fixtures"], "extras": extras,
+                              "checks": STATE.get("checks"),
                               "reads": {k: v for k, v in R["reads"].items() if v.get("round") in rr},
                               "rounds": {str(k): R["rounds"][k] for k in rr}, "profiles": profiles_out(R),
                               "evidenza": an["evidenza"],

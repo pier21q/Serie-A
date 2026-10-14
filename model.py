@@ -25,7 +25,7 @@ W_GOALS = 0.20
 K_STYLE_CUP = 4        # coppa: lo stile nel campionato pesa come 4 partite di coppa (con 8 partite di coppa conta un terzo)
 MID_W = 0.25           # cambio di allenatore durante la stagione: le partite prima del cambio (e la stagione scorsa) pesano così
 VENUE_W = 0.0          # quota del rendimento in casa/fuori di quest'anno: era 0,20, la prova dice che peggiora (troppo rumoroso)
-SOFT_CAP = .10         # tetto complessivo di forma, accoppiamenti tattici, stili e ritmo sui gol attesi
+SOFT_CAP = .10         # tetto di forma, accoppiamenti, stili e ritmo sui gol attesi (dal 14/10/2026 non si applicano più)
 GOAL_SHARE_CAP, ASSIST_SHARE_CAP = .40, .30   # quota massima dei gol e degli assist dei titolari per un giocatore
 # taratura degli attaccanti titolari sulle partite reali (confronto del 28/09/2026 su 50 partite)
 LEAGUE = "Serie A"   # nome della lega nei testi: lo imposta server.py (SERIEA_LEGA)
@@ -42,7 +42,8 @@ RARE_KEYS = {"goals", "assists", "expectedGoals", "expectedAssists"}
 RHO = -0.08            # correzione Dixon-Coles
 CALIB = 1.0            # avvicinamento alla media delle forze di attacco e difesa: era 0,80, ma i pronostici risultavano troppo
                        # prudenti (al 74% previsto l'esito usciva l'86% delle volte); con 1,0 sono tarati
-FORM_EFF = 0.05        # effetto massimo della forma recente sui gol attesi
+FORM_EFF = 0.05        # effetto massimo della forma recente sui gol attesi (dal 14/10/2026 non si applica: vedi predict)
+CARD_STYLE_K = .25     # quanto dello scontro di stili va sui cartellini attesi (prova del 14/10/2026: ottimo tra 0,2 e 0,3)
 PAIR_ADV, PAIR_NEUT, PAIR_CAP = .03, -.02, .08   # accoppiamenti tattici: effetto per vantaggio, per neutralizzazione, tetto
 MAXG = 10
 NO_PRIOR = {"att": 1.0, "de": 1.0}
@@ -609,13 +610,9 @@ def style_clash(H, Aw, A):
         tot["tempo"] += tempo
         tot["cards"] += cards
         tot["poss"] += poss if side != "a" else -poss
-        chips = []
-        if side and e:
-            chips.append(f"gol attesi {names[side]} {'+' if e > 0 else ''}{fmt(e * 100, 0)}%")
-        if tempo:
-            chips.append(f"ritmo {'+' if tempo > 0 else ''}{fmt(tempo * 100, 0)}%")
-        if cards:
-            chips.append(f"cartellini +{fmt(cards * 100, 0)}%")
+        chips = []   # i gol attesi non si spostano più (prova del 14/10/2026): resta chi è favorito e i cartellini
+        if cards and cards * CARD_STYLE_K * 100 >= 1:
+            chips.append(f"cartellini +{fmt(cards * CARD_STYLE_K * 100, 0)}%")
         items.append({"title": title, "text": text, "winner": ids[side] if side and e > 0 else ids["a" if side == "h" else "h"] if side and e < 0 else None,
                       "chips": chips, "kind": kind})
 
@@ -1652,74 +1649,43 @@ def predict(A, hid, aid, ev=None, extra=None):
     lh, la = (L["AA"] if neutral else L["HA"]) * attH * deA, L["AA"] * attA * deH
     base_h, base_a = lh, la
 
-    fh, fa = H["m"].get("form"), Aw["m"].get("form")
-    fd = ((fh if fh is not None else 1.4) - (fa if fa is not None else 1.4)) / 3
-    # in coppa forma, accoppiamenti e stili verrebbero da 1-8 partite della competizione: niente effetto sui gol attesi
-    # (la forza europea pesa già le partite recenti, di campionato e di coppa); restano le descrizioni
-    if cup:
-        fd = 0.0
-    if abs(fd) > .05:
-        adj.append({"team": int(hid), "what": "Forma recente", "pct": FORM_EFF * 100 * fd})
-        adj.append({"team": int(aid), "what": "Forma recente", "pct": -FORM_EFF * 100 * fd})
-    lh *= 1 + FORM_EFF * fd
-    la *= 1 - FORM_EFF * fd
-
+    # forma, accoppiamenti tattici, scontro di stili e ritmo: provati all'indietro il 14/10/2026 su 3503 partite dei
+    # cinque campionati maggiori (2024/25 e 2025/26, ricerca/prova_correzioni.py), con le stesse funzioni e i dati fino
+    # al giorno prima. Nessuno migliora il pronostico (log loss dell'1X2 da +0,0000 a +0,0005, tutti insieme +0,0013 ±
+    # 0,0012) e accoppiamenti, stili e ritmo peggiorano un po' l'over/under. Restano come descrizioni (chiavi tattiche,
+    # scontro di stili, forma) ma non spostano i gol attesi, come già in coppa. I cartellini dello scontro di stili sì,
+    # ma a un quarto (CARD_STYLE_K): con l'effetto pieno 4,38 gialli previsti contro 4,04 veri (3,90 senza).
     ins = sorted(insights(H, Aw, "h", L["N"]) + insights(Aw, H, "a", L["N"]), key=lambda i: -i["score"])
-    bh = 0.0 if cup else clamp(sum(i["eff"] for i in ins if i["side"] == "h"), -PAIR_CAP, PAIR_CAP)
-    ba = 0.0 if cup else clamp(sum(i["eff"] for i in ins if i["side"] == "a"), -PAIR_CAP, PAIR_CAP)
-    if bh:
-        adj.append({"team": int(hid), "what": "Accoppiamenti tattici", "pct": bh * 100})
-    if ba:
-        adj.append({"team": int(aid), "what": "Accoppiamenti tattici", "pct": ba * 100})
-    lh *= 1 + bh
-    la *= 1 + ba
-
-    # scontro di stili
     clash = style_clash(H, Aw, A)
-    if cup:
-        clash = dict(clash, eff={"h": 0.0, "a": 0.0}, tempo=0.0, cards=0.0)
-    for key, tid in (("h", hid), ("a", aid)):
-        if clash["eff"][key]:
-            adj.append({"team": int(tid), "what": "Scontro di stili", "pct": clash["eff"][key] * 100})
-        if clash["tempo"]:
-            adj.append({"team": int(tid), "what": "Ritmo della partita (scontro di stili)", "pct": clash["tempo"] * 100})
-    lh *= (1 + clash["eff"]["h"]) * (1 + clash["tempo"])
-    la *= (1 + clash["eff"]["a"]) * (1 + clash["tempo"])
-    # forma, accoppiamenti, stili e ritmo tendono a premiare la squadra più forte: insieme non spostano i gol
-    # attesi più di SOFT_CAP (come nelle quote reali, dove questi fattori contano poco)
-    for tid, lam, base in ((hid, lh, base_h), (aid, la, base_a)):
-        capped = clamp(lam, base * (1 - SOFT_CAP), base * (1 + SOFT_CAP))
-        if abs(capped - lam) > 1e-9:
-            adj.append({"team": int(tid), "what": f"Tetto alle correzioni qui sopra (insieme al massimo ±{SOFT_CAP * 100:.0f}%)",
-                        "pct": (capped / lam - 1) * 100})
-        if tid == hid:
-            lh = capped
-        else:
-            la = capped
+    clash = dict(clash, eff={"h": 0.0, "a": 0.0}, tempo=0.0, cards=0.0 if cup else clash["cards"] * CARD_STYLE_K)
 
     # formazioni e assenti
     lu = (extra or {}).get("lineups")
     confirmed = bool(lu and lu.get("confirmed"))
     sides = {"h": (lu or {}).get("home"), "a": (lu or {}).get("away")}
-    absent = {}
+    # assenze: spostano i gol attesi da una squadra all'altra senza cambiarne il totale (prova del 14/10/2026: così
+    # l'1X2 migliora, −0,0032 ± 0,0015 dalla 6ª giornata, e l'over/under resta com'è; con il totale libero peggiorava)
+    absent, fac, why = {}, {"h": 1.0, "a": 1.0}, {"h": [], "a": []}
     for key, tid, oppkey in (("h", hid, "a"), ("a", aid, "h")):
         lst, att_loss, def_loss = absences(A, tid, sides[key], confirmed)
         absent[key] = lst
-        opp_id = aid if key == "h" else hid
+        who = T[tid]["team"]["name"]
+        fac[key] *= 1 - att_loss
+        fac[oppkey] *= 1 + def_loss
         if att_loss:
             names = ", ".join(x["name"] or "?" for x in lst if x["att"] >= .05)
-            adj.append({"team": int(tid), "what": f"Assenti in attacco: {names}" if names else "Assenti in attacco", "pct": -att_loss * 100})
+            why[key].append(f"in attacco ({names})" if names else "in attacco")
         if def_loss:
             names = ", ".join(x["name"] or "?" for x in lst if x["def"] >= .05 or x["pos"] == "G")
-            who = T[tid]["team"]["name"]
-            adj.append({"team": int(opp_id), "what": f"Assenti in difesa di {who}: {names}" if names else f"Assenti in difesa di {who}",
-                        "pct": def_loss * 100})
-        if key == "h":
-            lh *= 1 - att_loss
-            la *= 1 + def_loss
-        else:
-            la *= 1 - att_loss
-            lh *= 1 + def_loss
+            why[oppkey].append(f"in difesa di {who} ({names})" if names else f"in difesa di {who}")
+    if fac["h"] != 1.0 or fac["a"] != 1.0:
+        k = (lh + la) / (lh * fac["h"] + la * fac["a"])
+        for key, tid in (("h", hid), ("a", aid)):
+            pct = (fac[key] * k - 1) * 100
+            if abs(pct) >= .05:
+                adj.append({"team": int(tid), "what": "Assenti " + "; ".join(why[key] or why["a" if key == "h" else "h"])
+                            + " (i gol attesi si spostano tra le squadre, il totale resta uguale)", "pct": pct})
+        lh, la = lh * fac["h"] * k, la * fac["a"] * k
     lh, la = clamp(lh, .2, 4.5), clamp(la, .2, 4.5)
 
     mat = score_matrix(lh, la)
@@ -1786,6 +1752,7 @@ def predict(A, hid, aid, ev=None, extra=None):
                   "items": clash["items"], "tempo": clash["tempo"], "cards": clash["cards"], "poss": clash["poss"],
                   "matches": A.get("archMatches", 0)},
         "h2h": (extra or {}).get("h2h"), "tie": tie, "neutral": neutral, "cup": bool(cup),
+        "market": market_of(extra),   # quote dei bookmaker senza il margine, per il confronto
         "coachRoles": {"home": (H.get("coachRoles") or {}).get("text"), "away": (Aw.get("coachRoles") or {}).get("text")},
         "prior": {"home": H["prior"], "away": Aw["prior"], "weightH": H["priorWeight"], "weightA": Aw["priorWeight"],
                   "year": A["priorYear"]},
@@ -1839,10 +1806,15 @@ def update_history(H, A, data, matches, now=None, ids=None):
         it["start"] = e["start"]
         it["latest"] = dict(summary(P), at=now, pl=history_players(P), cards=[round(P["cards"]["home"], 2),
                             round(P["cards"]["away"], 2)], ref=(P.get("referee") or {}).get("name"))
+        mk = market_of(matches.get(str(e["id"])))
+        if mk:
+            it["latestMk"] = mk
         changed = True
     for eid, it in items.items():
         if "final" not in it and it.get("latest") and now >= it["start"]:
             it["final"] = it["latest"]
+            if it.get("latestMk"):   # le quote al fischio d'inizio, accanto al pronostico
+                it["market"] = it["latestMk"]
             changed = True
     for e in data.get("played") or []:
         it = items.get(str(e["id"]))
@@ -1850,6 +1822,13 @@ def update_history(H, A, data, matches, now=None, ids=None):
             it["result"] = {"hs": e["hs"], "as": e["as"]}
             it["eval"] = evaluate(it["final"], e["hs"], e["as"])
             changed = True
+        # il mercato sulla stessa partita (quote di chiusura, se al fischio non c'erano): stesso metro del pronostico
+        if it and it.get("result") and "evalMk" not in it:
+            mk = it.get("market") or market_of(matches.get(str(e["id"])))
+            if mk:
+                it["market"] = mk
+                it["evalMk"] = evaluate_probs(mk, e["hs"], e["as"])
+                changed = True
     # le statistiche vere dei giocatori (ESPN) arrivano poco dopo il risultato
     for eid, it in items.items():
         box = (matches.get(eid) or {}).get("box")
@@ -1878,11 +1857,29 @@ def history_real(box, ids=None):
                      for s in ("home", "away")}}
 
 
+def market_of(x):
+    """Quote del mercato salvate per una partita (server.keep_odds) -> {p1, px, p2, src}, o None."""
+    od = (x or {}).get("odds")
+    if not od or od.get("p1") is None:
+        return None
+    return {"p1": round(od["p1"], 4), "px": round(od["px"], 4), "p2": round(od["p2"], 4), "src": od.get("src")}
+
+
+def evaluate_probs(f, hs, as_):
+    """Esito, Brier e log loss di probabilità 1X2 qualsiasi (il pronostico o le quote del mercato)."""
+    o = "1" if hs > as_ else "X" if hs == as_ else "2"
+    probs = {"1": f["p1"], "X": f["px"], "2": f["p2"]}
+    return {"outcome": o, "pick": max(probs, key=probs.get) == o,
+            "brier": sum((probs[k] - (1 if k == o else 0)) ** 2 for k in probs),
+            "ll": -math.log(max(probs[o], 1e-6))}
+
+
 def evaluate(f, hs, as_):
     o = "1" if hs > as_ else "X" if hs == as_ else "2"
     probs = {"1": f["p1"], "X": f["px"], "2": f["p2"]}
     return {
         "outcome": o,
+        "ll": -math.log(max(probs[o], 1e-6)),
         "pick": f["pick"]["k"] == o,
         "score": f["pick"]["score"]["i"] == hs and f["pick"]["score"]["j"] == as_,
         "topScore": f["top"]["i"] == hs and f["top"]["j"] == as_,
@@ -1922,9 +1919,18 @@ def history_summary(H):
             for k, pi, ri in (("y", 6, 5), ("shots", 3, 2), ("fouls", 5, 4), ("goals", 7, 6)):
                 pl[k][0] += p[pi] or 0
                 pl[k][1] += min(r[ri], 1) if k in ("y", "goals") else r[ri]
+    # il pronostico contro il mercato (quote dei bookmaker senza il loro margine), sulle stesse partite
+    mk = [it for it in done if it.get("evalMk")]
+    ll = lambda it: it["eval"].get("ll", -math.log(max(it["final"][{"1": "p1", "X": "px", "2": "p2"}[it["eval"]["outcome"]]], 1e-6)))
+    market = {"n": len(mk), "brier": sum(it["eval"]["brier"] for it in mk) / len(mk),
+              "brierMk": sum(it["evalMk"]["brier"] for it in mk) / len(mk),
+              "ll": sum(ll(it) for it in mk) / len(mk), "llMk": sum(it["evalMk"]["ll"] for it in mk) / len(mk),
+              "pick": sum(1 for it in mk if it["eval"]["pick"]) / len(mk),
+              "pickMk": sum(1 for it in mk if it["evalMk"]["pick"]) / len(mk),
+              "src": sorted({(it.get("market") or {}).get("src") for it in mk} - {None})} if mk else None
     return {"n": n, "pick": s("pick"), "score": s("score"), "over25": s("over25"), "btts": s("btts"),
             "brier": sum(it["eval"]["brier"] for it in done) / n, "baseBrier": base_brier, "cal": cal,
-            "players": pl if pl["n"] else None}
+            "players": pl if pl["n"] else None, "market": market}
 
 
 # ---------- fantacalcio ----------
