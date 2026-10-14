@@ -95,6 +95,49 @@ details.acc[open] .acc-ch{transform:rotate(90deg)}
 .stamp .warn{color:var(--warn);font-weight:600}
 .stamp .ckl{color:inherit;text-decoration:none;white-space:nowrap}
 .bl.mk{color:var(--muted);margin-top:2px}
+/* scheda del giocatore: fascia nei colori della lega, numeri principali, statistiche per tema (totale, a partita, barra) */
+.card.phero{padding:0;overflow:hidden}
+.ph-band{position:relative;display:flex;align-items:flex-start;gap:12px;padding:20px 16px 16px;color:#fff;background:var(--hdr,linear-gradient(120deg,#0F1B2D,#3B4659))}
+.ph-band::before{content:"";position:absolute;inset:0 0 auto 0;height:4px;background:var(--band)}
+.ph-num{position:absolute;right:12px;bottom:-14px;font-family:var(--display);font-weight:700;font-size:96px;line-height:1;color:rgba(255,255,255,.13);pointer-events:none}
+.ph-main{min-width:0;flex:1}
+.ph-role{font-size:12px;letter-spacing:.09em;text-transform:uppercase;opacity:.85}
+.ph-band h2{font-family:var(--display);font-weight:700;font-size:32px;line-height:1.02;letter-spacing:.01em;text-transform:uppercase;margin:3px 0 10px;text-wrap:balance;color:#fff}
+.ph-team{display:inline-flex;align-items:center;gap:7px;max-width:100%;padding:3px 12px 3px 3px;border-radius:999px;background:rgba(255,255,255,.16);color:#fff;text-decoration:none;font-weight:600;font-size:14px}
+.ph-team span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.ph-vote{position:relative;flex:none;text-align:center;padding:6px 10px;border-radius:12px;background:rgba(255,255,255,.16)}
+.ph-vote b{display:block;font-family:var(--display);font-size:28px;line-height:1.05}
+.ph-vote small{display:block;font-size:11px;opacity:.85}
+.ph-kpis{display:grid;grid-template-columns:repeat(4,minmax(0,1fr))}
+.ph-kpis>div{padding:10px 12px;border-left:1px solid var(--line)}
+.ph-kpis>div:first-child{border-left:0}
+.ph-kpis small{display:block;font-size:11px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ph-kpis b{display:block;font-family:var(--display);font-weight:700;font-size:28px;line-height:1.1}
+.shead,.srow{display:grid;grid-template-columns:minmax(0,1fr) 62px 62px 64px;align-items:center;gap:10px}
+.shead{font-size:10.5px;color:var(--muted);text-transform:uppercase;letter-spacing:.02em;padding-bottom:4px;white-space:nowrap}
+.shead span:nth-child(2),.shead span:nth-child(3){text-align:right}
+.sgrp h4{display:flex;align-items:center;gap:8px;margin:12px 0 2px;font-family:var(--display);font-weight:700;font-size:15px;letter-spacing:.04em;text-transform:uppercase;color:var(--ink)}
+.sgrp h4::before{content:"";width:4px;height:14px;border-radius:2px;background:var(--accent)}
+.srow{padding:7px 0;border-top:1px solid var(--line);font-size:14px}
+.srow .sl{color:var(--ink2);overflow:hidden;text-overflow:ellipsis}
+.srow .st{text-align:right;font-family:var(--display);font-size:19px;font-weight:700}
+.srow .st small{font-family:var(--body);font-size:12px;font-weight:500;color:var(--muted)}
+.srow .sa{text-align:right;color:var(--ink2)}
+.sbar{position:relative;height:7px;border-radius:4px;background:var(--surface2);overflow:hidden}
+.sbar i{position:absolute;inset:0 auto 0 0;border-radius:4px;background:var(--accent)}
+.sbar.off{background:repeating-linear-gradient(90deg,var(--surface2) 0 4px,transparent 4px 7px)}
+@media (max-width:480px){.ph-kpis{grid-template-columns:repeat(2,minmax(0,1fr))}.ph-kpis>div:nth-child(3){border-left:0}.ph-kpis>div:nth-child(n+3){border-top:1px solid var(--line)}}
+@media (max-width:380px){.shead,.srow{grid-template-columns:minmax(0,1fr) 54px 54px 48px;gap:8px}.ph-band h2{font-size:28px}}
+/* piccoli dettagli nei colori di ogni lega: fondo appena tinto, titoli sottolineati con i colori del paese, tacca sui
+   titoli dei riquadri, simbolo della capolista */
+:root[data-lega]{--ground:color-mix(in srgb,var(--accent) 4%,#F3F5F9)}
+@media (prefers-color-scheme:dark){:root[data-lega]:not([data-theme="light"]){--ground:color-mix(in srgb,var(--accent) 5%,#0A1120)}}
+:root[data-lega][data-theme="dark"]{--ground:color-mix(in srgb,var(--accent) 5%,#0A1120)}
+h2::after{content:"";display:block;width:44px;height:3px;border-radius:2px;margin-top:6px;background-color:var(--accent);background-image:var(--band)}
+.ph-band h2::after{display:none}
+.card h3{border-left:4px solid var(--accent);padding-left:9px}
+.lead-mark{display:inline-flex;flex:none;margin-left:6px}
+.lead-mark svg{width:16px;height:17px}
 nav{display:flex;gap:4px;overflow-x:auto;scrollbar-width:none;padding-block:4px 10px}
 nav::-webkit-scrollbar{display:none}
 nav a{flex:none;text-decoration:none;color:var(--ink2);font-family:var(--display);font-weight:600;font-size:17px;letter-spacing:.02em;padding:4px 12px;border-radius:999px;text-transform:uppercase}
@@ -383,10 +426,19 @@ function vGiornata() {
 
 const ZONE = {'Champions League': ['cl', 'Champions League'], 'Champions League Qualification': ['cl', 'Champions (preliminari)'], 'Europa League': ['el', 'Europa League'], 'Europa League Qualification': ['el', 'Europa League (preliminari)'], 'Relegation Playoff': ['rp', 'Spareggio salvezza'], 'Conference League Qualification': ['co', 'Conference League (preliminari)'], 'Conference League': ['co', 'Conference League'], 'Relegation': ['rel', 'Retrocessione'],
   'Round of 16': ['cl', 'Ottavi'], 'Playoffs': ['el', 'Spareggi'], 'Eliminated': ['rel', 'Eliminate']};
+// la capolista con il simbolo della sua competizione: lo scudetto tricolore in Serie A, la stella in Champions, la coppa
+// negli altri campionati (disegni originali, non i loghi dei trofei)
+function leadMark() {
+  const k = (D.league || {}).key;
+  const svg = k === 'serie-a' ? '<svg viewBox="0 0 16 18" aria-hidden="true"><defs><clipPath id="scudo"><path d="M8 1 15 3.2v5.3c0 4.2-3 7.2-7 8.5C4 15.7 1 12.7 1 8.5V3.2Z"/></clipPath></defs><g clip-path="url(#scudo)"><rect width="5.4" height="18" fill="#009246"/><rect x="5.3" width="5.4" height="18" fill="#F4F5F0"/><rect x="10.6" width="5.4" height="18" fill="#CE2B37"/></g><path d="M8 1 15 3.2v5.3c0 4.2-3 7.2-7 8.5C4 15.7 1 12.7 1 8.5V3.2Z" fill="none" stroke="#0F1B2D" stroke-opacity=".35"/></svg>'
+    : k === 'champions' ? '<svg viewBox="0 0 16 16" aria-hidden="true"><path d="m8 1 2.1 4.4 4.9.6-3.6 3.3.9 4.8L8 11.8 3.7 14.1l.9-4.8L1 6l4.9-.6Z" fill="var(--accent)"/></svg>'
+    : '<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M4 1.5h8v4.2A4 4 0 0 1 9 9.6V11h2v2H5v-2h2V9.6A4 4 0 0 1 4 5.7Z" fill="var(--accent)"/><path d="M4 3H1.8v1.3A2.6 2.6 0 0 0 4 6.8M12 3h2.2v1.3A2.6 2.6 0 0 1 12 6.8" fill="none" stroke="var(--accent)" stroke-width="1.2"/><rect x="4" y="13.2" width="8" height="1.6" rx=".5" fill="var(--accent)"/></svg>';
+  return `<span class="lead-mark" title="${k === 'serie-a' ? 'In testa: lo scudetto' : 'In testa'}">${svg}</span>`;
+}
 function vClassifica() {
   const zones = new Set(), cup = (D.league || {}).cup, pj = D.proj || null;
   const rows = D.standings.map(r => { const z = ZONE[r.zone]; if (z) zones.add(r.zone); const q = pj && pj[r.team];
-    return `<tr><td class="l"><span class="pos ${z ? 'z-' + z[0] : ''}">${r.pos}</span></td><td class="l"><a class="plain" href="#s${r.team}">${team(r.team, true)}</a></td>
+    return `<tr><td class="l"><span class="pos ${z ? 'z-' + z[0] : ''}">${r.pos}</span></td><td class="l"><a class="plain" href="#s${r.team}" style="display:flex;align-items:center">${team(r.team, true)}${r.pos === 1 ? leadMark() : ''}</a></td>
       <td>${r.p}</td><td>${r.gf - r.ga > 0 ? '+' : ''}${r.gf - r.ga}</td><td><b>${r.pts}</b></td>${pj ? `<td>${q ? pc(q.top8) : '–'}</td><td>${q ? pc(q.top8 + q.po) : '–'}</td>` : `<td>${dots((T[r.team] || {}).form)}</td>`}</tr>`; }).join('');
   const note = cup ? `Le prime 8 vanno agli ottavi, dalla 9ª alla 24ª agli spareggi (andata e ritorno), le altre sono eliminate.${pj ? ` Top 8 e Top 24: probabilità di finire tra le prime 8 e tra le prime 24, da 5.000 simulazioni delle ${pj._left} partite che mancano con i gol attesi del pronostico.` : ''}`
     : "Zone dei posti sicuri per la prossima stagione. La vincitrice della coppa nazionale va in Europa League e un posto Champions in più va alle due nazioni con i migliori risultati europei di quest'anno: si sanno in primavera e possono far scalare le posizioni.";
@@ -787,7 +839,7 @@ function refCard(P) {
       <div class="fact"><small>Rossi</small><b class="num">${r.red ?? 0}</b></div>
       <div class="fact"><small>Effetto sui gialli attesi</small><b class="num">${eff >= 0 ? '+' : ''}${eff}%</b></div>
     </div>
-    <p class="small muted">Con poche partite il suo dato pesa meno e resta vicino alla media. Il rischio giallo di ogni giocatore e i gialli attesi della partita ne tengono già conto. Designazione da Fantacalcio.it, poi confermata da ESPN il giorno della partita.</p></div>`;
+    <p class="small muted">Con poche partite il suo dato pesa meno e resta vicino alla media. Il rischio giallo di ogni giocatore e i gialli attesi della partita ne tengono già conto. ${LG.fantacalcio === false ? 'Arbitro da ESPN.' : 'Designazione da Fantacalcio.it, poi confermata da ESPN il giorno della partita.'}</p></div>`;
 }
 function scorersCard(P, h, a) {
   const list = (key, c) => P.players[key].filter(p => p.pos !== 'G').sort((x, y) => y.pGoal - x.pGoal).slice(0, 4)
@@ -1002,9 +1054,10 @@ function relianceCard(id) {
 function squadCard(id) {
   const sq = (D.squads || {})[id] || [];
   if (!sq.length) return '';
-  return `<div class="card"><h3>Giocatori più impiegati</h3><div class="tw"><table class="lu"><thead><tr><th class="l">Giocatore</th><th>Min</th><th>Gol</th><th>Ass</th><th>xG</th><th>MV</th><th>FM</th></tr></thead><tbody>
-    ${sq.map(p => `<tr><td class="l"><b>${esc(p.name)}</b> <span class="muted">${POSL[p.pos] || ''}</span></td><td>${p.min ?? '–'}</td><td>${p.g ?? 0}</td><td>${p.a ?? 0}</td><td>${fx(p.xg, 2)}</td><td>${p.mv != null ? fx(p.mv, 2) : '–'}</td><td>${p.fm != null ? fx(p.fm, 2) : '–'}</td></tr>`).join('')}
-    </tbody></table></div><p class="small muted">MV = media voto, FM = fantamedia (Fantacalcio.it).</p></div>`;
+  const fc = LG.fantacalcio !== false;   // media voto e fantamedia solo in Serie A
+  return `<div class="card"><h3>Giocatori più impiegati</h3><div class="tw"><table class="lu"><thead><tr><th class="l">Giocatore</th><th>Min</th><th>Gol</th><th>Ass</th><th>xG</th>${fc ? '<th>MV</th><th>FM</th>' : ''}</tr></thead><tbody>
+    ${sq.map(p => `<tr><td class="l"><b>${esc(p.name)}</b> <span class="muted">${POSL[p.pos] || ''}</span></td><td>${p.min ?? '–'}</td><td>${p.g ?? 0}</td><td>${p.a ?? 0}</td><td>${fx(p.xg, 2)}</td>${fc ? `<td>${p.mv != null ? fx(p.mv, 2) : '–'}</td><td>${p.fm != null ? fx(p.fm, 2) : '–'}</td>` : ''}</tr>`).join('')}
+    </tbody></table></div>${fc ? '<p class="small muted">MV = media voto, FM = fantamedia (Fantacalcio.it).</p>' : ''}</div>`;
 }
 const ZN = [['piccola', 'Area piccola'], ['centro', "Centro dell'area"], ['lati', "Lati dell'area"], ['fuori', 'Fuori area']];
 function zoneRows(p) {
@@ -1113,46 +1166,81 @@ function teamFromFixtures(id) {
     if (f.P && f.P.players[k].some(x => String(x.id) === String(id))) return {tid: String(f[k]), name: f.P.players[k].find(x => String(x.id) === String(id)).name};
   return null;
 }
-const P90 = [['xg', 'xG', 2], ['g', 'Gol', 2], ['xa', 'xA', 2], ['kp', 'Chance create', 1], ['sh', 'Tiri', 1], ['sot', 'Tiri in porta', 1],
-  ['fo', 'Falli fatti', 1], ['fd', 'Falli subiti', 1], ['yc', 'Gialli', 2], ['tk', 'Contrasti (Opta)', 1], ['itc', 'Intercetti (Opta)', 1],
-  ['rec', 'Palloni recuperati (Opta)', 1], ['pcar', 'Conduzioni progressive (Opta)', 1], ['gp', 'Gol evitati (Opta)', 2]];
 function vGiocatore(id) {
   const p = PL[String(id)], alt = p ? null : teamFromFixtures(id);
   if (!p && !alt) return backAny + '<p class="lead" style="margin-top:14px">Questo giocatore non è nella fotografia attuale.</p>';
   const tid = p ? p.t : alt.tid, name = p ? p.n : alt.name, nx = nextOf(id, tid);
   const pos = (p ? p.pos : nx && nx.p && nx.p.pos) || 'M';
-  let season = '<p class="small muted">Nessun minuto giocato in questa stagione.</p>';
+  let season = '<p class="small muted">Nessun minuto giocato in questa stagione.</p>', kpis = '', vote = '';
   if (p) {
-    const tiles = [['Presenze', `${p.ap ?? '–'}`, p.st != null ? `${p.st} da titolare` : ''], ['Minuti', fx(p.min, 0), ''],
-      ['Gol', fx(p.g, 0), `xG ${fx(p.xg, 1)}`], ['Assist', fx(p.a, 0), `xA ${fx(p.xa, 1)}`], ['Chance create', fx(p.kp, 0), ''],
-      ['Tiri', fx(p.sh, 0), `${fx(p.sot, 0)} in porta`], ['Falli fatti', fx(p.fo, 0), `subiti ${fx(p.fd, 0)}`],
-      ['Ammonizioni', fx(p.yc, 0), p.rc ? `${p.rc} espulsioni` : ''], ...(pos === 'G' ? [['Parate', fx(p.sv, 0), '']] : []),
-      ...(p.mv != null ? [['Media voto', fx(p.mv, 2), p.fm != null ? `fantamedia ${fx(p.fm, 2)}` : '']] : []),
-      ...(p.tk != null && pos !== 'G' ? [['Contrasti', fx(p.tk, 0), `intercetti ${fx(p.itc, 0)}`], ['Palloni recuperati', fx(p.rec, 0), ''],
-        ['Duelli a terra vinti', p.gd ? `${Math.round(p.gw / p.gd * 100)}%` : '–', p.gd ? `${fx(p.gw, 0)} su ${fx(p.gd, 0)}` : ''],
-        ['Duelli aerei vinti', p.ad ? `${Math.round(p.aw / p.ad * 100)}%` : '–', p.ad ? `${fx(p.aw, 0)} su ${fx(p.ad, 0)}` : ''],
-        ['Conduzioni progressive', fx(p.pcar, 0), '']] : []),
-      ...(p.gp != null && pos === 'G' ? [['Gol evitati', (p.gp > 0 ? '+' : '') + fx(p.gp, 2), `xG nello specchio subiti ${fx(p.xgot, 1)}`]] : [])];
-    // per 90 minuti, con la posizione tra i giocatori dello stesso ruolo che hanno giocato abbastanza
-    const maxMin = Math.max(...D.players.map(x => x.min || 0)), minQ = Math.max(180, .3 * maxMin);
-    const peers = D.players.filter(x => x.pos === pos && (x.min || 0) >= minQ);
-    // i numeri di Opta si dividono per i minuti di Opta (si aggiorna una volta al giorno: può avere una partita in meno)
+    const ap = p.ap || 0, gk = pos === 'G';
+    // i numeri di Opta si contano sulle partite che Opta ha già (si aggiorna una volta al giorno: può averne una in meno)
     const OPTA = ['tk', 'itc', 'rec', 'gw', 'gd', 'aw', 'ad', 'pcar', 'gp', 'xgot'];
-    const r90 = (x, k) => { const m = OPTA.includes(k) && x.mo ? x.mo : x.min; return m ? (x[k] || 0) / m * 90 : null; };
-    const rows = P90.filter(([k]) => p[k] != null && (pos === 'G' ? ['yc', 'gp'].includes(k) : k !== 'gp')).map(([k, l, d]) => {
-      const v = r90(p, k), enough = (p.min || 0) >= minQ;
-      const rank = enough ? peers.filter(x => r90(x, k) > v).length + 1 : null;
-      return `<tr><td class="l">${l}</td><td><b>${fx(v, d)}</b></td><td class="l muted">${rank ? `${rank}° su ${peers.length} ${POSP[pos]}` : ''}</td></tr>`;
+    const apOf = k => OPTA.includes(k) && p.mo && p.min ? ap * p.mo / p.min : ap;
+    const avg = (k, d) => apOf(k) && p[k] != null ? fx(p[k] / apOf(k), d) : '–';
+    // posizione ogni 90 minuti tra i giocatori dello stesso ruolo che hanno giocato abbastanza
+    const maxMin = Math.max(...D.players.map(x => x.min || 0)), minQ = Math.max(180, .3 * maxMin), enough = (p.min || 0) >= minQ;
+    const peers = D.players.filter(x => x.pos === pos && (x.min || 0) >= minQ);
+    const r90 = (x, k) => { const m = OPTA.includes(k) && x.mo ? x.mo : x.min; return m && x[k] != null ? x[k] / m * 90 : null; };
+    const ratio = (x, w, n) => x[n] ? x[w] / x[n] : null;
+    const bar = val => {
+      if (!enough || val == null) return '<span class="sbar off" aria-hidden="true"></span>';
+      const vals = peers.map(x => val.f(x)).filter(v => v != null);
+      const below = vals.filter(v => v < val.v).length, rank = vals.filter(v => v > val.v).length + 1, q = vals.length ? below / vals.length : 0;
+      return `<span class="sbar" role="img" aria-label="${rank}° su ${vals.length} ${POSP[pos]}" title="${rank}° su ${vals.length} ${POSP[pos]} ogni 90 minuti"><i style="width:${Math.max(4, q * 100)}%"></i></span>`;
+    };
+    // [chiave, nome, decimali del totale, decimali della media]
+    const GROUPS = gk
+      ? [['Porta', [['sv', 'Parate', 0, 1], ['gc', 'Gol subiti', 0, 2], ['cs', 'Porta inviolata', 0, 'pct'], ['gp', 'Gol evitati (Opta)', 2, 2], ['xgot', 'xG nello specchio subiti (Opta)', 1, 2]]],
+         ['Disciplina', [['yc', 'Ammonizioni', 0, 2], ['rc', 'Espulsioni', 0, 2]]]]
+      : [['Attacco', [['g', 'Gol', 0, 2], ['xg', 'xG, gol attesi', 2, 2], ['sh', 'Tiri', 0, 1], ['sot', 'Tiri in porta', 0, 1],
+          ['a', 'Assist', 0, 2], ['xa', 'xA, assist attesi', 2, 2], ['kp', 'Chance create', 0, 1]]],
+         ['Duelli e recuperi (Opta)', [['tk', 'Contrasti', 0, 1], ['itc', 'Intercetti', 0, 1], ['rec', 'Palloni recuperati', 0, 1],
+          ['gw', 'Duelli a terra vinti', 'duel', 'gd'], ['aw', 'Duelli aerei vinti', 'duel', 'ad'], ['pcar', 'Conduzioni progressive', 0, 1]]],
+         ['Falli e cartellini', [['fo', 'Falli fatti', 0, 1], ['fd', 'Falli subiti', 0, 1], ['yc', 'Ammonizioni', 0, 2], ['rc', 'Espulsioni', 0, 2]]]];
+    const row = ([k, l, dt, da]) => {
+      if (p[k] == null) return '';
+      let tot, per, b;
+      if (dt === 'duel') {   // vinti su giocati, e la percentuale
+        const n = p[da];
+        if (!n) return '';
+        tot = `${fx(p[k], 0)}<small>/${fx(n, 0)}</small>`;
+        per = `${Math.round(p[k] / n * 100)}%`;
+        b = bar({v: ratio(p, k, da), f: x => ratio(x, k, da)});
+      } else if (da === 'pct') {
+        tot = fx(p[k], 0);
+        per = ap ? `${Math.round(p[k] / ap * 100)}%` : '–';
+        b = bar({v: ap ? p[k] / ap : null, f: x => x.ap ? (x[k] || 0) / x.ap : null});
+      } else {
+        tot = fx(p[k], dt);
+        per = avg(k, da);
+        b = bar({v: r90(p, k), f: x => r90(x, k)});
+      }
+      return `<div class="srow"><span class="sl">${l}</span><b class="st num">${tot}</b><span class="sa num">${per}</span>${b}</div>`;
+    };
+    const groups = GROUPS.map(([title, rows]) => {
+      const body = rows.map(row).join('');
+      return body ? `<div class="sgrp"><h4>${title}</h4>${body}</div>` : '';
     }).join('');
-    season = `<div class="facts">${tiles.map(([k, v, s]) => `<div class="fact"><small>${k}</small><b class="num">${v}</b>${s ? `<small>${s}</small>` : ''}</div>`).join('')}</div>
-      ${rows ? `<h4>Ogni 90 minuti</h4><div class="tw"><table><tbody>${rows}</tbody></table></div>
-      <p class="small muted">${(p.min || 0) >= minQ ? `Posizione tra i ${POSP[pos]} con almeno ${Math.round(minQ)} minuti giocati.` : `Ha giocato meno di ${Math.round(minQ)} minuti: niente confronto con gli altri ${POSP[pos]}.`} Dati di Understat, ESPN${p.tk != null || p.gp != null ? ', Opta (Opta Analyst)' : ''}${p.mv != null ? ' e Fantacalcio.it' : ''}.</p>` : ''}`;
+    const per = (k, d) => ap ? fx((p[k] || 0) / ap, d) : '–';
+    const K = gk
+      ? [['Presenze', fx(ap, 0), p.st != null ? `${p.st} da titolare` : ''], ['Minuti', fx(p.min, 0), ap ? `${per('min', 0)}' a partita` : ''],
+         ['Parate', fx(p.sv, 0), `${per('sv', 1)} a partita`], ['Gol subiti', fx(p.gc, 0), `${per('gc', 2)} a partita`]]
+      : [['Presenze', fx(ap, 0), p.st != null ? `${p.st} da titolare` : ''], ['Minuti', fx(p.min, 0), ap ? `${per('min', 0)}' a partita` : ''],
+         ['Gol', fx(p.g, 0), `${per('g', 2)} a partita`], ['Assist', fx(p.a, 0), `${per('a', 2)} a partita`]];
+    kpis = `<div class="ph-kpis">${K.map(([l, v, sub]) => `<div><small>${l}</small><b class="num">${v}</b><small>${sub}</small></div>`).join('')}</div>`;
+    if (p.mv != null) vote = `<div class="ph-vote"><b class="num">${fx(p.mv, 2)}</b><small>media voto</small>${p.fm != null ? `<small>FM ${fx(p.fm, 2)}</small>` : ''}</div>`;
+    const tra = `tra ${pos === 'F' ? 'gli' : 'i'} ${POSP[pos]}`;
+    season = `<div class="shead"><span></span><span>Totale</span><span>A partita</span><span>Pari ruolo</span></div>${groups}
+      <p class="small muted">A partita: media sulle ${fx(ap, 0)} presenze. La barra dice dove si colloca ogni 90 minuti ${tra} con almeno
+      ${Math.round(minQ)} minuti (più piena = ne fa di più)${enough ? '' : `; con meno di ${Math.round(minQ)} minuti il confronto non c'è`}.
+      Dati di ESPN${LG.noXg ? '' : LG.xgEspn || LG.cup ? ', xG dalla posizione dei tiri' : ', Understat'}${p.tk != null || p.gp != null ? ', Opta (Opta Analyst)' : ''}${p.mv != null ? ' e Fantacalcio.it' : ''}.</p>`;
   }
   let next = '';
   if (nx && !nx.p) {
     const {f, k, sub, miss, pct} = nx, opp = k === 'home' ? f.away : f.home, conf = f.P.lineups.confirmed, src = srcLabel(conf ? 'ufficiale' : f.P.lineups[k].source)[1];
     const why = miss ? `<span class="st ko">${esc(miss.why || 'Indisponibile')}</span>${miss.desc ? ` <span class="muted">${esc(miss.desc)}</span>` : ''}`
-      : sub ? `In panchina${pct ? ` (${pct}% di giocare secondo Fantacalcio.it)` : ''}` : 'Non è tra i titolari previsti';
+      : sub ? `In panchina${pct ? ` (${pct}% di giocare secondo ${LG.fantacalcio === false ? 'OneFootball' : 'Fantacalcio.it'})` : ''}` : 'Non è tra i titolari previsti';
     next = `<div class="card"><h3>Prossima partita</h3>
       <a class="cardlink" href="#p${f.id}"><div class="fx-top"><span>${when(f.start)}</span><span>${k === 'home' ? 'in casa' : 'in trasferta'}</span></div>
         <div style="display:flex;align-items:center;gap:8px;margin-top:6px">contro ${team(opp, true)}</div></a>
@@ -1172,10 +1260,12 @@ function vGiocatore(id) {
   } else if (p) {
     next = `<div class="card"><h3>Prossima partita</h3><p class="small muted">Non è tra i titolari previsti delle prossime partite (formazioni probabili o stimate: può cambiare).</p></div>`;
   }
+  // in alto la fascia nei colori della lega: nome, ruolo, squadra e i numeri principali con la media a partita
+  const num = p && p.num ? `<span class="ph-num num">${esc(p.num)}</span>` : '';
   return `${backAny}
-    <article class="card" style="margin-top:10px"><div class="fx-top"><span>${POSN[pos] || ''}</span><a class="plain" href="#s${tid}">${team(tid, true)}</a></div>
-      <h2 style="margin:8px 0 0">${esc(name)}</h2></article>
-    <div class="stack">${next}<div class="card"><h3>Stagione</h3>${season}</div>${uefaPlayerCard(id, pos)}</div>`;
+    <article class="card phero" style="margin-top:10px"><div class="ph-band">${num}<div class="ph-main"><div class="ph-role">${POSN[pos] || ''}</div>
+      <h2>${esc(name)}</h2><a class="ph-team" href="#s${tid}">${crest(tid, true)}<span>${esc((T[tid] || {}).name || '')}</span></a></div>${vote}</div>${kpis}</article>
+    <div class="stack">${next}<div class="card"><h3>Stagione <small class="muted">totale e media a partita</small></h3>${season}</div>${uefaPlayerCard(id, pos)}</div>`;
 }
 
 // Champions: statistiche ufficiali della UEFA del giocatore (tracciamento compreso), per 90 minuti con la posizione tra

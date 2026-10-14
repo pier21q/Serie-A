@@ -3476,7 +3476,10 @@ def snapshot():
                    # Opta (Opta Analyst): contrasti, intercetti, recuperi, duelli, conduzioni progressive, gol evitati
                    "tk": p.get("tackles"), "itc": p.get("interceptions"), "rec": p.get("recoveries"), "gw": p.get("groundWon"),
                    "gd": p.get("groundDuels"), "aw": p.get("aerialWon"), "ad": p.get("aerialDuels"), "pcar": p.get("progCarries"),
-                   "gp": p.get("goalsPrevented"), "xgot": p.get("xgotConceded"), "mo": p.get("minutesOpta")}, 2)
+                   "gp": p.get("goalsPrevented"), "xgot": p.get("xgotConceded"), "mo": p.get("minutesOpta"),
+                   # portieri: gol subiti e porte inviolate (tabellini ESPN); numero di maglia
+                   **({"gc": p.get("goalsConceded"), "cs": p.get("cleanSheet") or 0} if p.get("pos") == "G" else {}),
+                   "num": p.get("num")}, 2)
                for p in d.get("players") or [] if (p.get("minutesPlayed") or 0) > 0]
     players = [{k: v for k, v in p.items() if v is not None} for p in players]   # più leggero: niente campi vuoti
     snap = {
