@@ -152,7 +152,8 @@ def understat_from_espn(results, shots, boxes, names):
                     continue
                 q = players.setdefault(pid, {"id": pid, "player_name": st.get("name"), "games": 0, "time": 0, "goals": 0, "assists": 0,
                                              "shots": 0, "key_passes": 0, "yellow_cards": 0, "red_cards": 0, "xG": 0.0, "xA": 0.0,
-                                             "npg": 0, "npxG": 0.0, "position": st.get("pos") or "", "team_title": ""})
+                                             "npg": 0, "npxG": 0.0, "position": "GK" if st.get("pos") == "G" else st.get("pos") or "",
+                                             "team_title": ""})
                 q["games"] += 1
                 q["time"] += st.get("min") or 0
                 q["goals"] += st.get("goals") or 0
@@ -162,7 +163,7 @@ def understat_from_espn(results, shots, boxes, names):
                 q["red_cards"] += st.get("rc") or 0
                 q["team_title"] = names.get(tid) or tid
                 if st.get("pos") and st["pos"] != "SUB":
-                    q["position"] = st["pos"]
+                    q["position"] = "GK" if st["pos"] == "G" else st["pos"]   # come Understat: i portieri sono «GK»
             for x in sh.get(s) or []:
                 pid = who(x[1], s)
                 if pid in players:

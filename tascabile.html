@@ -1101,7 +1101,9 @@ function vGiocatore(id) {
     // per 90 minuti, con la posizione tra i giocatori dello stesso ruolo che hanno giocato abbastanza
     const maxMin = Math.max(...D.players.map(x => x.min || 0)), minQ = Math.max(180, .3 * maxMin);
     const peers = D.players.filter(x => x.pos === pos && (x.min || 0) >= minQ);
-    const r90 = (x, k) => x.min ? (x[k] || 0) / x.min * 90 : null;
+    // i numeri di Opta si dividono per i minuti di Opta (si aggiorna una volta al giorno: può avere una partita in meno)
+    const OPTA = ['tk', 'itc', 'rec', 'gw', 'gd', 'aw', 'ad', 'pcar', 'gp', 'xgot'];
+    const r90 = (x, k) => { const m = OPTA.includes(k) && x.mo ? x.mo : x.min; return m ? (x[k] || 0) / m * 90 : null; };
     const rows = P90.filter(([k]) => p[k] != null && (pos === 'G' ? ['yc', 'gp'].includes(k) : k !== 'gp')).map(([k, l, d]) => {
       const v = r90(p, k), enough = (p.min || 0) >= minQ;
       const rank = enough ? peers.filter(x => r90(x, k) > v).length + 1 : null;

@@ -124,6 +124,9 @@ model.F_CALIB = dict(model.F_CALIB, **(LEGA.get("calib") or {}))
 model.ROLE_CALIB = LEGA.get("roles") or {}
 CUP = bool(LEGA.get("cup"))
 ESPN_XG = not LEGA["understat"] and not CUP   # campionato senza Understat: i suoi dati nello stesso formato, fatti con ESPN
+# anche in coppa gli xG di squadre e giocatori vengono dai tiri della cronaca ESPN (stagione in corso: la base dei
+# giocatori restano i loro campionati, vedi cup_prior_players)
+SHOT_XG = ESPN_XG or CUP
 if LEGA["understat"]:
     statistiche.UNDERSTAT = statistiche.UNDERSTAT.replace("Serie_A", LEGA["understat"])
     statistiche.UNDERSTAT_REF = statistiche.UNDERSTAT_REF.replace("Serie_A", LEGA["understat"])
@@ -428,8 +431,8 @@ async def espn_schedule(d, months):
     ended = merge_events(d, evs)
     if CUP:
         cup_rounds(d)
-    elif LEGA["dir"]:
-        number_rounds(d)
+    else:   # anche la Serie A: le partite oltre il calendario di Fantacalcio.it (che arriva poche giornate avanti) non
+        number_rounds(d)   # avevano la giornata; quelle che ce l'hanno la tengono
     d["updatedAt"] = time.time()
     return ended
 
@@ -520,13 +523,16 @@ def reg_score(name, x, jersey=None):
     return sc
 
 
-def reg_find(name, team_ids, jersey=None, need=4.0, espn=None):
+def reg_find(name, team_ids, jersey=None, need=4.0, espn=None, skip=()):
     """Giocatore dell'anagrafica con questo nome (nelle squadre indicate, o in tutte se None). Con espn (id ESPN di chi
-    si cerca) salta chi ha già un altro id ESPN: per ESPN due id diversi sono sempre due persone diverse."""
+    si cerca) salta chi ha già un altro id ESPN: per ESPN due id diversi sono sempre due persone diverse. skip: giocatori
+    già collegati a un'altra persona della stessa fonte."""
     teams = {str(t) for t in team_ids if t} if team_ids else None
     best, bs = None, 0.0
     for cid, x in REG["info"].items():
         if teams is not None and str(x.get("teamId")) not in teams:
+            continue
+        if cid in skip:
             continue
         if espn and x.get("espnId") and str(x["espnId"]) != str(espn):
             continue
@@ -1521,9 +1527,10 @@ async def opta_step(d, now):
 def canon_opta(pid, o, team_of):
     """Giocatore di Opta -> id dell'anagrafica (stessa squadra e stesso cognome)."""
     cid = REG["opta"].get(pid)
-    if cid is None:
+    if cid is None:   # un id Opta è una persona sola: salta chi è già collegato a un altro
+        owned = {c for k, c in REG["opta"].items() if k != pid}
         tid = team_of(o.get("team"))
-        cid = reg_find(o["name"], [tid] if tid else None) or reg_find(o["name"], None, need=8.0)
+        cid = reg_find(o["name"], [tid] if tid else None, skip=owned) or reg_find(o["name"], None, need=8.0, skip=owned)
         if cid is None:
             return None
         REG["opta"][pid] = cid
@@ -1592,13 +1599,38 @@ async def mondo_step(d, now):
     log(f"Forza europea ricalcolata: {len(done)} partite, {len(P['A'])} squadre" + (f" ({len(bad)} calendari non scaricati)" if bad else ""))
 
 
+def cup_domestic_styles(d, group):
+    """Stile di gioco delle squadre di Champions nel loro campionato, quando è uno di quelli dell'app (fotografia delle
+    altre leghe, sola lettura): {id: {"dims", "arch", "n", "league"}}. In Champions si giocano poche partite (una o due
+    a ottobre, al massimo otto nella fase campionato): lo stile misurato solo lì sarebbe quello di una o due partite."""
+    out = {}
+    for key, cfg in LEGHE.items():
+        mine = [tid for tid in d.get("teams") or {} if group.get(tid) == cfg["espn"]]
+        if cfg.get("cup") or not mine:
+            continue
+        base = DATA_BASE / cfg["dir"] if cfg["dir"] else DATA_BASE
+        snap = load_json(base / "fotografia.json", {}) or {}
+        # la Serie A ha i suoi id: la mappa ESPN -> Serie A è in cache/espn.json (come per gli allenatori)
+        emap = ((load_json(base / "cache" / "espn.json", {}) or {}).get("teams") or {}) if cfg["dir"] == "" else {}
+        played = {str(r["team"]): r.get("p") or 0 for r in snap.get("standings") or []}
+        for tid in mine:
+            lid = str(emap.get(tid, tid))
+            t = (snap.get("teams") or {}).get(lid) or {}
+            if t.get("dims") and played.get(lid):
+                out[tid] = {"dims": t["dims"], "arch": t.get("arch"), "n": played[lid], "league": cfg["name"]}
+    return out
+
+
 def cup_ext(d):
-    """Forza delle squadre di Champions dal modello europeo: {"mu", "he", "teams": {id: {A, D, league, n}}}."""
+    """Forza delle squadre di Champions dal modello europeo: {"mu", "he", "teams": {id: {A, D, league, n, dom}}}
+    (dom: lo stile nel campionato, vedi cup_domestic_styles)."""
     P = load_json(FORZA_FILE, None)
     if not CUP or not P:
         return None
+    dom = cup_domestic_styles(d, P.get("group") or {})
     teams = {tid: {"A": europa.effect(P, tid, "A"), "D": europa.effect(P, tid, "D"),
-                   "league": (P.get("group") or {}).get(tid, "altro"), "n": (P.get("n") or {}).get(tid, 0)}
+                   "league": (P.get("group") or {}).get(tid, "altro"), "n": (P.get("n") or {}).get(tid, 0),
+                   "dom": dom.get(tid)}
              for tid in (d.get("teams") or {})}
     return {"mu": P["mu"], "he": P["he"], "teams": teams, "at": P.get("at")}
 
@@ -1612,6 +1644,18 @@ async def us_league_get(lg, year):
         return json.loads(await r.text())
 
 
+# base dei giocatori di Champions: i cinque campionati di Understat e quelli con gli xG fatti dalla cronaca ESPN
+# (Eredivisie e Portogallo: PSV, Feyenoord, Sporting, Porto...). In Turchia gli xG non ci sono.
+CUP_SOURCES = dict(US_LEAGUES, **{"ned.1": "espn:eredivisie", "por.1": "espn:portugal"})
+
+
+def cup_league_file(lg, y):
+    """File della stagione y di un campionato, nel formato di Understat."""
+    if lg.startswith("espn:"):
+        return DATA_BASE / lg[5:] / "cache" / f"understat-{y}.json"
+    return CACHE / f"understat-{lg}-{y}.json"
+
+
 def cup_us_teams(d):
     """Squadra di Champions -> (campionato Understat, nome della squadra su Understat), scegliendo solo tra le squadre del
     suo campionato (così «Real Sociedad» non diventa «Real Madrid»)."""
@@ -1619,10 +1663,10 @@ def cup_us_teams(d):
     y = season_year(d)
     out = {}
     for tid, o in (d.get("teams") or {}).items():
-        lg = US_LEAGUES.get((P.get("group") or {}).get(tid))
+        lg = CUP_SOURCES.get((P.get("group") or {}).get(tid))
         if not lg:
             continue
-        titles = [t["title"] for t in ((load_json(CACHE / f"understat-{lg}-{y}.json", {}) or {}).get("teams") or {}).values()]
+        titles = [t["title"] for t in ((load_json(cup_league_file(lg, y), {}) or {}).get("teams") or {}).values()]
         t = o["team"]
         names = [t.get("name"), t.get("fullName"), t.get("shortName")]
         sc = lambda title: max(difflib.SequenceMatcher(None, " ".join(tok_seq(title)), " ".join(tok_seq(n))).ratio()
@@ -1634,22 +1678,52 @@ def cup_us_teams(d):
 
 
 def cup_prior_players(d):
-    """Base dei giocatori di Champions: le loro statistiche nei cinque campionati di Understat (stagione in corso e
-    scorsa). In Champions si giocano al massimo 8 partite: senza questa base i numeri per 90' sarebbero solo medie di ruolo."""
+    """Base dei giocatori di Champions: le loro statistiche nel loro campionato (stagione in corso e scorsa): i cinque
+    di Understat, più Eredivisie e Portogallo con gli xG fatti dalla cronaca ESPN (CUP_SOURCES). In Champions si giocano
+    al massimo 8 partite: senza questa base i numeri per 90' sarebbero solo medie di ruolo."""
     y = season_year(d)
     teams = cup_us_teams(d)
     by_title = {(lg, title): tid for tid, (lg, title) in teams.items()}
     usmap = REG.setdefault("usd", {})
+    # collegamenti già fatti dalle altre leghe dell'app (Understat -> giocatore -> id ESPN): gli id ESPN sono gli stessi
+    # in campionato e in Champions, quindi il collegamento è esatto (niente nomi da confrontare)
+    dom = {}
+    for key, cfg in LEGHE.items():
+        if not cfg.get("cup") and cfg.get("understat"):
+            reg = load_json((DATA_BASE / cfg["dir"] if cfg["dir"] else DATA_BASE) / "cache" / "giocatori.json", {}) or {}
+            for us_id, c in (reg.get("us") or {}).items():
+                eid = ((reg.get("info") or {}).get(str(c)) or {}).get("espnId")
+                if eid:
+                    dom[str(us_id)] = str(eid)
     out = {}
     for yy in (y, y - 1):
-        for lg in set(US_LEAGUES.values()):
-            f = CACHE / f"understat-{lg}-{yy}.json"
+        for lg in sorted(set(CUP_SOURCES.values())):
+            f = cup_league_file(lg, yy)
             for u in ((statistiche.understat_parse(load_json(f, {})) or {}).get("players") or []) if f.exists() else []:
+                if lg.startswith("espn:"):   # id di ESPN, da non confondere con quelli di Understat
+                    u["usId"] = "e" + u["usId"]
+                # id ESPN (Eredivisie, Portogallo) o Understat già collegato da una lega dell'app: collegamento esatto,
+                # e se quel giocatore non è in Champions non si cerca un omonimo (Pablo García del Racing non è Fran
+                # García del Betis)
+                eid = u["usId"][1:] if u["usId"].startswith("e") else dom.get(u["usId"])
+                if eid:
+                    cid = REG["espn"].get(eid)
+                    if cid is None:
+                        usmap.pop(u["usId"], None)
+                    elif usmap.get(u["usId"]) != cid:
+                        usmap[u["usId"]] = cid
                 cid = usmap.get(u["usId"])
-                if cid is None and yy == y:   # il collegamento si fa con la stagione in corso, per squadra
+                if cid is not None and role_clash(cid, u.get("usPos")):
+                    usmap.pop(u["usId"], None)
+                    cid = None
+                if cid is None and not eid and yy == y:   # il collegamento si fa con la stagione in corso, per squadra
                     tids = [by_title.get((lg, t.strip())) for t in (u.get("team") or "").split(",")]
                     tids = [t for t in tids if t]
-                    cid = reg_find(u["name"], tids) if tids else None
+                    fam = u["usId"].startswith("e")   # un id per persona in ogni fonte (Understat, ESPN)
+                    owned = {c for k, c in usmap.items() if k != u["usId"] and k.startswith("e") == fam}
+                    cid = reg_find(u["name"], tids, skip=owned) if tids else None
+                    if cid and role_clash(cid, u.get("usPos")):
+                        cid = None
                     if cid:
                         usmap[u["usId"]] = cid
                 if cid is None:
@@ -2280,6 +2354,71 @@ def repair_registry(d):
         if uid in us_names and (str(cid) in fixed or not same_person(us_names[uid], (REG["info"].get(str(cid)) or {}).get("name"))):
             del REG["us"][uid]
             fixed.add(str(cid))
+    # un id Understat è una persona sola, e viceversa. Fino al 14/10/2026 due compagni con lo stesso cognome potevano
+    # finire sullo stesso giocatore (Víctor e Iker Muñoz dell'Osasuna, Alex e Jacob Murphy del Newcastle): resta il nome
+    # più vicino (a parità, quello della squadra del giocatore), gli altri si ricollegano con canon_us. Nei campionati
+    # senza Understat l'id è quello di ESPN: deve essere lo stesso del giocatore
+    us_fixed = 0
+    if SHOT_XG:
+        for uid, cid in list(REG["us"].items()):
+            if str((REG["info"].get(str(cid)) or {}).get("espnId")) != str(uid):
+                del REG["us"][uid]
+                us_fixed += 1
+    else:
+        us_full = {}
+        for y in (season_year(d), season_year(d) - 1):
+            for p in ((statistiche.understat_parse(load_json(us_file(y), {})) or {}).get("players") or []) if us_file(y).exists() else []:
+                us_full.setdefault(str(p.get("usId")), p)
+        owners = {}
+        for uid, cid in REG["us"].items():
+            owners.setdefault(str(cid), []).append(uid)
+        for cid, uids in owners.items():
+            if len(uids) < 2:
+                continue
+            x = REG["info"].get(cid) or {}
+
+            def fit(uid):
+                u = us_full.get(uid)
+                if not u:
+                    return -1.0
+                team = team_by_name(d, (u.get("team") or "").split(",")[-1])
+                return reg_score(u.get("name"), x) + (1.0 if team and str(team) == str(x.get("teamId")) else 0.0)
+            keep = max(uids, key=fit)
+            for uid in uids:
+                if uid != keep:
+                    log(f"Anagrafica: Understat «{(us_full.get(uid) or {}).get('name')}» staccato da {x.get('name')} "
+                        f"(collegato a «{(us_full.get(keep) or {}).get('name')}»)")
+                    del REG["us"][uid]
+                    us_fixed += 1
+    # Opta, stessa regola (Liga: «Pablo García» del Racing era finito su Fran García del Betis, «José Ángel»
+    # dell'Espanyol su José Ángel Carmona)
+    opta = (load_json(OPTA_FILE, {}) or {}).get("players") or {}
+    owners = {}
+    for pid, cid in REG.get("opta", {}).items():
+        owners.setdefault(str(cid), []).append(pid)
+    for cid, pids in owners.items():
+        if len(pids) < 2:
+            continue
+        x = REG["info"].get(cid) or {}
+
+        def fit_o(pid):
+            o = opta.get(pid)
+            if not o:
+                return -1.0
+            team = team_by_name(d, o.get("team") or "")
+            return reg_score(o.get("name"), x) + (1.0 if team and str(team) == str(x.get("teamId")) else 0.0)
+        keep = max(pids, key=fit_o)
+        for pid in pids:
+            if pid != keep:
+                log(f"Anagrafica: Opta «{(opta.get(pid) or {}).get('name')}» staccato da {x.get('name')}")
+                del REG["opta"][pid]
+                us_fixed += 1
+    if us_fixed and not fixed:   # basta rifare le statistiche (anche della stagione scorsa), le formazioni sono giuste
+        PRIOR["statsV"] = 1
+        d["v"] = None
+        save_json(REG_FILE, REG)
+        save_json(PRIOR_FILE, PRIOR)
+        return
     if not fixed:
         return
     # formazioni salvate con l'id sbagliato: si riscaricano da ESPN; statistiche di questa stagione e della scorsa da rifare
@@ -2297,28 +2436,72 @@ def repair_registry(d):
     VERSION["matches"] += 1
 
 
+def role_clash(cid, us_pos):
+    """Ruoli che non possono essere della stessa persona: portiere nell'anagrafica e difensore, centrocampista o
+    attaccante su Understat, o il contrario («S», solo subentrato, non dice il ruolo). Esempio: l'«Álvaro Fernández»
+    di Understat è il terzino Álvaro Carreras del Real Madrid, non il portiere omonimo di un'altra squadra."""
+    parts = set((us_pos or "").split())
+    gk, out = "GK" in parts, bool(parts & {"D", "M", "F"})
+    reg_gk = (REG["info"].get(str(cid)) or {}).get("pos") == "G"
+    return (reg_gk and out and not gk) or (not reg_gk and gk and not out)
+
+
 def canon_us(u, team_of_title):
-    """Giocatore Understat -> id dell'anagrafica."""
+    """Giocatore Understat -> id dell'anagrafica: mai una persona con un ruolo incompatibile, né una già collegata a un
+    altro id Understat (un id è una persona sola: «Víctor Muñoz» non può diventare il compagno «Iker Muñoz»). Nei
+    campionati senza Understat (e in coppa) l'id è quello di ESPN, quindi il collegamento è esatto."""
+    if SHOT_XG:
+        cid = REG["espn"].get(str(u["usId"]))
+        if cid is not None:
+            REG["us"][u["usId"]] = cid
+        return cid
     cid = REG["us"].get(u["usId"])
+    if cid is not None and role_clash(cid, u.get("usPos")):   # collegamento sbagliato salvato prima del controllo
+        REG["us"].pop(u["usId"], None)
+        cid = None
     if cid is None:
+        owned = {c for k, c in REG["us"].items() if k != u["usId"]}
         teams = [team_of_title(t) for t in (u.get("team") or "").split(",")]
-        cid = reg_find(u["name"], teams) or reg_find(u["name"], None, need=8.0)
-        if cid is None:
+        cid = reg_find(u["name"], teams, skip=owned)
+        if cid is None or role_clash(cid, u.get("usPos")):
+            cid = reg_find(u["name"], None, need=8.0, skip=owned)
+        if cid is None or role_clash(cid, u.get("usPos")):
             return None
         REG["us"][u["usId"]] = cid
     return cid
 
 
-def canon_fc(f, tid):
-    """Giocatore di Fantacalcio.it (es. "Martinez L.") -> id dell'anagrafica."""
+def fc_fits(f, cid, alt=None):
+    """Il giocatore di Fantacalcio.it f può essere cid? Portiere solo con portiere (Pietro Terracciano non è il
+    difensore Filippo) e, se c'è, l'iniziale del nome giusta («Oyono J.» non è Anthony Oyono)."""
+    x = REG["info"].get(str(cid)) or {}
+    if x.get("pos") and (f.get("role") == "p") != (x["pos"] == "G"):
+        return False
+    m = re.search(r"\s([A-Z])\.$", f.get("name") or "")
+    full = [t for t in (model.norm_tokens(n) for n in [x.get("name")] + list((alt or {}).get(str(cid)) or ())) if len(t) >= 2]
+    return not m or not full or any(t[0].startswith(m.group(1).lower()) for t in full)
+
+
+def canon_fc(f, tid, alt=None):
+    """Giocatore di Fantacalcio.it (es. "Martinez L.") -> id dell'anagrafica: della sua squadra, non già collegato a un
+    altro giocatore di Fantacalcio.it, e che torna con fc_fits. alt: altri nomi dello stesso giocatore (Understat:
+    «Alhassane» è Abdel Rahim, «Zambo Anguissa» è Frank Anguissa)."""
     cid = REG["fc"].get(f["fcId"])
+    if cid is not None and not fc_fits(f, cid, alt):   # collegamento sbagliato salvato prima del controllo
+        REG["fc"].pop(f["fcId"], None)
+        cid = None
     if cid is None:
-        cands = [{"id": c, "name": x.get("name"), "minutesPlayed": 0} for c, x in REG["info"].items()
-                 if str(x.get("teamId")) == str(tid)]
-        p = model.match_roster_player({"name": f["name"]}, cands)
-        if not p:
-            return None
-        cid = REG["fc"][f["fcId"]] = p["id"]
+        owned = {c for k, c in REG["fc"].items() if k != f["fcId"]}
+        cands = [{"id": c, "name": n, "minutesPlayed": 0} for c, x in REG["info"].items()
+                 if str(x.get("teamId")) == str(tid) and c not in owned and fc_fits(f, c, alt)
+                 for n in [x.get("name")] + list((alt or {}).get(c) or ())
+                 + ([" ".join([x.get("name") or ""] + list(alt[c]))] if (alt or {}).get(c) else [])]
+        # «N'Dicka» = Ndicka, «Ederson D.S.» = Ederson
+        for name in dict.fromkeys((f["name"], f["name"].replace("'", ""), re.sub(r"\s+(?:[A-Z]\.){2,}$", "", f["name"]))):
+            p = model.match_roster_player({"name": name}, cands)
+            if p:
+                cid = REG["fc"][f["fcId"]] = p["id"]
+                break
     return cid
 
 
@@ -2340,25 +2523,59 @@ def build_players(results, boxes, us, team_of_title, current):
         for k, v in s.items():
             if isinstance(v, (int, float)) and not isinstance(v, bool):
                 p[k] = p.get(k, 0) + v
-    for u in (us or {}).get("players") or []:
-        cid = canon_us(u, team_of_title)
-        if cid is None:
-            continue
+        p["appearancesEspn"] = p.get("appearances", 0)
+    def merge(cid, u):
         x = REG["info"].get(cid) or {}
         p = out.setdefault(cid, {"id": int(cid), "name": x.get("name") or u["name"], "pos": x.get("pos"),
                                  "teamId": int(team_of_title(u["team"].split(",")[-1]) or x.get("teamId") or 0)})
         p.update({k: u[k] for k in US_FIELDS if u.get(k) is not None})
         p["appearances"] = max(p.get("appearances") or 0, int(u.get("appearances") or 0))
+        linked.add(cid)
+
+    linked, pending = set(), []
+    for u in (us or {}).get("players") or []:
+        cid = canon_us(u, team_of_title)
+        if cid is None:
+            pending.append(u)
+        else:
+            merge(cid, u)
+    # Understat con un nome diverso da ESPN («Valde» e Víctor Valdepeñas, «Franck Zambo» e Frank Anguissa, «Djené
+    # Dakonam» e Djené, «Álvaro Fernández» e Álvaro Carreras): nella stessa squadra, l'unico giocatore ESPN ancora senza
+    # Understat con quasi gli stessi minuti (le due fonti differiscono di pochi minuti di recupero: 18 al massimo nei
+    # collegamenti per nome) e un ruolo compatibile; a parità, quello del reparto indicato da Understat
+    for u in pending:
+        t, team = int(u.get("minutesPlayed") or 0), team_of_title((u.get("team") or "").split(",")[-1])
+        if t < 30 or not team or "," in (u.get("team") or ""):
+            continue
+        owned = {c for k, c in REG["us"].items() if k != u["usId"]}
+        near = [cid for cid, p in out.items() if cid not in linked and cid not in owned and str(p.get("teamId")) == str(team)
+                and p.get("minutesEspn") is not None and abs(p["minutesEspn"] - t) <= max(20, .08 * t)
+                and not role_clash(cid, u.get("usPos"))]
+        same = [cid for cid in near if (out[cid].get("pos") or "") in (u.get("usPos") or "").split()]
+        pick = near if len(near) == 1 else same if len(same) == 1 else []
+        if pick:
+            REG["us"][u["usId"]] = pick[0]
+            merge(pick[0], u)
     if current:   # Opta: xG e xA diventano la media di Understat e Opta (due modelli indipendenti), più le statistiche nuove
         for pid, o in ((load_json(OPTA_FILE, {}) or {}).get("players") or {}).items():
             cid = canon_opta(pid, o, team_of_title)
             p = out.get(cid) if cid else None
             if not p:
                 continue
+            # Opta si aggiorna una volta al giorno, Understat e la cronaca ESPN entro un'ora: dopo una giornata Opta
+            # può avere una partita in meno (Champions, 14/10/2026: Lautaro 0,32 xG su 90' per Opta, 2,92 su 180'
+            # dalla cronaca). La media dei due xG si fa solo sugli stessi minuti; i numeri solo di Opta (contrasti,
+            # duelli...) si dividono per i minuti di Opta (minutesOpta)
+            om = o.get("mins_played")
+            p["minutesOpta"] = om
+            same = om is not None and abs(om - (p.get("minutesPlayed") or 0)) <= 45
             for k, ok in (("expectedGoals", "xg"), ("expectedAssists", "xa")):
                 if o.get(ok) is not None:
                     p[k + "Opta"] = o[ok]
-                    p[k] = (p[k] + o[ok]) / 2 if p.get(k) is not None else o[ok]
+                    if p.get(k) is None:
+                        p[k] = o[ok]
+                    elif same:
+                        p[k] = (p[k] + o[ok]) / 2
             for k, ok in (("chancesCreated", "chances_created"), ("tackles", "tackles"), ("interceptions", "interceptions"),
                           ("recoveries", "recoveries"), ("blocks", "blocks"), ("clearances", "clearances"),
                           ("aerialDuels", "aerial_duels"), ("aerialWon", "aerial_duels_won"), ("groundDuels", "ground_duels"),
@@ -2366,6 +2583,25 @@ def build_players(results, boxes, us, team_of_title, current):
                           ("goalsPrevented", "goals_prevented"), ("xgotConceded", "xgot_conceded"), ("foulsOpta", "fouls_commited")):
                 if o.get(ok) is not None:
                     p[k] = o[ok]
+    # Understat che non torna con i tabellini ESPN (che tornano con la classifica): conta una partita due volte (Liga
+    # 2026/27, Villarreal-Deportivo del 5/9: 9 presenze e 810 minuti in 8 partite, un gol in più a Pépé, Aubameyang e
+    # Luismi Cruz). Se ci sono i tabellini di tutte le partite e un giocatore ha minuti (oltre 45) o gol diversi, valgono
+    # i conti di ESPN e gli xG di Understat si riportano agli stessi minuti. Dove le due fonti tornano non cambia niente.
+    all_boxes = all(boxes.get(str(e["id"])) for e in results if e.get("hs") is not None)
+    for p in out.values():
+        em, um = p.get("minutesEspn"), p.get("minutesPlayed")
+        if not all_boxes or em is None or um is None:
+            continue
+        if abs(um - em) > 45 or (p.get("goals") or 0) != (p.get("goalsEspn") or 0):
+            k = min(1.0, em / um) if um else 1.0
+            for f in ("expectedGoals", "expectedAssists", "npxG", "keyPasses", "xGChain", "xGBuildup"):
+                if p.get(f) is not None:
+                    p[f] = p[f] * k
+            if p.get("npg") is not None:
+                p["npg"] = max(0, p["npg"] - ((p.get("goals") or 0) - (p.get("goalsEspn") or 0)))
+            p.update(minutesPlayed=em, goals=p.get("goalsEspn", 0), assists=p.get("assistsEspn", 0), totalShots=p.get("shotsEspn", 0),
+                     yellowCards=p.get("yellowCardsEspn", 0), redCards=p.get("redCardsEspn", 0),
+                     appearances=p.get("appearancesEspn", p.get("appearances")))
     for p in out.values():
         # dove Understat non c'è, valgono i conti delle partite ESPN
         for k, src in (("minutesPlayed", "minutesEspn"), ("goals", "goalsEspn"), ("assists", "assistsEspn"),
@@ -2403,16 +2639,46 @@ def no_xg():
     return ESPN_XG and not us_file(season_year(STATE["data"] or {})).exists()
 
 
+def team_extra_stats(d):
+    """Statistiche di squadra che non sono nei tabellini: duelli aerei e a terra e palloni recuperati di Opta (i giocatori
+    sommati per squadra) e, in Champions, i recuperi nella metà campo avversaria e i tocchi nell'area avversaria dei dati
+    ufficiali UEFA. Servono allo stile di gioco (fisicità, pressing, baricentro)."""
+    agg = {}
+    for p in d.get("players") or []:
+        a = agg.setdefault(str(p.get("teamId")), {})
+        for k in ("aerialDuels", "aerialWon", "groundDuels", "groundWon", "recoveries"):
+            if p.get(k) is not None:
+                a[k] = a.get(k, 0) + p[k]
+        if p.get("minutesOpta"):   # partite contate da Opta (che può averne una in meno): 990 minuti a partita
+            a["optaN"] = a.get("optaN", 0) + p["minutesOpta"] / 990
+    if CUP:
+        for e in d.get("played") or []:
+            t = ((MATCHES.get(str(e["id"])) or {}).get("uefa") or {}).get("t") or {}
+            if not t.get("home") or not t.get("away"):
+                continue
+            for side, opp in (("home", "away"), ("away", "home")):
+                a = agg.setdefault(str(e[side]["id"]), {})
+                a["uefaN"] = a.get("uefaN", 0) + 1
+                a["uefaReco"] = a.get("uefaReco", 0) + (t[side].get("reco") or 0)
+                a["uefaBox"] = a.get("uefaBox", 0) + (t[side].get("box") or 0)
+                a["uefaBoxA"] = a.get("uefaBoxA", 0) + (t[opp].get("box") or 0)
+    for tid, o in (d.get("teams") or {}).items():
+        st = o.setdefault("stats", {"matches": 0})
+        for k in ("aerialDuels", "aerialWon", "groundDuels", "groundWon", "recoveries", "optaN", "uefaN", "uefaReco", "uefaBox", "uefaBoxA"):
+            st.pop(k, None)
+        st.update(agg.get(tid) or {})
+
+
 def rebuild_stats(d):
     """Ricalcola le statistiche della stagione in corso (e della scorsa, quando ci sono tutte le partite)."""
     y = season_year(d)
-    if ESPN_XG:
+    if SHOT_XG:
         cur = espn_understat(d, y)
         if cur:
             save_json(us_file(y), cur)
         else:
             us_file(y).unlink(missing_ok=True)
-        if not us_file(y - 1).exists():
+        if ESPN_XG and not us_file(y - 1).exists():
             prev = espn_understat(d, y - 1)
             if prev:
                 save_json(us_file(y - 1), prev)
@@ -2427,12 +2693,20 @@ def rebuild_stats(d):
     for tid, o in (d.get("teams") or {}).items():
         o["stats"] = ts.get(tid) or {"matches": 0}
     players = build_players(results, boxes, us, team_of, True)
+    alt = {}   # nomi di Understat dei giocatori, per riconoscere quelli di Fantacalcio.it
+    for u in (us or {}).get("players") or []:
+        c = REG["us"].get(u["usId"])
+        if c is not None and u.get("name") and u["name"] != (REG["info"].get(str(c)) or {}).get("name"):
+            alt.setdefault(str(c), []).append(u["name"])
     for f in fc:
         tid = team_by_name(d, f["teamSlug"].replace("-", " "))
-        cid = canon_fc(f, tid) if tid else None
+        cid = canon_fc(f, tid, alt) if tid else None
         if cid in players:
-            players[cid].update(rating=f.get("mv"), ratingPV=f.get("pv"), fantamedia=f.get("fm"), fcRole=f.get("role"))
+            voted = bool(f.get("pv"))   # senza partite a voto Fantacalcio.it scrive 0: non è un voto
+            players[cid].update(rating=f.get("mv") if voted else None, ratingPV=f.get("pv"),
+                                fantamedia=f.get("fm") if voted else None, fcRole=f.get("role"))
     d["players"] = sorted(players.values(), key=lambda p: -(p.get("minutesPlayed") or 0))
+    team_extra_stats(d)
     if CUP:   # la base dei giocatori sono i loro campionati (al posto della stagione scorsa della competizione)
         PRIOR["players"] = cup_prior_players(d)
         PRIOR["statsV"] = 2
@@ -2942,7 +3216,7 @@ def snapshot():
                    # Opta (Opta Analyst): contrasti, intercetti, recuperi, duelli, conduzioni progressive, gol evitati
                    "tk": p.get("tackles"), "itc": p.get("interceptions"), "rec": p.get("recoveries"), "gw": p.get("groundWon"),
                    "gd": p.get("groundDuels"), "aw": p.get("aerialWon"), "ad": p.get("aerialDuels"), "pcar": p.get("progCarries"),
-                   "gp": p.get("goalsPrevented"), "xgot": p.get("xgotConceded")}, 2)
+                   "gp": p.get("goalsPrevented"), "xgot": p.get("xgotConceded"), "mo": p.get("minutesOpta")}, 2)
                for p in d.get("players") or [] if (p.get("minutesPlayed") or 0) > 0]
     players = [{k: v for k, v in p.items() if v is not None} for p in players]   # più leggero: niente campi vuoti
     return {

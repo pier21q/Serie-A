@@ -22,6 +22,7 @@ K_PRIOR_NEW = 6        # con un allenatore nuovo la stagione scorsa pesa meno (c
 # formula (55% gol, 45% xG; in difesa tiri in porta e palloni concessi vicino all'area). Correggere per espulsioni,
 # punteggio o calci piazzati e per i giocatori in campo non aiuta, o aiuta meno del margine d'errore.
 W_GOALS = 0.20
+K_STYLE_CUP = 4        # coppa: lo stile nel campionato pesa come 4 partite di coppa (con 8 partite di coppa conta un terzo)
 MID_W = 0.25           # cambio di allenatore durante la stagione: le partite prima del cambio (e la stagione scorsa) pesano così
 VENUE_W = 0.0          # quota del rendimento in casa/fuori di quest'anno: era 0,20, la prova dice che peggiora (troppo rumoroso)
 SOFT_CAP = .10         # tetto complessivo di forma, accoppiamenti tattici, stili e ritmo sui gol attesi
@@ -137,10 +138,18 @@ METRICS = [
          f=lambda s, n, c: dv(g(s, "saves"), g(s, "shotsOnTargetAgainst"), 100), S="Portiere decisivo", W="Portiere in difficoltà"),
     dict(k="rec", c="Difesa", l="Contrasti vinti", u="/p", d=1, hi=1, f=pm("tacklesWon"), S="Vince tanti contrasti", W="Vince pochi contrasti"),
     dict(k="int", c="Difesa", l="Intercetti", u="/p", d=1, hi=1, f=pm("interceptions"), S="Legge bene le linee di passaggio", W="Pochi intercetti"),
+    dict(k="recov", c="Difesa", l="Palloni recuperati (Opta)", u="/p", d=1, hi=1,
+         f=lambda s, n, c: dv(g(s, "recoveries"), g(s, "optaN") or n), S="Recupera tanti palloni",
+         W="Recupera pochi palloni"),
     dict(k="duel", c="Duelli e disciplina", l="Contrasti vinti sul totale", sh="Contrasti vinti (%)", u="%", d=1, hi=1, f=ratio("tacklesWon", "tackles"),
          S="Vince i contrasti", W="Perde i contrasti"),
     dict(k="air", c="Duelli e disciplina", l="Gol di testa subiti", u="/p", d=2, hi=0, f=pm("headedGoalsAgainst"),
          S="Solida sui palloni alti", W="Soffre i colpi di testa"),
+    # Opta (Opta Analyst, giocatori sommati per squadra): più affidabili dei contrasti e dei gol di testa subiti
+    dict(k="aerial", c="Duelli e disciplina", l="Duelli aerei vinti (Opta)", sh="Duelli aerei vinti (%)", u="%", d=0, hi=1,
+         f=ratio("aerialWon", "aerialDuels"), S="Domina nel gioco aereo", W="Perde i duelli aerei"),
+    dict(k="ground", c="Duelli e disciplina", l="Duelli a terra vinti (Opta)", sh="Duelli a terra vinti (%)", u="%", d=0, hi=1,
+         f=ratio("groundWon", "groundDuels"), S="Vince i duelli a terra", W="Perde i duelli a terra"),
     dict(k="foul", c="Duelli e disciplina", l="Falli commessi", u="/p", d=1, hi=0, f=pm("fouls"), S="Gioco pulito", W="Commette molti falli"),
     dict(k="card", c="Duelli e disciplina", l="Cartellini", u="/p", d=1, hi=0, f=_card, S="Disciplinata", W="Indisciplinata (cartellini)"),
     dict(k="form", c="Rendimento", l="Forma: punti/partita ultime 5", sh="Forma (ultime 5)", u="", d=2, hi=1, f=_form, S="In gran forma", W="Momento negativo"),
@@ -150,8 +159,13 @@ METRICS = [
     dict(k="press", c="Stile", l="PPDA: passaggi lasciati agli avversari per ogni azione difensiva (più basso = più pressing)", sh="PPDA (pressing)",
          u="", d=1, hi=None, f=plain("ppda")),
     dict(k="fk", c="Stile", l="Falli subiti (punizioni a favore)", sh="Falli subiti", u="/p", d=1, hi=None, f=pm("freeKicks")),
+    # baricentro: palloni giocati vicino all'area avversaria (Understat, «deep») o, in Champions, tocchi nell'area avversaria (UEFA)
     dict(k="territory", c="Stile", l="Quota dei palloni giocati vicino alle aree che sono suoi", sh="Baricentro (vicino all'area)", u="%", d=0,
-         hi=None, f=lambda s, n, c: dv(g(s, "deep"), (g(s, "deep") or 0) + (g(s, "deepAllowed") or 0), 100) if g(s, "deep") is not None else None),
+         hi=None, f=lambda s, n, c: dv(g(s, "deep"), (g(s, "deep") or 0) + (g(s, "deepAllowed") or 0), 100) if g(s, "deep") is not None
+         else dv(g(s, "uefaBox"), (g(s, "uefaBox") or 0) + (g(s, "uefaBoxA") or 0), 100) if g(s, "uefaBox") is not None else None),
+    # Champions: palloni recuperati nella metà campo avversaria (dati ufficiali UEFA), al posto del PPDA che lì non c'è
+    dict(k="recohi", c="Stile", l="Palloni recuperati nella metà campo avversaria (UEFA)", sh="Recuperi in avanti", u="/p", d=1, hi=None,
+         f=lambda s, n, c: dv(g(s, "uefaReco"), g(s, "uefaN"))),
     dict(k="tempo", c="Stile", l="Tiri totali in partita (fatti e subiti)", sh="Ritmo (tiri totali)", u="/p", d=1, hi=None,
          f=lambda s, n, c: dv(g(s, "shots") + (g(s, "shotsAgainst") or 0), n) if g(s, "shots") is not None else None),
 ]
@@ -456,14 +470,19 @@ def style_dims(pct):
     def P(k):
         v = pct.get(k)
         return .5 if v is None else v
+
+    def P2(*ks):   # la prima che c'è: Opta (duelli, recuperi) e, se manca, la misura di prima
+        return next((pct[k] for k in ks if pct.get(k) is not None), .5)
+    press = (2 * (1 - P("press")) + P2("recov", "rec")) / 3 if pct.get("press") is not None or pct.get("recohi") is None \
+        else (2 * P("recohi") + P2("recov", "rec")) / 3   # Champions: recuperi nella metà campo avversaria (UEFA)
     return {
         "possesso": (2 * P("poss") + P("pass")) / 3,
         "baricentro": P("territory"),
-        "pressing": (2 * (1 - P("press")) + P("rec")) / 3,
+        "pressing": press,
         "verticalita": (2 * P("long") + (1 - P("pass"))) / 3,
         "ampiezza": (2 * P("cross") + P("corners")) / 3,
         "transizioni": ((1 - P("poss")) + P("xg")) / 2,   # pericolosa (xG) pur tenendo poco il pallone
-        "fisicita": (P("duel") + P("air") + (1 - P("foul"))) / 3,
+        "fisicita": (P2("ground", "duel") + P2("aerial", "air") + (1 - P("foul"))) / 3,
         "ritmo": P("tempo"),
     }
 
@@ -507,6 +526,12 @@ def style_summary(t):
         bits.append(f"PPDA {mval('press', m['press'])}")
     if m.get("cross") is not None:
         bits.append(f"{mval('cross', m['cross'])} cross riusciti a partita")
+    src = t.get("styleSrc")
+    if src:   # coppa: stile da campionato + coppa, numeri della sola coppa
+        games = lambda k: f"{k} partit{'a' if k == 1 else 'e'}"
+        how = (f"stile misurato su {games(src['dom'])} di {src['league']} e {games(src['cup'])} di Champions" if src["dom"]
+               else f"stile misurato solo su {games(src['cup'])} di Champions")
+        return f"{lead} {a['desc']} ({how})." + (f" In Champions: {', '.join(bits)}." if bits else "")
     return f"{lead} {a['desc']}." + (f" In numeri: {', '.join(bits)}." if bits else "")
 
 
@@ -612,7 +637,7 @@ def style_clash(H, Aw, A):
             if y["transizioni"] >= .6:
                 add("Ripartenze contro squadra sbilanciata", f"{yn} aspetta e riparte: con {xn} spinta in avanti, le ripartenze possono fare male.", other, .03)
         if x["verticalita"] >= .65:
-            ya = Y["pct"].get("air")
+            ya = Y["pct"].get("aerial", Y["pct"].get("air"))   # duelli aerei vinti (Opta) o, se mancano, gol di testa subiti
             if ya is not None and ya <= .35:
                 add("Lanci lunghi contro difesa debole di testa", f"{xn} cerca spesso la profondità con i lanci lunghi e {yn} soffre nel gioco aereo.", side, .04)
             elif ya is not None and ya >= .7:
@@ -827,6 +852,18 @@ def build(data, prior=None, matches=None, now=None, coaches=None, role_rows=None
                 t["xgBase"] = t["att"] * L["mu"]
                 t["prior"], t["priorWeight"] = "forza europea", 1.0
                 t["euro"] = {"league": e.get("league"), "n": e.get("n"), "net": round(e["A"] - e["D"], 3)}
+                # stile: le poche partite di coppa insieme a quelle del campionato (stesse dimensioni, da 0 a 1)
+                dom = e.get("dom")
+                if not (dom and dom.get("dims")):   # campionato che l'app non segue: solo le partite di coppa
+                    t["styleSrc"] = {"cup": t["n"], "dom": 0, "league": None}
+                    t["summary"] = style_summary(t)
+                else:
+                    w = t["n"] / (t["n"] + K_STYLE_CUP)
+                    t["dimsCup"] = t["dims"]
+                    t["dims"] = {k: w * v + (1 - w) * dom["dims"].get(k, v) for k, v in t["dims"].items()}
+                    t["arch"] = archetype(t["dims"])
+                    t["styleSrc"] = {"cup": t["n"], "dom": dom["n"], "league": dom["league"]}
+                    t["summary"] = style_summary(t)
             L["HA"] = math.exp(ext["mu"] + ext["he"] + ma + md)
             L["AA"] = math.exp(ext["mu"] + ma + md)
             ranked = sorted(ids, key=lambda t: -(ext["teams"][t]["A"] - ext["teams"][t]["D"]))
