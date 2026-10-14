@@ -1677,6 +1677,48 @@ def cup_us_teams(d):
     return out
 
 
+CUP_BASE_KEYS = ["totalShots", "shotsOnTarget", "fouls", "wasFouled", "yellowCards", "redCards", "expectedGoals",
+                 "expectedAssists", "goals", "assists", "saves", "keyPasses", "npg", "npxG", "xGChain", "xGBuildup"]
+
+
+def cup_domestic_players():
+    """Numeri dei giocatori nei campionati dell'app (stagione in corso e scorsa, sola lettura): {id ESPN: numeri}.
+    Oltre agli xG hanno quello che viene dai tabellini ESPN: tiri in porta, falli fatti e subiti, cartellini, parate.
+    Understat da solo non ha i falli: senza questa base Muriqi (Fenerbahçe, una partita di Champions con 3 falli in
+    71') si prendeva quasi tutti i falli previsti della squadra e il 73% di probabilità di giallo. Una statistica che
+    manca in una parte delle partite (gli xG in Turchia) si riporta a tutti i minuti con il ritmo delle altre. Con il
+    ruolo, questi giocatori fanno anche le medie per ruolo della coppa (model.posavg): senza, chi aveva una sola partita
+    di Champions e nessun campionato dell'app (Shakhtar, Bodø/Glimt...) aveva come falli per 90' quelli di quella
+    partita, 0 o 11."""
+    acc = {}
+    for key, cfg in LEGHE.items():
+        if cfg.get("cup"):
+            continue
+        base = DATA_BASE / cfg["dir"] if cfg["dir"] else DATA_BASE
+        info = ((load_json(base / "cache" / "giocatori.json", {}) or {}).get("info")) or {}
+        recs = ((load_json(base / "cache" / "data.json", {}) or {}).get("players") or []) \
+            + ((load_json(base / "cache" / "prior.json", {}) or {}).get("players") or [])
+        for r in recs:
+            eid = (info.get(str(r.get("id"))) or {}).get("espnId")
+            m = r.get("minutesPlayed") or 0
+            if not eid or m <= 0:
+                continue
+            a = acc.setdefault(str(eid), {"minutesPlayed": 0.0, "_min": {}})
+            if r.get("pos") and not a.get("pos"):   # serve alle medie di ruolo (prima la stagione in corso)
+                a["pos"] = r["pos"]
+            a["minutesPlayed"] += m
+            for k in CUP_BASE_KEYS:
+                if r.get(k) is not None:
+                    a[k] = a.get(k, 0) + r[k]
+                    a["_min"][k] = a["_min"].get(k, 0) + m
+    for a in acc.values():
+        mins = a.pop("_min")
+        for k, km in mins.items():
+            if km and km < a["minutesPlayed"]:
+                a[k] = a[k] * a["minutesPlayed"] / km
+    return acc
+
+
 def cup_prior_players(d):
     """Base dei giocatori di Champions: le loro statistiche nel loro campionato (stagione in corso e scorsa): i cinque
     di Understat, più Eredivisie e Portogallo con gli xG fatti dalla cronaca ESPN (CUP_SOURCES). In Champions si giocano
@@ -1732,6 +1774,11 @@ def cup_prior_players(d):
                 for k in US_FIELDS:
                     if u.get(k) is not None:
                         p[k] = p.get(k, 0) + u[k]
+    # chi gioca in un campionato dell'app ha come base i suoi numeri completi lì (anche falli e cartellini)
+    for eid, a in cup_domestic_players().items():
+        cid = REG["espn"].get(eid)
+        if cid is not None:
+            out[cid] = dict(a, id=int(cid))
     return list(out.values())
 
 
