@@ -26,6 +26,11 @@ HALF_LIFE = 365       # giorni
 K_TEAM = 4.0          # quanto ogni squadra viene avvicinata alla media del suo campionato
 K_LEAGUE = 1.0        # quanto le medie dei campionati vengono avvicinate a zero
 WINDOW = 3.2 * 365    # partite più vecchie di così non contano
+# peso delle partite delle coppe europee rispetto a quelle di campionato, e in più delle sole partite di Champions.
+# Provati il 15/10/2026 sulle stesse 378 partite (ricerca/prova_peso_coppe.py): coppe ×1,5 +0,0000, ×2 +0,0005, ×3
+# +0,0019; solo Champions ×1,5 +0,0002, ×2 +0,0009, ×3 +0,0027 di log loss. Nessun guadagno: restano uguali (1)
+EU_W = 1.0
+CL_W = 1.0
 
 
 def compact(j, comp):
@@ -77,7 +82,8 @@ def fit(done, group, now, prev=None, iters=40):
         P.update(mu=prev["mu"], h=prev["h"], he=prev["he"], A=dict(prev["A"]), D=dict(prev["D"]),
                  GA=dict(prev["GA"]), GD=dict(prev["GD"]))
     hl = HALF_LIFE * 86400
-    rows = [(m, .5 ** ((now - m["t"]) / hl)) for m in done if m["t"] < now and now - m["t"] < WINDOW * 86400]
+    cw = lambda m: (EU_W * (CL_W if m["comp"] == "uefa.champions" else 1.0)) if m["eu"] else 1.0
+    rows = [(m, .5 ** ((now - m["t"]) / hl) * cw(m)) for m in done if m["t"] < now and now - m["t"] < WINDOW * 86400]
     if not rows:
         return None
     teams = {t for m, _ in rows for t in (m["h"], m["a"])}
