@@ -77,7 +77,9 @@ def check_data(data, snap, hist, M):
             if (p.get("minutesPlayed") or 0) > (tm[t] if not cup else 20) * 90 + 60:
                 bad("minuti impossibili:", p["name"], p.get("minutesPlayed"), "in", tm.get(t), "partite")
         for n_, c in collections.Counter(p["name"] for p in ps).items():
-            if c > 1:
+            nums = [p.get("num") for p in ps if p["name"] == n_]
+            # stesso nome e numeri di maglia diversi: due persone (allo Shakhtar due «Pedrinho», il 10 e il 13)
+            if c > 1 and (None in nums or len(set(nums)) < len(nums)):
                 bad("giocatore doppio in", name.get(t, t) + ":", n_)
     # 4. pronostici
     for f in snap.get("fixtures") or []:
