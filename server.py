@@ -998,9 +998,35 @@ def roster_cands(tid):
     return cands
 
 
+def roster_fuzzy(name, cands):
+    """Secondo tentativo per i nomi delle formazioni probabili scritti in un altro modo (15/10/2026: OneFootball scrive
+    «Matvey Safonov», ESPN «Matvei Safonov», e il portiere titolare del PSG risultava assente contro il Man City;
+    in Liga i nomi completi «Pablo Barrios Rivas», «Bryan Zaragoza Martinez»). Nella squadra, l'unico giocatore il cui
+    nome più corto ha tutte le parole nell'altro, anche con piccole differenze («Matvey»/«Matvei», «Sam»/«Samuel»);
+    se non c'è, l'unico che ha in comune una parola di almeno 4 lettere («Bote Baku» = Ridle Baku). Mai se i
+    candidati sono più di uno."""
+    clean = re.sub(r"\s+(?:[A-Z]\.){2,}$", "", name or "").replace("'", "")
+    a = [t for t in model.norm_tokens(clean) if len(t) > 1]
+    if not a:
+        return None
+
+    def fit(t, toks):   # parola uguale, quasi uguale o iniziale di almeno 3 lettere
+        return any(t == u or (min(len(t), len(u)) >= 3 and (u.startswith(t) or t.startswith(u)))
+                   or difflib.SequenceMatcher(None, t, u).ratio() >= .8 for u in toks)
+    named = [(c, [t for t in model.norm_tokens(c.get("name")) if len(t) > 1]) for c in cands]
+    hits = [c for c, b in named if b and all(fit(t, b if len(a) <= len(b) else a) for t in (a if len(a) <= len(b) else b))]
+    if len(hits) == 1:
+        return hits[0]
+    if hits:
+        return None
+    share = [c for c, b in named if any(len(t) >= 4 and t in b for t in a)]
+    return share[0] if len(share) == 1 else None
+
+
 def fc_player(name, cands):
-    """Nome di fantacalcio.it (es. "Martinez L.") -> id dell'anagrafica; se non trovato, un id negativo stabile."""
-    p = model.match_roster_player({"name": name}, cands)
+    """Nome di fantacalcio.it (es. "Martinez L.") o di OneFootball -> id dell'anagrafica; se non trovato, un id
+    negativo stabile."""
+    p = model.match_roster_player({"name": name}, cands) or roster_fuzzy(name, cands)
     return (p["id"], p.get("name") or name) if p else (-(zlib.crc32(name.encode()) % 10 ** 8), name)
 
 
