@@ -1,0 +1,135 @@
+# Aggiorna il sito di Serie A Live sui computer di GitHub, anche con il Mac spento: prima la Serie A (in cima al sito),
+# poi la Premier League (in /premier/, dati nella cartella premier del ramo "dati"), la Liga (in /liga/, cartella liga)
+# la Champions League (in /champions/, cartella champions), la Bundesliga (/bundesliga/), la Ligue 1 (/ligue1/),
+# l'Eredivisie (/eredivisie/), la Liga Portugal (/portugal/) e la Süper Lig (/superlig/).
+# Ogni 30 minuti: riscarica tutte le fonti (ESPN, Understat, Fantacalcio.it, Wikipedia), ricalcola statistiche e
+# pronostici, ripubblica il sito nel ramo "sito" (anche se non è cambiato niente) e salva i dati nel ramo "dati".
+# GitHub salta gran parte delle esecuzioni programmate (il 28/09 ne ha fatte 4 su 96): per questo una sveglia
+# esterna (cron-job.org) avvia il workflow ogni 15 minuti con l'input auto=1. Sia la sveglia sia il cron di
+# GitHub aggiornano solo se l'ultimo aggiornamento ha più di 25 minuti. Nell'ora e mezza prima di ogni partita invece aggiorna ogni 15
+# minuti, per prendere subito le formazioni ufficiali.
+# Il file originale sta nella cartella dell'app sul Mac (cloud/aggiorna.yml): lo carica "python sito.py codice".
+name: Aggiorna Serie A Live
+
+on:
+  schedule:
+    - cron: "4,19,34,49 * * * *"
+  workflow_dispatch:
+    inputs:
+      auto:
+        description: "Avvio della sveglia esterna (cron-job.org): aggiorna solo se è l'ora"
+        required: false
+        default: ""
+  push:
+    branches: [main]
+
+permissions:
+  contents: write
+  actions: write
+
+concurrency:
+  group: aggiorna
+  cancel-in-progress: false
+
+jobs:
+  aggiorna:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      TZ: Europe/Rome
+      SERIEA_DATA_DIR: ${{ github.workspace }}/dati
+      SERIEA_SITE_DIR: ${{ github.workspace }}/sito
+    steps:
+      - name: Dati salvati
+        uses: actions/checkout@v7
+        with:
+          ref: dati
+          path: dati
+      - name: Serve un aggiornamento?
+        id: serve
+        env:
+          AUTO: ${{ github.event.inputs.auto }}
+        run: |
+          python3 - <<'PY'
+          import json, os, time
+          now = time.time()
+          try:
+              at = json.load(open("dati/esecuzione.json"))["at"]
+          except Exception:
+              at = 0
+          nxt = []
+          for f in ("dati/cache/data.json", "dati/premier/cache/data.json", "dati/liga/cache/data.json",
+                    "dati/champions/cache/data.json", "dati/bundesliga/cache/data.json",
+                    "dati/ligue1/cache/data.json", "dati/eredivisie/cache/data.json", "dati/portugal/cache/data.json",
+                    "dati/superlig/cache/data.json"):   # tutte le leghe
+              try:
+                  nxt += json.load(open(f)).get("next") or []
+              except Exception:
+                  pass
+          # nell'ora e mezza prima di una partita si aggiorna ogni 15 minuti: le formazioni ufficiali escono circa
+          # un'ora prima, e pronostici e giocatori in evidenza si rifanno con quelle
+          lineups = any(e.get("status") == "notstarted" and -300 <= e.get("start", 0) - now <= 95 * 60 for e in nxt)
+          # le esecuzioni programmate e quelle della sveglia esterna seguono il ritmo; push e "Run workflow" aggiornano sempre
+          timed = os.environ["GITHUB_EVENT_NAME"] == "schedule" or bool(os.environ.get("AUTO"))
+          due = not timed or now - at >= 25 * 60 or (lineups and now - at >= 10 * 60)
+          print(f"Ultimo aggiornamento {int((now - at) // 60)} minuti fa" + (", partita in arrivo" if lineups else "")
+                + (": si aggiorna" if due else ": niente da fare"))
+          open(os.environ["GITHUB_OUTPUT"], "a").write(f"ok={'true' if due else 'false'}\n")
+          PY
+      - name: Codice dell'app
+        if: steps.serve.outputs.ok == 'true'
+        uses: actions/checkout@v7
+        with:
+          path: app
+      - name: Sito
+        if: steps.serve.outputs.ok == 'true'
+        uses: actions/checkout@v7
+        with:
+          ref: sito
+          path: sito
+      - name: Python
+        if: steps.serve.outputs.ok == 'true'
+        uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: app/requirements.txt
+      - name: Componenti
+        if: steps.serve.outputs.ok == 'true'
+        run: pip install -r app/requirements.txt
+      - name: Dati Opta dal Mac
+        # Opta Analyst non risponde ai computer di GitHub (403): i dati Opta li carica il Mac nei rami opta, opta-premier,
+        # opta-liga, opta-champions, opta-bundesliga e opta-ligue1
+        if: steps.serve.outputs.ok == 'true'
+        continue-on-error: true
+        run: |
+          for b in opta:cache opta-premier:premier/cache opta-liga:liga/cache opta-champions:champions/cache opta-bundesliga:bundesliga/cache opta-ligue1:ligue1/cache; do
+            br=${b%%:*}; dir=${b#*:}
+            if git -C dati fetch -q --depth=1 origin "$br" 2>/dev/null; then
+              mkdir -p "dati/$dir" && git -C dati show FETCH_HEAD:opta.json > "dati/$dir/opta.json" && echo "Dati Opta presi dal ramo $br"
+            fi
+          done
+      - name: Aggiorna dati e sito
+        if: steps.serve.outputs.ok == 'true'
+        run: |
+          git config --global user.name "Serie A Live"
+          git config --global user.email "serie-a-live@users.noreply.github.com"
+          ok=0
+          python -u app/server.py --cloud || ok=1
+          SERIEA_LEGA=premier python -u app/server.py --cloud || ok=1
+          SERIEA_LEGA=liga python -u app/server.py --cloud || ok=1
+          SERIEA_LEGA=bundesliga python -u app/server.py --cloud || ok=1
+          SERIEA_LEGA=ligue1 python -u app/server.py --cloud || ok=1
+          SERIEA_LEGA=eredivisie python -u app/server.py --cloud || ok=1
+          SERIEA_LEGA=portugal python -u app/server.py --cloud || ok=1
+          SERIEA_LEGA=superlig python -u app/server.py --cloud || ok=1
+          SERIEA_LEGA=champions python -u app/server.py --cloud || ok=1
+          exit $ok
+      - name: Tieni attiva la programmazione
+        # GitHub sospende le programmazioni dei repository fermi da 60 giorni: una volta al giorno la riattiva
+        if: always()
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if [ "$(date +%H)" = "03" ]; then gh api -X PUT "repos/${{ github.repository }}/actions/workflows/aggiorna.yml/enable"; fi
