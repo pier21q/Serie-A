@@ -2926,11 +2926,8 @@ def build_players(results, boxes, us, team_of_title, current):
         mins = {c: p.get("minutesEspn") for c, p in out.items()}
         tids = {}   # squadra di Opta -> id, cercata una volta sola
         opta_team = lambda t: tids[t] if t in tids else tids.setdefault(t, team_of_title(t))
-        for pid, o in ((load_json(OPTA_FILE, {}) or {}).get("players") or {}).items():
-            cid = canon_opta(pid, o, opta_team, words, mins)
-            p = out.get(cid) if cid else None
-            if not p:
-                continue
+
+        def add_opta(p, o):
             # Opta si aggiorna una volta al giorno, Understat e la cronaca ESPN entro un'ora: dopo una giornata Opta
             # può avere una partita in meno (Champions, 14/10/2026: Lautaro 0,32 xG su 90' per Opta, 2,92 su 180'
             # dalla cronaca). La media dei due xG si fa solo sugli stessi minuti; i numeri solo di Opta (contrasti,
@@ -2953,6 +2950,35 @@ def build_players(results, boxes, us, team_of_title, current):
                           ("goalsPrevented", "goals_prevented"), ("xgotConceded", "xgot_conceded"), ("foulsOpta", "fouls_commited")):
                 if o.get(ok) is not None:
                     p[k] = o[ok]
+        waiting = []
+        for pid, o in ((load_json(OPTA_FILE, {}) or {}).get("players") or {}).items():
+            cid = canon_opta(pid, o, opta_team, words, mins)
+            if cid is None:
+                waiting.append((pid, o))
+            elif out.get(cid):
+                add_opta(out[cid], o)
+        # Opta con un nome diverso da ESPN (Shakhtar: «Pedro Henrique» e «Vinícius Tobias» sono i difensori che ESPN
+        # chiama «Pedrinho» e «Vinicius Augusto»; Fiorentina: «Pote» è Pedro Gonçalves): come per Understat, nella stessa
+        # squadra l'unico giocatore ESPN ancora senza Opta con quasi gli stessi minuti, le stesse presenze (contro le
+        # coincidenze di minuti) e un ruolo compatibile (portiere con portiere); tra più candidati vale il ruolo di Opta,
+        # poi gol e gialli uguali (i due difensori dello Shakhtar hanno giocato tutti i 270', uno solo ha segnato)
+        taken = set(REG["opta"].values())
+        for pid, o in waiting:
+            t, team, role = int(o.get("mins_played") or 0), opta_team(o.get("team")), OPTA_POS.get(o.get("pos"))
+            if t < 30 or not team:
+                continue
+            near = [cid for cid, p in out.items() if cid not in taken and str(p.get("teamId")) == str(team)
+                    and p.get("minutesEspn") is not None and abs(p["minutesEspn"] - t) <= max(20, .08 * t)
+                    and p.get("appearancesEspn") == o.get("apps") and (role is None or (p.get("pos") == "G") == (role == "G"))]
+            fit = lambda c: (out[c].get("pos") != role, (out[c].get("goalsEspn") or 0) != (o.get("goals") or 0),
+                             (out[c].get("yellowCardsEspn") or 0) != (o.get("yellows") or 0))
+            low = min(map(fit, near), default=None)
+            best = [c for c in near if fit(c) == low]
+            if len(best) == 1:
+                REG["opta"][pid] = best[0]
+                taken.add(best[0])
+                log(f"Anagrafica: Opta «{o['name']}» collegato a {out[best[0]].get('name')} con i minuti")
+                add_opta(out[best[0]], o)
     # Understat che non torna con i tabellini ESPN (che tornano con la classifica): conta una partita due volte (Liga
     # 2026/27, Villarreal-Deportivo del 5/9: 9 presenze e 810 minuti in 8 partite, un gol in più a Pépé, Aubameyang e
     # Luismi Cruz). Se ci sono i tabellini di tutte le partite e un giocatore ha minuti (oltre 45) o gol diversi, valgono
