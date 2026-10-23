@@ -117,8 +117,17 @@ details.acc[open] .acc-ch{transform:rotate(90deg)}
 .picks .pk small{font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:.03em}
 @media (max-width:420px){.picks .pk{grid-template-columns:minmax(0,1fr) auto;row-gap:1px}.picks .pk small{grid-column:1/-1}}
 .picks .pk b{font-weight:600;min-width:0}.picks .pk em{font-style:normal;color:var(--muted);font-size:12.5px;white-space:nowrap}
+/* pagina della partita: in breve, pulsanti delle sezioni, sezioni a tendina */
+.inbreve{display:grid;gap:8px;margin-top:12px;padding-top:10px;border-top:1px solid var(--line);font-size:14px;line-height:1.4}
+.inbreve small{display:block;font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:.04em;color:var(--muted)}
+.secbar{display:flex;flex-wrap:wrap;gap:6px;margin:12px 0 0}
+.secbar button{font:inherit;font-size:12.5px;font-weight:600;padding:5px 11px;border-radius:999px;border:1px solid var(--line);background:var(--surface);color:var(--ink2);cursor:pointer}
+.secbar button.all{color:var(--muted);font-weight:500;background:transparent}
+details.msec{margin:12px 0 0}
+details.msec .acc-t{font-size:18px}
 /* chicche statistiche */
 .chic .ch-grp h4{display:flex;align-items:center;gap:8px}
+.chic .ch-grp:first-child h4{margin-top:0}
 .ch-pips{display:inline-flex;gap:3px}
 .ch-pips i{width:7px;height:7px;border-radius:50%;background:var(--line)}
 .ch-pips i.on{background:var(--accent)}
@@ -1013,8 +1022,8 @@ function betsCard(P) {
   const inBand = B.items.filter(it => it.fair >= B.lo && it.fair <= B.hi);
   const value = B.items.filter(it => it.value >= (B.vmin ?? VMIN) && it.odds >= B.lo && it.odds <= B.hi).sort((a, b) => b.value - a.value).slice(0, 6);
   const groups = [...new Set(inBand.map(it => it.g))], odds = B.items.some(it => it.odds != null);
-  return `<div class="card bets"><h3>Scommesse <small class="muted">giocate con quota tra ${fx(B.lo, 2)} e ${fx(B.hi, 2)}</small></h3>
-    ${(B.picks || []).length ? `<h4>Le giocate consigliate</h4>${betTable(B.picks)}` : ''}
+  return `<div class="card bets">
+    ${(B.picks || []).length ? `<h4 style="margin-top:0">Le giocate consigliate</h4>${betTable(B.picks)}` : ''}
     ${value.length ? `<h4>Con valore secondo modello e bookmaker</h4>${betTable(value)}` : `<p class="small muted">${odds ? 'Nessuna giocata con valore tra quelle di cui c\'è la quota vera del bookmaker.' : 'Quote del bookmaker non ancora pubblicate (di solito arrivano uno o due giorni prima della partita): confronta la quota minima con quella del tuo bookmaker.'}</p>`}
     <details class="acc"><summary>Tutte le giocate in fascia (${inBand.length})</summary>${groups.map(g => `<h4>${esc(g)}</h4>${betTable(inBand.filter(it => it.g === g))}`).join('')}</details>
     <p class="small muted">${BET_NOTE}</p></div>`;
@@ -1032,7 +1041,7 @@ function chicheCard(P, h, a) {
   const C = P.chicche || [];
   if (!C.length) return '';
   const pips = n => `<span class="ch-pips" aria-hidden="true">${[1, 2, 3].map(i => `<i class="${i <= n ? 'on' : ''}"></i>`).join('')}</span>`;
-  return `<div class="card chic"><h3>Chicche statistiche <small class="muted">dalla più particolare alla più semplice</small></h3>
+  return `<div class="card chic">
     ${CH_LV.map(([lv, title, n]) => {
       const L = C.filter(c => c.lv === lv);
       return L.length ? `<div class="ch-grp${n ? '' : ' ch-rit'}"><h4>${n ? pips(n) : ''}${title}</h4>${n ? '' : `<p class="small muted">${CH_RIT}</p>`}<ul class="ch-list">${L.map(c => `<li>${chMark(c, h, a)}<div><small>${esc(c.cat)}${c.team ? ' · ' + nm(c.team) : ''}</small><p>${esc(c.t)}</p></div></li>`).join('')}</ul></div>` : '';
@@ -1094,12 +1103,68 @@ function gustoTeaser() {
     <div class="more">Tutte le partite gustose ›</div></a>`;
 }
 
+/* pagina della partita: il pronostico resta aperto; il resto sta in sezioni a tendina chiuse all'inizio, che apre chi le
+   vuole (richiesta dell'utente del 23/10/2026). Una sezione aperta resta aperta finché si guarda la stessa partita, anche
+   quando i dati si aggiornano e la pagina si ridisegna; un'altra partita parte di nuovo tutta chiusa. */
+const SEC_OPEN = new Set();
+function secToggle(el, k) { if (el.open) SEC_OPEN.add(k); else SEC_OPEN.delete(k); }
+function secGo(key) {   // dai pulsanti in alto: apre la sezione e ci scorre sopra, sotto l'intestazione fissa
+  const d = document.getElementById('sec-' + key);
+  if (!d) return;
+  d.open = true;
+  const hd = document.querySelector('header'), hh = hd && /sticky|fixed/.test(getComputedStyle(hd).position) ? hd.getBoundingClientRect().height : 0;
+  window.scrollTo({top: d.getBoundingClientRect().top + window.scrollY - hh - 8, behavior: 'smooth'});
+}
+function secAll(open) { document.querySelectorAll('details.msec').forEach(d => { d.open = open; }); }
+// in breve, sotto il pronostico: la giocata più sicura e la chicca più rara
+function inBreve(P) {
+  const pk = ((P.bets || {}).picks || [])[0], ch = (P.chicche || []).find(c => c.lv !== 'Ritardo');
+  if (!pk && !ch) return '';
+  return `<div class="inbreve">${pk ? `<div><small>Giocata più sicura</small><b>${esc(pk.k)}</b> <span class="muted">${pc(pk.p)} · da ${fx(pk.fair, 2)}</span></div>` : ''}
+    ${ch ? `<div><small>La chicca</small>${esc(ch.t)}</div>` : ''}</div>`;
+}
+// le sezioni: [chiave, titolo, riga di riassunto visibile da chiusa, contenuto]
+function matchSecs(x, P, h, a) {
+  const lu = P.lineups, src = srcLabel(lu.confirmed ? 'ufficiale' : lu.home.source)[1];
+  const nAbs = ['home', 'away'].reduce((n, k) => { const miss = lu[k].missing || [];
+    return n + miss.length + (P.absent[k] || []).filter(z => !miss.some(m => m.id === z.id)).length; }, 0);
+  const forms = lu.home.formation && lu.away.formation ? ` · ${esc(lu.home.formation)} contro ${esc(lu.away.formation)}` : '';
+  const sc = [...P.players.home, ...P.players.away].filter(p => p.pos !== 'G').sort((u, v) => v.pGoal - u.pGoal)[0];
+  const r = P.referee, tone = refTone(r);
+  const ref = r && r.name ? `arbitro ${esc(r.name)}${tone ? ` (${tone})` : ''}` : 'arbitro non ancora designato';
+  const C = P.chicche || [], cnt = lv => C.filter(c => c.lv === lv).length;
+  const chs = [[cnt('Rara'), 'rare', 'rara'], [cnt('Curiosa'), 'curiose', 'curiosa'], [cnt('Semplice'), 'da sapere', 'da sapere'], [cnt('Ritardo'), 'ritardi', 'ritardo']]
+    .filter(([n]) => n).map(([n, pl, sg]) => `${n} ${n === 1 ? sg : pl}`).join(' · ');
+  const B = P.bets || {}, pk = (B.picks || [])[0], st = P.style;
+  return [
+    ['gioco', 'Come giocano', `${st ? `${esc(st.home.arch.name)} contro ${esc(st.away.arch.name)} · ` : ''}stili, chiavi tattiche, statistiche a confronto`,
+      lessonsCard(x) + clashCard(P, h, a) + keysCard(P, h) + radarCard(h, a) + mirrorCard(h, a) + swCard(h, a)],
+    ['formazioni', 'Formazioni e assenti', `${src}${forms} · ${nAbs ? `${nAbs} tra indisponibili e in dubbio` : 'nessuna assenza nota'}`,
+      lineupCard(P, 'home', h) + lineupCard(P, 'away', a) + absentCard(P, h, a)],
+    ['giocatori', 'Giocatori e arbitro', `${sc ? `${esc(sc.name)} il più probabile marcatore (${pc(sc.pGoal)}) · ` : ''}${ref}`,
+      scorersCard(P, h, a) + yellowCard(P, h, a) + refCard(P)],
+    ['chicche', 'Chicche statistiche', `dalla più particolare alla più semplice${chs ? ' · ' + chs : ''}`, chicheCard(P, h, a)],
+    ['scommesse', 'Scommesse', pk ? `più sicura: ${esc(pk.k)} (${pc(pk.p)}, da ${fx(pk.fair, 2)})` : `giocate con quota tra ${fx(B.lo ?? 1.35, 2)} e ${fx(B.hi ?? 1.8, 2)}`, betsCard(P)],
+    ['come', 'Come funziona', 'da dove viene il pronostico e cosa è stato provato', `<div class="card">${howNote()}</div>`],
+  ].filter(z => z[3] && z[3].trim());
+}
+const secNav = S => `<nav class="secbar" aria-label="Sezioni della partita">${S.map(([k, t]) => `<button type="button" onclick="secGo('${k}')">${t}</button>`).join('')}
+  <button type="button" class="all" onclick="secAll(true)">Apri tutte</button><button type="button" class="all" onclick="secAll(false)">Chiudi tutte</button></nav>`;
+const secBoxes = (mid, S) => S.map(([k, t, sub, body]) => { const id = `${mid}:${k}`;
+  return `<details class="acc msec" id="sec-${k}"${SEC_OPEN.has(id) ? ' open' : ''} ontoggle="secToggle(this, '${id}')">
+    <summary><span class="acc-hd"><span class="acc-t">${t}</span><span class="acc-s">${sub}</span></span><span class="acc-ch" aria-hidden="true">›</span></summary>
+    <div class="acc-b stack">${body}</div></details>`; }).join('');
+// come funziona il pronostico (in fondo alla pagina della partita, nella sua sezione)
+function howNote() {
+  return `${(D.league || {}).cup ? `<p class="small muted">Come funziona in Champions: la forza di ogni squadra (attacco e difesa) viene da tutte le sue partite degli ultimi tre anni, nel suo campionato e nelle coppe europee, pesate per quanto sono recenti; ogni squadra è avvicinata alla media del suo campionato e le coppe collegano i campionati tra loro. Provato all'indietro sulle 378 partite di Champions 2024/25 e 2025/26: log loss 0,898 contro 1,014 delle frequenze fisse, esito più probabile azzeccato nel 59% dei casi. Forma, accoppiamenti e stili qui non spostano i gol attesi (in coppa le partite sono troppo poche); restano le assenze. Nei ritorni la probabilità di passare il turno tiene conto dell'andata, dei supplementari e dei rigori. Provati anche gli xG al posto dei gol (Understat per i cinque campionati maggiori, la posizione dei tiri per le partite europee): sulle stesse 378 partite non migliorano il pronostico in modo misurabile (0,2%, dentro il margine d'errore), quindi la forza resta calcolata sui gol.</p>` : `<p class="small muted">Come funziona: per ogni squadra si stima la forza in attacco e in difesa rispetto alla media della ${LGN}: per l'80% dagli xG senza rigori creati e concessi, per il 20% dai gol veri, partendo dalla stagione scorsa e dando sempre più peso a quella in corso. Se l'allenatore è cambiato d'estate la stagione scorsa pesa meno; se è cambiato in corsa, le partite di prima contano un quarto. È la combinazione che ha previsto meglio, provata all'indietro su 1520 partite di Serie A e Premier. Poi si corregge per le assenze. Provato su 3500 partite dei cinque campionati maggiori (2024-2026, usando solo le partite giocate prima di ognuna): forma, accoppiamenti e scontro di stili non migliorano il pronostico, quindi li trovi come descrizioni ma non spostano i gol attesi. Le assenze sì: spostano i gol attesi da una squadra all'altra, lasciando uguale il totale. I gol attesi alimentano un modello di Poisson con correzione Dixon-Coles.${LG.noXg ? ' In questo campionato Understat non arriva e ESPN non ha la cronaca tiro per tiro (solo gol, cartellini e cambi): la forza delle squadre viene dai gol e dai tiri in porta, senza xG, e le letture delle partite non ci sono.' : LG.xgEspn ? ' Understat non copre questo campionato: gli xG di squadre e giocatori sono calcolati dalla posizione di ogni tiro nella cronaca Opta di ESPN, con il modello tarato sugli xG di Understat (errore medio 0,29 a partita).' : ''}</p>`}`;
+}
 function vPartita(id) {
   const x = D.fixtures.find(f => String(f.id) === String(id));
   if (!x || !x.P) return back('giornata', 'Giornata') + '<p class="lead" style="margin-top:14px">Questa partita non è nella fotografia attuale.</p>';
   const P = x.P, h = x.home, a = x.away;
   const [sc, st] = srcLabel(P.lineups.confirmed ? 'ufficiale' : P.lineups.home.source);
   const row = t => D.standings.find(r => r.team === String(t)) || {};
+  const S = matchSecs(x, P, h, a);
   const side = (t, cls) => `<a class="side ${cls}" href="#s${t}">${team(t)}<small class="muted">${row(t).pos ?? '–'}ª · ${row(t).pts ?? 0} pt</small>${dots((T[t] || {}).form)}</a>`;
   return `${back('giornata', 'Giornata')}
   <article class="card" style="margin-top:10px">
@@ -1119,15 +1184,14 @@ function vPartita(id) {
       ${P.tie ? `<div class="fact"><small>${P.tie.final ? 'Vince la coppa' : 'Passa il turno'} ${nm(h)}</small><b>${pc(P.tie.home)}</b><small>${P.tie.final ? 'con supplementari e rigori' : `andata: ${nm(a)} ${P.tie.first[1]}–${P.tie.first[0]} ${nm(h)}`}</small></div>
         <div class="fact"><small>${P.tie.final ? 'Vince la coppa' : 'Passa il turno'} ${nm(a)}</small><b>${pc(P.tie.away)}</b></div>` : ''}
     </div>
+    ${inBreve(P)}
   </article>
+  ${secNav(S)}
   <div class="stack">
     <div class="card narr"><h3>Andamento previsto</h3>${narrative(P, h, a)}</div>
-    ${lessonsCard(x)}${clashCard(P, h, a)}${adjCard(P, h, a)}${keysCard(P, h)}
-    ${refCard(P)}${lineupCard(P, 'home', h)}${lineupCard(P, 'away', a)}
-    ${absentCard(P, h, a)}${scorersCard(P, h, a)}${yellowCard(P, h, a)}${heatCard(P, h, a)}
-    ${radarCard(h, a)}${mirrorCard(h, a)}${swCard(h, a)}${chicheCard(P, h, a)}${betsCard(P)}
-    ${(D.league || {}).cup ? `<p class="small muted">Come funziona in Champions: la forza di ogni squadra (attacco e difesa) viene da tutte le sue partite degli ultimi tre anni, nel suo campionato e nelle coppe europee, pesate per quanto sono recenti; ogni squadra è avvicinata alla media del suo campionato e le coppe collegano i campionati tra loro. Provato all'indietro sulle 378 partite di Champions 2024/25 e 2025/26: log loss 0,898 contro 1,014 delle frequenze fisse, esito più probabile azzeccato nel 59% dei casi. Forma, accoppiamenti e stili qui non spostano i gol attesi (in coppa le partite sono troppo poche); restano le assenze. Nei ritorni la probabilità di passare il turno tiene conto dell'andata, dei supplementari e dei rigori. Provati anche gli xG al posto dei gol (Understat per i cinque campionati maggiori, la posizione dei tiri per le partite europee): sulle stesse 378 partite non migliorano il pronostico in modo misurabile (0,2%, dentro il margine d'errore), quindi la forza resta calcolata sui gol.</p>` : `<p class="small muted">Come funziona: per ogni squadra si stima la forza in attacco e in difesa rispetto alla media della ${LGN}: per l'80% dagli xG senza rigori creati e concessi, per il 20% dai gol veri, partendo dalla stagione scorsa e dando sempre più peso a quella in corso. Se l'allenatore è cambiato d'estate la stagione scorsa pesa meno; se è cambiato in corsa, le partite di prima contano un quarto. È la combinazione che ha previsto meglio, provata all'indietro su 1520 partite di Serie A e Premier. Poi si corregge per le assenze. Provato su 3500 partite dei cinque campionati maggiori (2024-2026, usando solo le partite giocate prima di ognuna): forma, accoppiamenti e scontro di stili non migliorano il pronostico, quindi li trovi come descrizioni ma non spostano i gol attesi. Le assenze sì: spostano i gol attesi da una squadra all'altra, lasciando uguale il totale. I gol attesi alimentano un modello di Poisson con correzione Dixon-Coles.${LG.noXg ? ' In questo campionato Understat non arriva e ESPN non ha la cronaca tiro per tiro (solo gol, cartellini e cambi): la forza delle squadre viene dai gol e dai tiri in porta, senza xG, e le letture delle partite non ci sono.' : LG.xgEspn ? ' Understat non copre questo campionato: gli xG di squadre e giocatori sono calcolati dalla posizione di ogni tiro nella cronaca Opta di ESPN, con il modello tarato sugli xG di Understat (errore medio 0,29 a partita).' : ''}</p>`}
-  </div>`;
+    ${adjCard(P, h, a)}${heatCard(P, h, a)}
+  </div>
+  ${secBoxes(x.id, S)}`;
 }
 
 /* squadra */
