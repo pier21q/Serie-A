@@ -1798,12 +1798,33 @@ async def opta_step(d, now):
         log(f"Dati Opta caricati su GitHub (ramo {branch})" if ok else f"Dati Opta non caricati su GitHub: {out[-200:]}")
 
 
-def canon_opta(pid, o, team_of):
-    """Giocatore di Opta -> id dell'anagrafica (stessa squadra e stesso cognome)."""
+OPTA_POS = {"Goalkeeper": "G", "Defender": "D", "Midfielder": "M", "Forward": "F"}
+
+
+def canon_opta(pid, o, team_of, words=None, mins=None):
+    """Giocatore di Opta -> id dell'anagrafica (stessa squadra e stesso cognome). Omonimi nella stessa squadra (più
+    giocatori con lo stesso punteggio del nome): prima vinceva il primo dell'anagrafica (Champions, Shakhtar: il gol e i
+    95' del centrocampista «Pedrinho» n. 10 sul difensore omonimo n. 13, che Opta chiama «Pedro Henrique»; Liga: «Alfon
+    González» del Siviglia sul portiere Fran González), ora vale chi ha il ruolo di Opta e poi i minuti ESPN più vicini,
+    anche per un collegamento salvato prima. words: (squadra, parola del nome) -> id dell'anagrafica (un punteggio da
+    collegamento, almeno 4, vuole una parola in comune); mins: id -> minuti ESPN della stagione."""
     cid = REG["opta"].get(pid)
+    tid = team_of(o.get("team"))
+    near = {c for t in tokens(o["name"]) for c in (words or {}).get((str(tid), t), ())} if tid else set()
+    if len(near) > 1:
+        near -= {c for k, c in REG["opta"].items() if k != pid}   # un id Opta è una persona sola
+        sc = {c: reg_score(o["name"], REG["info"][c]) for c in near}
+        twins = [c for c in sc if sc[c] >= 4.0 and sc[c] == max(sc.values())]
+        if len(twins) > 1 and (cid is None or cid in twins):
+            role, om = OPTA_POS.get(o.get("pos")), o.get("mins_played") or 0
+            best = min(twins, key=lambda c: (REG["info"][c].get("pos") != role,
+                                             abs((mins or {})[c] - om) if (mins or {}).get(c) is not None else math.inf))
+            if cid is not None and best != cid:
+                log(f"Anagrafica: Opta «{o['name']}» collegato a {REG['info'][best].get('name')} ({REG['info'][best].get('pos')}) "
+                    f"e non all'omonimo ({REG['info'][cid].get('pos')})")
+            cid = REG["opta"][pid] = best
     if cid is None:   # un id Opta è una persona sola: salta chi è già collegato a un altro
         owned = {c for k, c in REG["opta"].items() if k != pid}
-        tid = team_of(o.get("team"))
         cid = reg_find(o["name"], [tid] if tid else None, skip=owned) or reg_find(o["name"], None, need=8.0, skip=owned)
         if cid is None:
             return None
@@ -2898,8 +2919,15 @@ def build_players(results, boxes, us, team_of_title, current):
             REG["us"][u["usId"]] = pick[0]
             merge(pick[0], u)
     if current:   # Opta: xG e xA diventano la media di Understat e Opta (due modelli indipendenti), più le statistiche nuove
+        words = {}   # per gli omonimi di canon_opta, senza passare tutta l'anagrafica per ogni giocatore
+        for c, x in REG["info"].items():
+            for t in tokens(x.get("name")):
+                words.setdefault((str(x.get("teamId")), t), set()).add(c)
+        mins = {c: p.get("minutesEspn") for c, p in out.items()}
+        tids = {}   # squadra di Opta -> id, cercata una volta sola
+        opta_team = lambda t: tids[t] if t in tids else tids.setdefault(t, team_of_title(t))
         for pid, o in ((load_json(OPTA_FILE, {}) or {}).get("players") or {}).items():
-            cid = canon_opta(pid, o, team_of_title)
+            cid = canon_opta(pid, o, opta_team, words, mins)
             p = out.get(cid) if cid else None
             if not p:
                 continue
