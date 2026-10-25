@@ -47,10 +47,10 @@ header .wrap{padding-block:0}   /* il margine in fondo serve alla pagina, non al
 @media (max-width:420px){.logo span{display:none}}
 .stamp{margin-left:auto;font-size:11.5px;color:rgba(255,255,255,.8);text-align:right;line-height:1.35}
 .stamp .warn{color:#FFD58A;font-weight:600}
-.stamp .ckl{color:inherit;text-decoration:none;white-space:nowrap}
+.stamp .ckl{display:inline-block;padding:8px 0;margin:-8px 0;color:inherit;text-decoration:none;white-space:nowrap}
 .leghe{display:flex;gap:6px;padding-block:0 2px;overflow-x:auto;scrollbar-width:none}.leghe:empty{display:none}
 .leghe::-webkit-scrollbar{display:none}
-.leghe a,.leghe select{flex:none;white-space:nowrap;font:inherit;font-size:12.5px;font-weight:600;text-decoration:none;color:rgba(255,255,255,.92);background-color:rgba(255,255,255,.13);border:0;border-radius:999px;padding:5px 12px}
+.leghe a,.leghe select{flex:none;white-space:nowrap;font:inherit;font-size:13px;font-weight:600;text-decoration:none;color:rgba(255,255,255,.92);background-color:rgba(255,255,255,.13);border:0;border-radius:999px;padding:8px 14px;line-height:18px}
 .leghe a[aria-current="page"]{background:var(--hdr-hi);color:var(--hdr-hi-ink)}
 .leghe select{-webkit-appearance:none;appearance:none;padding-right:26px;cursor:pointer;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M1 1l4 4 4-4' fill='none' stroke='white' stroke-width='1.6'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right 10px center}
 .leghe select option{color:#111;background:#fff}
@@ -240,6 +240,19 @@ h2 small{font-family:var(--body);font-stretch:100%;font-weight:500;font-size:13.
 .fx-nums b{font-family:var(--display);font-stretch:var(--dw);font-weight:750;font-size:20px;line-height:1.1}
 .card.hero{margin-top:12px;box-shadow:var(--shadow)}
 .hero .sched{margin-top:16px}
+.fx-pk{display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:baseline;gap:2px 10px;padding-top:10px;border-top:1px solid var(--line)}
+.fx-pk small{grid-column:1/-1;font-size:12px;font-weight:700;color:var(--good)}
+.fx-pk b{font-weight:650;min-width:0}.fx-pk em{font-style:normal;font-size:13px;color:var(--muted);white-space:nowrap}
+.fx-lab{margin-top:14px;margin-bottom:6px;font-size:12px;font-weight:600;color:var(--muted)}
+.sched small.uscito{color:var(--good);font-weight:700}
+.vtag{display:inline-block;margin-top:5px;font-family:var(--body);font-stretch:100%;font-size:12px;font-weight:650;line-height:1.3;padding:2px 9px;border-radius:999px}
+.vtag.ok{color:var(--good);background:color-mix(in srgb,var(--good) 15%,transparent)}.vtag.ko{color:var(--bad);background:color-mix(in srgb,var(--bad) 15%,transparent)}
+details.nota{margin-top:8px}
+details.nota>summary{list-style:none;cursor:pointer;display:inline-flex;align-items:center;gap:6px;padding:6px 0;font-size:13px;font-weight:600;color:var(--accent)}
+details.nota>summary::-webkit-details-marker{display:none}
+details.nota>summary::after{content:"›";font-size:17px;line-height:1;transition:transform .2s}
+details.nota[open]>summary::after{transform:rotate(90deg)}
+details.nota>p{margin:2px 0 0}
 .fx-info{display:grid;gap:3px;font-size:13px;color:var(--ink2)}
 .fx-info b{font-weight:600;color:var(--muted)}
 .fx .more{margin-top:-2px}
@@ -400,11 +413,22 @@ a.plain{color:inherit;text-decoration:none}
 .chart text{font-family:var(--body);font-stretch:100%;font-size:11px;fill:var(--muted)}
 .chart .gl{stroke:var(--line);stroke-width:1}
 .chart .ht{stroke:var(--muted);stroke-width:1;stroke-dasharray:3 3;opacity:.7}
-.chart .lh{stroke:var(--home);stroke-width:2;fill:none}.chart .la{stroke:var(--away);stroke-width:2;fill:none}
+.chart .lh{stroke:var(--home);stroke-width:2.5;fill:none;stroke-linejoin:round}.chart .la{stroke:var(--away);stroke-width:2.5;fill:none;stroke-linejoin:round}
+.chart .ah{fill:color-mix(in srgb,var(--home) 14%,transparent)}.chart .aa{fill:color-mix(in srgb,var(--away) 14%,transparent)}
+.chart .gh,.chart .ga{stroke:var(--ground);stroke-width:2;cursor:pointer}.chart .gh{fill:var(--home)}.chart .ga{fill:var(--away)}
+.chart .mh{fill:var(--home)}.chart .ma{fill:var(--away)}
+.chart .mid{stroke:var(--line2);stroke-width:1}
+.chart .glow{filter:drop-shadow(0 0 4px color-mix(in srgb,var(--accent) 35%,transparent))}
+.chart .hit.on{fill:color-mix(in srgb,var(--ink) 7%,transparent)}
+.chart circle.on{stroke:#FFFFFF;stroke-width:1}
+.chartbox{margin-top:2px}
+.chart-read{margin:6px 0 0;min-height:1.45em;font-size:13px;color:var(--ink2);font-variant-numeric:tabular-nums}
+.pitch .mow{fill:rgba(255,255,255,.025)}
+.pitch circle.goal{filter:drop-shadow(0 0 1.2px rgba(255,255,255,.8))}
 .chart .hit{fill:transparent}.chart .hit:hover{fill:color-mix(in srgb,var(--ink) 6%,transparent)}
 .chart.pitch{max-width:560px;margin-inline:auto}
-.pitch .ln{fill:none;stroke:color-mix(in srgb,var(--ink) 22%,transparent);stroke-width:.35}
-.pitch .bg{fill:color-mix(in srgb,var(--good) 7%,var(--surface))}
+.pitch .ln{fill:none;stroke:rgba(255,255,255,.26);stroke-width:.35}
+.pitch .bg{fill:color-mix(in srgb,var(--good) 10%,var(--ground))}
 .lgd{display:flex;flex-wrap:wrap;gap:4px 14px;font-size:12px;color:var(--ink2);margin-top:4px}
 .lgd i{display:inline-block;width:10px;height:10px;border-radius:50%;margin-right:5px;vertical-align:-1px}
 .pmir{display:grid;grid-template-columns:28px minmax(0,1fr) minmax(104px,auto) minmax(0,1fr) 28px;gap:6px;align-items:center;font-size:12px;padding:3px 0;font-variant-numeric:tabular-nums}
@@ -561,10 +585,10 @@ function glow(id) {
 const glowVars = (h, a) => `--hc:${glow(h)};--ac:${glow(a)}`;
 // la schedina 1X2: tre caselle come sul Totocalcio, segnata la più probabile; la barretta è la probabilità e sotto, se
 // c'è M, quella del mercato
-function sched(p1, px, p2, M, big) {
+function sched(p1, px, p2, M, big, out) {
   const v = [['1', 'h', p1, M && M.p1], ['X', 'x', px, M && M.px], ['2', 'a', p2, M && M.p2]], top = Math.max(p1, px, p2);
-  return `<div class="sched${big ? ' big' : ''}" role="img" aria-label="1 ${pc(p1)}, X ${pc(px)}, 2 ${pc(p2)}${M ? `; mercato 1 ${pc(M.p1)}, X ${pc(M.px)}, 2 ${pc(M.p2)}` : ''}">${v.map(([k, c, v, m]) =>
-    `<span class="c ${c}${v === top ? ' on' : ''}"><b>${k}</b><em class="num">${pc(v)}</em>${m != null ? `<small class="num">mercato ${pc(m)}</small>` : ''}<i style="width:${Math.round(v * 100)}%"></i></span>`).join('')}</div>`;
+  return `<div class="sched${big ? ' big' : ''}" role="img" aria-label="1 ${pc(p1)}, X ${pc(px)}, 2 ${pc(p2)}${M ? `; mercato 1 ${pc(M.p1)}, X ${pc(M.px)}, 2 ${pc(M.p2)}` : ''}${out ? `; è uscito ${out}` : ''}">${v.map(([k, c, v, m]) =>
+    `<span class="c ${c}${v === top ? ' on' : ''}"><b>${k}</b><em class="num">${pc(v)}</em>${m != null ? `<small class="num">mercato ${pc(m)}</small>` : ''}${out === k ? '<small class="uscito">✓ è uscito</small>' : ''}<i style="width:${Math.round(v * 100)}%"></i></span>`).join('')}</div>`;
 }
 // formazioni ufficiali, probabili o stimate, con il pallino verde, giallo o grigio
 const luTag = src => { const c = srcLabel(src)[0]; return `<span class="lu ${c}">Formazioni ${c === 'ok' ? 'ufficiali' : c === 'mid' ? 'probabili' : 'stimate'}</span>`; };
@@ -583,8 +607,11 @@ function vGiornata() {
   const live = D.live.length ? `<h2>Live <small>al momento della fotografia</small></h2><div class="list">${D.live.map(e => `<div class="card live"><div class="fx-teams">
       <div class="side">${team(e.home)}</div><div class="pick"><div class="sc num">${e.hs ?? 0}–${e.as ?? 0}</div><small>${esc(e.clock || '')}</small></div><div class="side r">${team(e.away)}</div></div></div>`).join('')}</div>` : '';
   const rounds = Object.keys(byRound).sort((a, b) => (+a || 99) - (+b || 99)).slice(0, 2);
-  return live + gustoTeaser() + roundCard() + rounds.map(r => `<h2>${r === 'altre' ? 'Prossime partite' : rname(r)} <small>pronostici</small></h2>
-    <div class="list">${byRound[r].map(f => { const tone = refTone(f.P && f.P.referee), yr = f.P && f.P.yellowRisk;
+  // prima le partite della giornata, poi le gustose e «Com'è andata», poi la giornata dopo (critica del design del 26/10:
+  // la prima partita compariva solo a metà del secondo schermo)
+  const extra = gustoTeaser() + roundCard();
+  return live + rounds.map((r, i) => (i === 1 ? extra : '') + `<h2>${r === 'altre' ? 'Prossime partite' : rname(r)} <small>pronostici</small></h2>
+    <div class="list">${byRound[r].map(f => { const pk = (((f.P || {}).bets || {}).picks || [])[0];
       return `<a class="card cardlink fx" style="${glowVars(f.home, f.away)}" href="#p${f.id}">
       <div class="fx-top"><span class="fx-when">${when(f.start)}</span>${luTag(f.lineups)}</div>
       <div class="fx-teams">
@@ -595,12 +622,8 @@ function vGiornata() {
       ${sched(f.p1, f.px, f.p2)}
       <div class="fx-nums"><div><small>Gol attesi</small><b class="num">${fx(f.lh, 2)}–${fx(f.la, 2)}</b></div><div><small>Over 2,5</small><b class="num">${pc(f.over25)}</b></div><div><small>Gol/Gol</small><b class="num">${pc(f.btts)}</b></div></div>
       ${f.P && f.P.tie ? `<div class="chips">${tieChip(f.P)}</div>` : ''}
-      ${f.clash.length ? `<p class="clash"><b>${esc(f.clash[0].title)}.</b> ${esc(f.clash[0].text)}</p>` : `<p class="clash"><b>${esc((T[f.home] || {}).arch)}</b> contro <b>${esc((T[f.away] || {}).arch)}</b>: nessuno scontro di stili marcato.</p>`}
-      <div class="fx-info">${f.scorers.length ? `<span><b>Probabili marcatori</b> ${f.scorers.map(s => `${esc(s.name)} ${pc(s.p)}`).join(' · ')}</span>` : ''}
-        ${yr && yr.top.length ? `<span><b>Più a rischio giallo</b> ${yr.top.slice(0, 2).map(y => `${esc(y.name)} ${pc(y.p)}`).join(' · ')}</span>` : ''}
-        ${f.referee ? `<span><b>Arbitro</b> ${esc(f.referee)}${tone ? ', ' + tone : ''}</span>` : ''}</div>
-      ${pickList(f.P)}
-      <div class="more">Scheda completa ›</div></a>`; }).join('')}</div>`).join('');
+      ${pk ? `<div class="fx-pk"><small>Giocata più sicura</small><b>${esc(pk.k)}</b><em class="num">${pc(pk.p)} · da ${fx(pk.fair, 2)}</em></div>` : ''}
+      <div class="more">Scheda completa ›</div></a>`; }).join('')}</div>`).join('') + (rounds.length < 2 ? extra : '');
 }
 
 const ZONE = {'Champions League': ['cl', 'Champions League'], 'Champions League Qualification': ['cl', 'Champions (preliminari)'], 'Europa League': ['el', 'Europa League'], 'Europa League Qualification': ['el', 'Europa League (preliminari)'], 'Relegation Playoff': ['rp', 'Spareggio salvezza'], 'Conference League Qualification': ['co', 'Conference League (preliminari)'], 'Conference League': ['co', 'Conference League'], 'Relegation': ['rel', 'Retrocessione'],
@@ -642,7 +665,7 @@ function pathCard() {
   const top = ids.slice(0, 12), rest = ids.slice(12);
   return `<h2>Percorso previsto <small>fino alla finale</small></h2><div class="card tw"><table class="path">${head}<tbody>${top.map(row).join('')}</tbody></table>
     ${rest.length ? `<details><summary class="small">Tutte le squadre</summary><table class="path">${head}<tbody>${rest.map(row).join('')}</tbody></table></details>` : ''}
-    <p class="small muted">Probabilità di arrivare a ogni turno e di vincere la coppa, da 5.000 simulazioni del resto della Champions con i gol attesi del pronostico: fase campionato, spareggi (9ª-24ª), ottavi, quarti e semifinali secondo il tabellone del formato UEFA, con supplementari e rigori, e la finale in campo neutro. Le partite giocate contano con il risultato vero e i turni già sorteggiati con gli accoppiamenti veri.</p></div>`;
+    ${nota("Da 5.000 simulazioni del resto della Champions con i gol attesi del pronostico, sul tabellone UEFA: spareggi per la 9ª-24ª, poi ottavi, quarti e semifinali (con supplementari e rigori) e finale in campo neutro. Le partite giocate contano con il risultato vero, i turni già sorteggiati con gli accoppiamenti veri.")}</div>`;
 }
 
 function xptsCard() {
@@ -657,7 +680,7 @@ function xptsCard() {
       return `<tr><td class="l">${i + 1}</td><td class="l"><a class="plain" href="#s${id}">${team(id, true)}</a></td><td>${pts}</td><td><b>${fx(x.xpts, 1)}</b></td>
         <td><span class="pos-luck ${df >= 1.5 ? 'up' : df <= -1.5 ? 'dn' : ''}">${df > 0 ? '+' : ''}${fx(df, 1)}</span></td><td>${fx(x.xg, 1)}</td><td>${fx(x.xga, 1)}</td></tr>`; }).join('')}
     </tbody></table>
-    <p class="small muted">I punti che ogni squadra avrebbe fatto in media con le occasioni create e concesse in ogni partita (Understat). Diff. positiva in verde: ha più punti di quanti ne meriterebbero le occasioni (è stata fortunata o molto cinica); negativa in rosso: ne ha meno. Con poche giornate le differenze contano poco.</p></div>`;
+    <p class="small muted">I punti che valevano le occasioni create e concesse (xG di Understat). In verde chi ha più punti del meritato (fortuna o cinismo), in rosso chi ne ha meno. Con poche giornate conta poco.</p></div>`;
 }
 
 const DIMS = [['possesso', 'Possesso'], ['baricentro', 'Baricentro'], ['pressing', 'Pressing'], ['verticalita', 'Verticale'], ['ampiezza', 'Ampiezza'], ['transizioni', 'Transizioni'], ['fisicita', 'Fisicità'], ['ritmo', 'Ritmo']];
@@ -674,7 +697,7 @@ function vSquadre() {
 
 function vStorico() {
   const s = D.history.summary || {n: 0};
-  const tiles = s.n ? `<div class="tiles">${[['Partite', s.n], ['Esito 1X2', pc(s.pick)], ['Risultato esatto', pc(s.score)], ['Over/Under', pc(s.over25)], ['Gol/No gol', pc(s.btts)]].map(([k, v]) => `<div class="tile"><small>${k}</small><b class="num">${v}</b></div>`).join('')}</div>`
+  const tiles = s.n ? `<div class="tiles">${[['Esito 1X2', pc(s.pick)], ['Risultato esatto', pc(s.score)], ['Over/Under', pc(s.over25)], ['Gol/No gol', pc(s.btts)]].map(([k, v]) => `<div class="tile"><small>${k}</small><b class="num">${v}</b></div>`).join('')}</div>`
     : '<p class="lead">Lo storico si riempie partita dopo partita: il server salva l\'ultimo pronostico prima di ogni calcio d\'inizio e lo confronta con il risultato.</p>';
   const items = D.history.items.filter(i => i.pick);
   // affidabilità: per fasce di fiducia, quante volte l'esito indicato è uscito davvero
@@ -682,12 +705,12 @@ function vStorico() {
     <div class="cal">${s.cal.map(c => `<span>fiducia ${Math.round(c.lo * 100)}–${Math.round(c.hi * 100)}%</span>
       <span class="tr" role="img" aria-label="azzeccate ${pc(c.hit)}, attese ${pc(c.p)}"><i style="width:${c.hit * 100}%"></i><u style="left:${c.p * 100}%"></u></span>
       <span class="num"><b>${pc(c.hit)}</b> <small class="muted">su ${c.n}</small></span>`).join('')}</div>
-    <p class="small muted">Per ogni fascia di fiducia del pronostico (la probabilità che dava all'esito indicato), la barra mostra quante volte ci ha preso; la tacca nera è quante volte avrebbe dovuto prenderci. Se barra e tacca coincidono, le percentuali sono affidabili. Servono parecchie partite perché il confronto conti.</p></div>` : '';
+    <p class="small muted">Per ogni fascia di fiducia, la barra è quante volte il pronostico ci ha preso e la tacca quante volte avrebbe dovuto. Se coincidono, le percentuali sono affidabili (servono molte partite).</p></div>` : '';
   const P = s.players;
   const plc = P ? `<div class="card" style="margin-top:10px"><h3>Giocatori: previsto e vero <small class="muted">titolari, ${P.n} partite</small></h3>
     <div class="facts">${[['Gialli', 'y', 1], ['Tiri', 'shots', 0], ['Falli', 'fouls', 0], ['Marcatori', 'goals', 1]].map(([l, k, d]) =>
       `<div class="fact"><small>${l} previsti · veri</small><b class="num">${fx(P[k][0], d)} · ${P[k][1]}</b></div>`).join('')}</div>
-    <p class="small muted">Somma delle previsioni sui titolari al calcio d'inizio contro quello che è successo davvero (ESPN). Gialli e marcatori: somma delle probabilità contro quanti titolari hanno preso un giallo o segnato.</p></div>` : '';
+    <p class="small muted">Previsioni sui titolari al calcio d'inizio contro quello che è successo (ESPN). Gialli e marcatori: somma delle probabilità contro quanti l'hanno fatto davvero.</p></div>` : '';
   const row = i => {
     const inner = `<span class="evn"><b>${nm(i.home)} – ${nm(i.away)}</b><small>${day(i.start)} · pronostico ${esc(i.pick.label)} ${i.pick.score.i}–${i.pick.score.j}</small></span>
       <span class="evv num">${i.result ? `${i.result.hs}–${i.result.as}` : '<small class="muted" style="font:500 12px var(--body)">da giocare</small>'}</span>
@@ -698,8 +721,8 @@ function vStorico() {
   const mkc = mk && mk.n ? `<div class="card" style="margin-top:10px"><h3>Il pronostico contro il mercato <small class="muted">${mk.n} partite</small></h3>
     <div class="facts">${[['Esito azzeccato', pc(mk.pick), pc(mk.pickMk)], ['Log loss', fx(mk.ll, 3), fx(mk.llMk, 3)], ['Brier', fx(mk.brier, 3), fx(mk.brierMk, 3)]].map(([l, a, b]) =>
       `<div class="fact"><small>${l} · pronostico · mercato</small><b class="num">${a} · ${b}</b></div>`).join('')}</div>
-    <p class="small muted">Le stesse partite: le probabilità del pronostico al calcio d'inizio e quelle delle quote dei bookmaker (${esc((mk.src || []).join(', '))}) senza il loro margine. Log loss e Brier: più bassi è meglio. Il mercato è il riferimento più difficile da battere: sulle 3500 partite 2024-2026 dei cinque campionati maggiori ha fatto meglio del modello (log loss 0,970 contro 0,981).</p></div>` : '';
-  return `<h2>Storico pronostici</h2>${tiles}${cal}${mkc}${plc}${checksCard()}${items.length ? `<div class="list evl" style="margin-top:10px">${items.map(row).join('')}</div>
+    <p class="small muted">Stesse partite: pronostico al calcio d'inizio contro quote dei bookmaker senza margine (${esc((mk.src || []).join(', '))}). Log loss e Brier: più bassi è meglio. Il mercato è il rivale più duro: sulle 3.500 partite 2024-2026 dei cinque campionati maggiori ha fatto meglio del modello (0,970 contro 0,981).</p></div>` : '';
+  return `<h2>Storico pronostici${s.n ? ` <small>${s.n} partite</small>` : ''}</h2>${tiles}${cal}${mkc}${plc}${checksCard()}${items.length ? `<div class="list evl" style="margin-top:10px">${items.map(row).join('')}</div>
       <p class="small muted">Tocca una partita giocata per vedere com'è andata rispetto al pronostico.</p>` : ''}`;
 }
 
@@ -716,7 +739,7 @@ function checksCard() {
     ${srcs ? `<h4>Fonti a confronto</h4><div class="tw"><table><thead><tr><th class="l">Fonte</th><th>Giocatori</th><th>Uguali a ESPN</th><th>Diversi</th></tr></thead><tbody>${srcs}</tbody></table></div>
       ${diffs.length ? `<details class="acc"><summary>Le differenze</summary><ul class="small">${diffs.join('')}</ul></details>` : ''}` : ''}
     ${ck.links ? `<p class="small muted">Giocatori di Understat riconosciuti anche dai minuti di ogni partita (non solo dal nome): ${ck.links.minutes} su ${ck.links.players}.</p>` : ''}
-    <p class="small muted">Si controlla che la classifica torni con i risultati, i gol dei giocatori con quelli delle squadre, le letture con i punteggi, che nessuna partita sia doppia e nessun pronostico fuori scala (falli, gialli, gol, tiri). Minuti, gol, assist e cartellini dei tabellini ESPN si confrontano con le altre fonti: gol e cartellini devono essere uguali, gli assist entro 1 (le fonti li contano in modo diverso). Chi ha giocato nelle ultime 36 ore aspetta: alcune fonti si aggiornano una volta al giorno.</p></div>`;
+    ${nota("Che classifica e risultati tornino, che i gol dei giocatori sommino a quelli delle squadre, che le letture tornino con i punteggi, che non ci siano partite doppie né pronostici fuori scala (falli, gialli, gol, tiri). Minuti, gol, assist e cartellini di ESPN si confrontano con le altre fonti: gol e cartellini devono coincidere, gli assist entro 1 (le fonti li contano in modo diverso). Chi ha giocato nelle ultime 36 ore aspetta: alcune fonti si aggiornano una volta al giorno.", 'Cosa si controlla')}</div>`;
 }
 
 /* letture delle partite: come sono nati i gol, come hanno giocato, perché il pronostico è andato così */
@@ -733,10 +756,10 @@ function roundCard() {
   // a tendina, chiusa all'inizio (sul telefono occupava troppo): la apre chi la vuole; resta aperta tornando da una lettura
   return `<details class="acc"${ROUND_OPEN ? ' open' : ''} ontoggle="ROUND_OPEN = this.open">
     <summary><span class="acc-hd"><span class="acc-t">Com'è andata · ${rname(r)}</span>
-      <span class="acc-s">${R.of && R.n < R.of ? `${R.n} partite lette su ${R.of}` : `${list.length} partite lette`} · come sono nati i gol e perché il pronostico è andato così</span></span>
+      <span class="acc-s">${R.of && R.n < R.of ? `${R.n} partite lette su ${R.of}` : `${list.length} partite lette`}: i gol e com'è andato il pronostico</span></span>
       <span class="acc-ch" aria-hidden="true">›</span></summary>
     <div class="acc-b"><div class="card narr">${R.text.map(t => `<p>${esc(t)}</p>`).join('')}
-      <p class="small muted">Tocca una partita: come sono nati i gol (errori, palle inattive, contropiedi, prodezze), come hanno giocato le squadre e perché il pronostico è andato così.</p></div>
+      <p class="small muted">Tocca una partita per i gol, il gioco e com'è andato il pronostico.</p></div>
     <div class="list evl">${list.map(readRow).join('')}</div></div></details>`;
 }
 let ROUND_OPEN = false;   // «Com'è andata» aperta o chiusa (solo finché la pagina resta aperta)
@@ -747,14 +770,17 @@ function goalsCard(rd) {
       return `<div class="goal"><div class="mn num">${esc(g.m)}<small>${esc(g.sc)}</small></div>
         <div><div class="who">${team(tid, true)}<b>${g.cat === 'autogol' ? 'autogol di ' + esc(g.w) : esc(g.w)}</b><span class="lab ${LABC[g.lab] || ''}">${esc(g.lab)}</span>${g.xg != null ? `<span class="how num">xG ${fx(g.xg, 2)}</span>` : ''}</div>
         <div class="how">${esc(g.how)}</div><p>${esc(g.why)}</p></div></div>`; }).join('')}
-    <p class="small muted">Le etichette dicono perché il gol è nato: <b>errore</b> (rigore causato, autogol, palla persa), <b>palla inattiva</b>, <b>transizione</b> (contropiede), <b>seconda palla</b> (ribattuta non allontanata), <b>difesa superata</b> (cross, filtrante, inserimento), <b>prodezza</b> (tiro difficile, xG basso). Fonti: ${(D.league || {}).cup ? 'cronaca Opta di ESPN (xG calcolati dalla posizione di ogni tiro) e dati ufficiali UEFA' : 'cronaca Opta di ESPN e xG di ogni tiro di Understat'}.</p></div>`;
+    ${nota(`Le etichette dicono perché il gol è nato: <b>errore</b> (rigore causato, autogol, palla persa), <b>palla inattiva</b>, <b>transizione</b> (contropiede), <b>seconda palla</b> (ribattuta non allontanata), <b>difesa superata</b> (cross, filtrante, inserimento), <b>prodezza</b> (tiro difficile, xG basso). Fonti: ${(D.league || {}).cup ? 'cronaca Opta di ESPN (xG calcolati dalla posizione di ogni tiro) e dati ufficiali UEFA' : 'cronaca Opta di ESPN e xG di ogni tiro di Understat'}.`, 'Cosa vogliono dire le etichette')}</div>`;
 }
 /* andamento: xG accumulati minuto per minuto, con gol ed espulsioni */
+// tiri di una lettura: i minuti di Understat partono da 0 (il gol del 65' di ESPN è un tiro al 64'), qui si allineano
+// a quelli dei gol (provato su 67 gol: 65 con un minuto di differenza)
+const shotsOf = rd => (rd.sh || []).map(x => rd.src === 'understat' ? [x[0] + 1, ...x.slice(1)] : x);
 const xgPts = (sh, side, T) => { const pts = [[0, 0]]; let c = 0;
   sh.filter(x => x[1] === side).forEach(x => { pts.push([x[0], c]); c += x[2]; pts.push([x[0], c]); }); pts.push([T, c]); return pts; };
 const cumAt = (sh, side, m) => sh.filter(x => x[1] === side && x[0] <= m).reduce((a, x) => a + x[2], 0);
 function xgChart(rd) {
-  const sh = rd.sh || [], mk = rd.mk || {g: [], r: []};
+  const sh = shotsOf(rd), mk = rd.mk || {g: [], r: []};
   if (!sh.length) return '';
   const T = Math.max(93, ...sh.map(x => x[0] + 1), ...mk.g.map(g => g[0] + 1));
   const top = Math.max(cumAt(sh, 0, 999), cumAt(sh, 1, 999), .5), step = top > 3 ? 1 : .5, Y = Math.ceil(top / step) * step;
@@ -764,38 +790,68 @@ function xgChart(rd) {
   const path = pts => 'M' + pts.map(([m, v]) => `${X(m).toFixed(1)},${Yp(v).toFixed(1)}`).join('L');
   const grid = []; for (let v = 0; v <= Y + 1e-9; v += step) grid.push(`<line class="gl" x1="${L}" x2="${W - R}" y1="${Yp(v)}" y2="${Yp(v)}"/><text x="${L - 6}" y="${Yp(v) + 4}" text-anchor="end">${fx(v, step < 1 ? 1 : 0)}</text>`);
   const xt = [0, 15, 30, 45, 60, 75, 90].map(m => `<text x="${X(m)}" y="${H - 8}" text-anchor="middle">${m}'</text>`).join('');
-  const goals = mk.g.map(g => { const v = cumAt(sh, g[1], g[0]); return `<circle cx="${X(g[0])}" cy="${Yp(v)}" r="5.5" fill="var(--${g[1] ? 'away' : 'home'})" stroke="var(--surface)" stroke-width="2"><title>${g[0]}' ${esc(g[3])}${g[4] ? ' (autogol)' : ''} · ${esc(g[2])}</title></circle>`; }).join('');
-  const reds = mk.r.map(r => `<rect x="${X(r[0]) - 3.5}" y="${H - B - 13}" width="7" height="10" rx="1.5" fill="var(--bad)"><title>${r[0]}' rosso a ${esc(r[2])} (${nm(r[1] ? rd.away : rd.home)})</title></rect>`).join('');
-  const hits = []; for (let m = 0; m < T; m += 5) hits.push(`<rect class="hit" x="${X(m)}" y="${Tp}" width="${X(m + 5) - X(m)}" height="${H - Tp - B}"><title>Fino al ${Math.min(m + 5, T)}': ${nm(rd.home)} ${fx(cumAt(sh, 0, m + 5), 2)} xG · ${nm(rd.away)} ${fx(cumAt(sh, 1, m + 5), 2)} xG</title></rect>`);
+  const area = pts => path(pts) + `L${X(T).toFixed(1)},${Yp(0).toFixed(1)}L${X(0).toFixed(1)},${Yp(0).toFixed(1)}Z`;
+  const goals = mk.g.map(g => { const v = cumAt(sh, g[1], g[0]); return `<circle class="${g[1] ? 'ga' : 'gh'}" cx="${X(g[0])}" cy="${Yp(v)}" r="5.5" data-tip="${g[0]}' gol di ${esc(g[3])}${g[4] ? ' (autogol)' : ''} · ${esc(g[2])}"/>`; }).join('');
+  const reds = mk.r.map(r => `<rect x="${X(r[0]) - 3.5}" y="${H - B - 13}" width="7" height="10" rx="1.5" fill="var(--bad)" data-tip="${r[0]}' rosso a ${esc(r[2])} (${nm(r[1] ? rd.away : rd.home)})"/>`).join('');
+  const hits = []; for (let m = 0; m < T; m += 5) hits.push(`<rect class="hit" x="${X(m)}" y="${Tp}" width="${X(m + 5) - X(m)}" height="${H - Tp - B}" data-tip="Fino al ${Math.min(m + 5, T)}': ${nm(rd.home)} ${fx(cumAt(sh, 0, m + 5), 2)} xG · ${nm(rd.away)} ${fx(cumAt(sh, 1, m + 5), 2)} xG"/>`);
   return `<div class="lgd"><span><i style="background:var(--home)"></i>${nm(rd.home)} ${fx(rd.xg[0], 2)} xG</span><span><i style="background:var(--away)"></i>${nm(rd.away)} ${fx(rd.xg[1], 2)} xG</span><span>● gol · <b style="color:var(--bad)">▮</b> espulsione</span></div>
-    <svg class="chart" viewBox="0 0 ${W} ${H}" role="img" aria-label="xG accumulati: ${nm(rd.home)} ${fx(rd.xg[0], 2)}, ${nm(rd.away)} ${fx(rd.xg[1], 2)}">
+    <div class="chartbox"><svg class="chart" viewBox="0 0 ${W} ${H}" role="img" aria-label="xG accumulati: ${nm(rd.home)} ${fx(rd.xg[0], 2)}, ${nm(rd.away)} ${fx(rd.xg[1], 2)}">
       ${grid.join('')}<line class="ht" x1="${X(45)}" x2="${X(45)}" y1="${Tp}" y2="${H - B}"/>${xt}
-      <path class="lh" d="${path(xgPts(sh, 0, T))}"/><path class="la" d="${path(xgPts(sh, 1, T))}"/>${hits.join('')}${goals}${reds}</svg>`;
+      <path class="ah" d="${area(xgPts(sh, 0, T))}"/><path class="aa" d="${area(xgPts(sh, 1, T))}"/>
+      <g class="glow"><path class="lh" d="${path(xgPts(sh, 0, T))}"/><path class="la" d="${path(xgPts(sh, 1, T))}"/></g>${hits.join('')}${goals}${reds}</svg>
+      <p class="chart-read">Tocca il grafico per leggere gli xG a ogni momento.</p></div>`;
+}
+/* momenti della partita, come l'«attack momentum» di Sofascore: chi spingeva minuto per minuto. È la somma degli xG
+   dei tiri, smussata su qualche minuto (campana di 2,5 minuti), in scala sul momento più forte della partita; sopra la
+   squadra di casa, sotto gli ospiti, i pallini sono i gol */
+function momentum(rd) {
+  const sh = shotsOf(rd), mk = rd.mk || {g: [], r: []};
+  if (sh.length < 4) return '';
+  const T = Math.max(93, ...sh.map(x => x[0] + 1), ...mk.g.map(g => g[0] + 1));
+  const press = side => Array.from({length: T + 1}, (_, m) => sh.filter(x => x[1] === side).reduce((a, x) => a + x[2] * Math.exp(-(((m - x[0]) / 2.5) ** 2)), 0));
+  const ph = press(0), pa = press(1), top = Math.max(...ph, ...pa, .05);
+  const W = innerWidth < 560 ? 360 : 640, H = 168, L = 8, R = 8, Tp = 16, B = 22, half = (H - Tp - B) / 2, mid = Tp + half;
+  const X = m => L + m / T * (W - L - R), bw = Math.max(1.6, (W - L - R) / (T + 1) - 1.2);
+  const bars = (arr, up) => arr.map((v, m) => { const hh = v / top * (half - 12); return hh < .8 ? '' :
+    `<rect x="${(X(m) - bw / 2).toFixed(1)}" y="${(up ? mid - hh : mid).toFixed(1)}" width="${bw.toFixed(1)}" height="${hh.toFixed(1)}" rx="${Math.min(bw / 2, 2).toFixed(1)}"/>`; }).join('');
+  const goals = mk.g.map(g => `<circle class="${g[1] ? 'ga' : 'gh'}" cx="${X(g[0])}" cy="${g[1] ? H - B - 5 : Tp + 5}" r="5" data-tip="${g[0]}' gol di ${esc(g[3])}${g[4] ? ' (autogol)' : ''} · ${esc(g[2])}"/>`).join('');
+  const xt = [0, 15, 30, 45, 60, 75, 90].map(m => `<text x="${X(m)}" y="${H - 6}" text-anchor="middle">${m}'</text>`).join('');
+  const win = (side, a, b) => sh.filter(x => x[1] === side && x[0] >= a && x[0] < b);
+  const hits = []; for (let m = 0; m < T; m += 5) { const h5 = win(0, m, m + 5), a5 = win(1, m, m + 5);
+    hits.push(`<rect class="hit" x="${X(m)}" y="${Tp}" width="${X(m + 5) - X(m)}" height="${H - Tp - B}" data-tip="${m}'-${Math.min(m + 5, T)}': ${nm(rd.home)} ${h5.length} ${h5.length === 1 ? 'tiro' : 'tiri'}, ${fx(h5.reduce((s, x) => s + x[2], 0), 2)} xG · ${nm(rd.away)} ${a5.length} ${a5.length === 1 ? 'tiro' : 'tiri'}, ${fx(a5.reduce((s, x) => s + x[2], 0), 2)} xG"/>`); }
+  return `<div class="lgd"><span><i style="background:var(--home)"></i>${nm(rd.home)} spinge (sopra)</span><span><i style="background:var(--away)"></i>${nm(rd.away)} spinge (sotto)</span><span>● gol</span></div>
+    <div class="chartbox"><svg class="chart mom" viewBox="0 0 ${W} ${H}" role="img" aria-label="Momenti della partita: chi spingeva minuto per minuto">
+      <line class="ht" x1="${X(45)}" x2="${X(45)}" y1="${Tp}" y2="${H - B}"/><line class="mid" x1="${L}" x2="${W - R}" y1="${mid}" y2="${mid}"/>
+      <g class="mh glow">${bars(ph, true)}</g><g class="ma glow">${bars(pa, false)}</g>${xt}${hits.join('')}${goals}</svg>
+      <p class="chart-read">Tocca il grafico: tiri e xG di ogni squadra, 5 minuti alla volta.</p></div>`;
 }
 /* mappa dei tiri: la squadra di casa attacca a destra, gli ospiti a sinistra; cerchio pieno = gol, più grande = xG più alto */
 const ESITO = {G: 'gol', S: 'parato', M: 'fuori', B: 'respinto', P: 'palo o traversa'};
 function shotMap(rd) {
-  const sh = (rd.sh || []).filter(x => x[4] != null);
+  const sh = shotsOf(rd).filter(x => x[4] != null);
   if (!sh.length) return '';
-  const lines = `<rect class="bg" x="0" y="0" width="105" height="68" rx="1"/><rect class="ln" x="0" y="0" width="105" height="68"/><line class="ln" x1="52.5" x2="52.5" y1="0" y2="68"/><circle class="ln" cx="52.5" cy="34" r="9.15"/>
+  const lines = `<rect class="bg" x="0" y="0" width="105" height="68" rx="1"/>${[0, 2, 4, 6, 8].map(i => `<rect class="mow" x="${i * 10.5}" y="0" width="10.5" height="68"/>`).join('')}<rect class="ln" x="0" y="0" width="105" height="68"/><line class="ln" x1="52.5" x2="52.5" y1="0" y2="68"/><circle class="ln" cx="52.5" cy="34" r="9.15"/>
     <rect class="ln" x="0" y="13.84" width="16.5" height="40.32"/><rect class="ln" x="88.5" y="13.84" width="16.5" height="40.32"/>
     <rect class="ln" x="0" y="24.84" width="5.5" height="18.32"/><rect class="ln" x="99.5" y="24.84" width="5.5" height="18.32"/>
     <rect class="ln" x="-1.2" y="30.34" width="1.2" height="7.32"/><rect class="ln" x="105" y="30.34" width="1.2" height="7.32"/>`;
   const dots = sh.slice().sort((a, b) => b[2] - a[2]).map(x => { const home = x[1] === 0, c = `var(--${home ? 'home' : 'away'})`;
     const px = home ? x[4] * 105 : (1 - x[4]) * 105, py = home ? x[5] * 68 : (1 - x[5]) * 68, r = .9 + 3.1 * Math.sqrt(x[2]), g = x[3] === 'G';
-    return `<circle cx="${px.toFixed(1)}" cy="${py.toFixed(1)}" r="${r.toFixed(2)}" fill="${c}" fill-opacity="${g ? 1 : .25}" stroke="${g ? 'var(--surface)' : c}" stroke-width="${g ? .6 : .35}"><title>${x[0]}' ${esc(x[6] || '')} · xG ${fx(x[2], 2)} · ${ESITO[x[3]] || ''}</title></circle>`; }).join('');
+    return `<circle class="${g ? 'goal' : ''}" cx="${px.toFixed(1)}" cy="${py.toFixed(1)}" r="${r.toFixed(2)}" fill="${c}" fill-opacity="${g ? 1 : .3}" stroke="${g ? '#FFFFFF' : c}" stroke-width="${g ? .5 : .35}" data-tip="${x[0]}' ${esc(x[6] || '')} (${nm(home ? rd.home : rd.away)}) · xG ${fx(x[2], 2)} · ${ESITO[x[3]] || ''}"/>`; }).join('');
   return `<div class="lgd"><span><i style="background:var(--away)"></i>${nm(rd.away)} attacca a sinistra</span><span><i style="background:var(--home)"></i>${nm(rd.home)} a destra</span><span>pieno = gol · più grande = xG più alto</span></div>
-    <svg class="chart pitch" viewBox="-2 -1 109 70" role="img" aria-label="Mappa dei tiri: ${sh.length} tiri">${lines}${dots}</svg>`;
+    <div class="chartbox"><svg class="chart pitch" viewBox="-2 -1 109 70" role="img" aria-label="Mappa dei tiri: ${sh.length} tiri">${lines}${dots}</svg>
+    <p class="chart-read">Tocca un tiro: minuto, giocatore, xG ed esito.</p></div>`;
 }
 function readCards(rd) {
   if (!rd) return '';
   const v = rd.verdict, vt = v ? VERD[v.k] : null;
   return `${v ? `<div class="card verd v-${vt[0]}"><h3>${esc(v.title)}</h3><p class="lead" style="margin:0">${esc(v.lead)}</p>
       ${v.why.length ? `<ul>${v.why.map(w => `<li>${esc(w)}</li>`).join('')}</ul>` : ''}<p class="small muted">${esc(v.goals)}</p></div>` : ''}
-    ${rd.sh && rd.sh.length ? `<div class="card"><h3>Andamento della partita <small class="muted">xG accumulati minuto per minuto</small></h3>${xgChart(rd)}
-      <p class="small muted">Ogni gradino è un tiro, alto quanto il suo xG. Passa sul grafico per i valori a ogni momento.</p></div>` : ''}
+    ${momentum(rd) ? `<div class="card"><h3>Momenti della partita <small class="muted">chi spingeva, minuto per minuto</small></h3>${momentum(rd)}
+      <p class="small muted">Più alta la barra, più pericolosi i tiri di quei minuti (xG, smussati su qualche minuto).</p></div>` : ''}
+    ${rd.sh && rd.sh.length ? `<div class="card"><h3>xG accumulati <small class="muted">minuto per minuto</small></h3>${xgChart(rd)}
+      <p class="small muted">Ogni gradino è un tiro, alto quanto il suo xG.</p></div>` : ''}
     ${goalsCard(rd)}
-    ${(rd.sh || []).some(x => x[4] != null) ? `<div class="card"><h3>Mappa dei tiri</h3>${shotMap(rd)}<p class="small muted">Tocca un cerchio per minuto, giocatore, xG ed esito (${rd.src === 'understat' ? 'Understat' : 'posizione dei tiri dalla cronaca Opta di ESPN, xG calcolati come quelli di Understat'}).</p></div>` : ''}
+    ${(rd.sh || []).some(x => x[4] != null) ? `<div class="card"><h3>Mappa dei tiri</h3>${shotMap(rd)}<p class="small muted">Fonte: ${rd.src === 'understat' ? 'Understat' : 'posizione dei tiri dalla cronaca Opta di ESPN, xG calcolati come quelli di Understat'}.</p></div>` : ''}
     <div class="card narr"><h3>Come hanno giocato</h3>${rd.game.map(t => `<p>${esc(t)}</p>`).join('')}</div>
     ${(rd.lu || []).length ? `<div class="card narr"><h3>Formazioni</h3>${rd.lu.map(t => `<p>${esc(t)}</p>`).join('')}</div>` : ''}
     ${(rd.ref || []).length ? `<div class="card narr"><h3>Arbitro</h3>${rd.ref.map(t => `<p>${esc(t)}</p>`).join('')}</div>` : ''}
@@ -804,7 +860,8 @@ function readCards(rd) {
 function xgStrip(rd) {
   const tot = (rd.xg[0] + rd.xg[1]) || 1;
   return `<div class="xgs"><span><b>${fx(rd.xg[0], 2)}</b> xG</span><span class="tr" role="img" aria-label="xG ${fx(rd.xg[0], 2)} a ${fx(rd.xg[1], 2)}"><i style="width:${rd.xg[0] / tot * 100}%"></i><i style="width:${rd.xg[1] / tot * 100}%"></i></span><span>xG <b>${fx(rd.xg[1], 2)}</b></span></div>
-    <div class="bl num"><span>${rd.shots[0]} tiri</span><span>${rd.src !== 'cronaca' ? `rigiocata: 1 ${pc(rd.xgp[0])} · X ${pc(rd.xgp[1])} · 2 ${pc(rd.xgp[2])}` : 'xG stimati dalla cronaca'}</span><span>${rd.shots[1]} tiri</span></div>`;
+    <div class="bl num"><span>${rd.shots[0]} tiri</span><span>${rd.shots[1]} tiri</span></div>
+    ${rd.src !== 'cronaca' ? `<div class="fx-lab">Rigiocata con le stesse occasioni finirebbe</div>${sched(rd.xgp[0], rd.xgp[1], rd.xgp[2])}` : '<p class="small muted">xG stimati dalla cronaca</p>'}`;
 }
 
 /* com'è andata: il pronostico al calcio d'inizio contro la partita vera, e la lettura della partita */
@@ -813,7 +870,7 @@ function vRivedi(id) {
   const it = it0 && it0.f && it0.result ? it0 : null, rd = (D.reads || {})[String(id)];
   if (!rd && !it) return back('giornata', 'Giornata') + '<p class="lead" style="margin-top:14px">La lettura di questa partita non è ancora pronta: arriva poco dopo il fischio finale (cronaca di ESPN)' + ((D.league || {}).cup ? ' e si completa con i dati ufficiali UEFA.</p>' : ' e si completa con gli xG di Understat.</p>');
   if (!it) return `${back('giornata', 'Giornata')}
-  <article class="card" style="margin-top:10px">
+  <article class="card hero" style="${glowVars(rd.home, rd.away)}">
     <div class="fx-top"><span>${when(rd.start)}${rd.round ? ' · ' + rname(rd.round) : ''}</span><span></span></div>
     <div class="fx-teams"><a class="side" href="#s${rd.home}">${team(rd.home)}</a><div class="pick"><div class="sc num">${rd.hs}–${rd.as}</div><small>risultato finale</small></div><a class="side r" href="#s${rd.away}">${team(rd.away)}</a></div>
     <p class="clash"><b>${esc(rd.title)}.</b></p>${xgStrip(rd)}
@@ -821,7 +878,7 @@ function vRivedi(id) {
   <div class="stack">${readCards(rd)}<p class="small muted">Per questa partita lo storico non ha il pronostico al calcio d'inizio: c'è solo la lettura.</p></div>`;
   const f = it.f, r = it.result, ev = it.eval || {}, real = it.real || {}, rp = real.players || {}, h = it.home, a = it.away;
   const out = r.hs > r.as ? '1' : r.hs === r.as ? 'X' : '2';
-  const yn = (ok, txt) => `<b class="${ok ? 'ok' : 'ko'}">${txt}</b>`;
+  const yn = (ok, txt) => `<span class="vtag ${ok ? 'ok' : 'ko'}">${txt}</span>`;
   const side = key => {
     const rows = ((f.pl || {})[key] || []);
     if (!rows.length) return '';
@@ -842,11 +899,10 @@ function vRivedi(id) {
   const tm = real.team || {};
   const yReal = tm.home && tm.away ? (tm.home.yellowCards || 0) + (tm.away.yellowCards || 0) : null;
   return `${back('storico', 'Storico')}
-  <article class="card" style="margin-top:10px">
+  <article class="card hero" style="${glowVars(h, a)}">
     <div class="fx-top"><span>${when(it.start)}${it.round ? ' · ' + rname(it.round) : ''}</span><span>${f.ref ? 'arbitro ' + esc(f.ref) : ''}</span></div>
     <div class="fx-teams"><a class="side" href="#s${h}">${team(h)}</a><div class="pick"><div class="sc num">${r.hs}–${r.as}</div><small>risultato finale</small></div><a class="side r" href="#s${a}">${team(a)}</a></div>
-    <div class="bars" role="img" aria-label="Pronostico: 1 ${pc(f.p1)}, X ${pc(f.px)}, 2 ${pc(f.p2)}"><i class="h" style="width:${f.p1 * 100}%"></i><i class="x" style="width:${f.px * 100}%"></i><i class="a" style="width:${f.p2 * 100}%"></i></div>
-    <div class="bl num"><span>${out === '1' ? '<b>1 · ' + pc(f.p1) + '</b>' : '1 · ' + pc(f.p1)}</span><span>${out === 'X' ? '<b>X · ' + pc(f.px) + '</b>' : 'X · ' + pc(f.px)}</span><span>${out === '2' ? '<b>2 · ' + pc(f.p2) + '</b>' : '2 · ' + pc(f.p2)}</span></div>
+    <div class="fx-lab">Il pronostico al calcio d'inizio</div>${sched(f.p1, f.px, f.p2, null, true, out)}
     ${rd ? `<p class="clash"><b>${esc(rd.title)}.</b></p>${xgStrip(rd)}` : ''}
     <div class="facts">
       <div class="fact"><small>Esito indicato</small><b>${esc(f.pick.label)}</b><small>${ev.pick != null ? yn(ev.pick, ev.pick ? 'azzeccato' : 'sbagliato') : ''}</small></div>
@@ -861,7 +917,7 @@ function vRivedi(id) {
     ${rd ? readCards(rd) : '<p class="small muted">La lettura della partita (come sono nati i gol, perché il pronostico è andato così) arriva poco dopo il fischio finale.</p>'}
     ${f.pl ? side('home') + side('away') : '<p class="small muted">Per questa partita lo storico ha solo il pronostico, senza le previsioni dei giocatori.</p>'}
     ${f.pl && !Object.keys(rp).length ? '<p class="small muted">Le statistiche dei giocatori arrivano da ESPN poco dopo la fine della partita.</p>' : ''}
-    <p class="small muted">In ogni cella prima il previsto al calcio d'inizio (con le formazioni ${f.lineups === 'ufficiale' ? 'ufficiali' : 'di quel momento'}), dopo il punto quello che è successo davvero (ESPN). Min: minuti giocati davvero. Giallo: probabilità prevista e se l'ha preso. Gol: probabilità di segnare e gol fatti.</p>
+    <p class="small muted">In ogni cella: previsto al calcio d'inizio (formazioni ${f.lineups === 'ufficiale' ? 'ufficiali' : 'di quel momento'}) · vero (ESPN). Giallo e gol: probabilità prevista · com'è andata.</p>
   </div>`;
 }
 
@@ -875,6 +931,8 @@ const rankTxt = (f, k) => `${f.rank[k]}ª su ${D.N}`;
 const avg = xs => xs.length ? xs.reduce((a, b) => a + b, 0) / xs.length : null;
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 const col = (id, homeId) => String(id) === String(homeId) ? 'var(--home)' : 'var(--away)';
+// nota di metodo a scomparsa: il dettaglio c'è, ma non occupa la pagina (testi rivisti il 26/10/2026)
+const nota = (t, label = 'Come si calcola') => `<details class="nota"><summary>${label}</summary><p class="small muted">${t}</p></details>`;
 const back = (href, label) => `<a class="back" href="#${href}">‹ ${label}</a>`;
 const CHG = {possesso: ['Più possesso', 'Meno possesso'], baricentro: ['Baricentro più alto', 'Baricentro più basso'],
   pressing: ['Più pressing', 'Meno pressing'], verticalita: ['Gioco più verticale', 'Gioco meno verticale'],
@@ -905,14 +963,14 @@ function narrative(P, h, a) {
   else out.push(`Partita molto equilibrata: ${hn} ${pc(P.p1)}, pareggio ${pc(P.px)}, ${an} ${pc(P.p2)}.`);
   if (P.style) {
     const st = P.style, main = st.items.find(i => i.kind === 'rule');
-    out.push(`Stili a confronto: ${hn} («${esc(st.home.arch.name)}»${st.home.coach ? `, allenata da ${esc(st.home.coach.name)}` : ''}) contro ${an} («${esc(st.away.arch.name)}»${st.away.coach ? `, allenata da ${esc(st.away.coach.name)}` : ''}).${main ? ' ' + esc(main.text) : ''}`);
+    out.push(`Stili: ${hn} «${esc(st.home.arch.name)}» contro ${an} «${esc(st.away.arch.name)}».${main ? ' ' + esc(main.text) : ''}`);
   }
   const hp = (H.m || {}).poss, ap = (A.m || {}).poss;
   if (hp != null && ap != null) {
     const poss = clamp((hp + (100 - ap)) / 2 + ((P.style && P.style.poss) || 0), 25, 75);
-    if (poss >= 54) out.push(`Controllo del gioco: ${hn} dovrebbe tenere il pallone (circa ${Math.round(poss)}% di possesso), con ${an} costretta a difendersi più bassa.`);
-    else if (poss <= 46) out.push(`Controllo del gioco: sarà ${an} a gestire il possesso (circa ${Math.round(100 - poss)}%); ${hn} dovrà soffrire e sfruttare le poche occasioni.`);
-    else out.push(`Controllo del gioco: possesso prevedibilmente equilibrato (circa ${Math.round(poss)}% – ${Math.round(100 - poss)}%), la partita si deciderà nei duelli e sulle occasioni.`);
+    if (poss >= 54) out.push(`Possesso: ${hn} circa ${Math.round(poss)}%, ${an} si difenderà più bassa.`);
+    else if (poss <= 46) out.push(`Possesso: ${an} circa ${Math.round(100 - poss)}%, ${hn} dovrà soffrire e ripartire.`);
+    else out.push(`Possesso equilibrato (circa ${Math.round(poss)}–${Math.round(100 - poss)}%): conteranno duelli e occasioni.`);
   }
   const e2 = (x, y) => (x != null && isFinite(x) && y != null && isFinite(y)) ? (x + y) / 2 : (isFinite(x) ? x : y);
   const hs = H.s || {}, as = A.s || {}, hN = H.n || 1, aN = A.n || 1;
@@ -920,21 +978,21 @@ function narrative(P, h, a) {
   const V = P.vol || {};
   const shH = V.shots ? V.shots[0] : e2(hs.shots / hN, as.shotsAgainst / aN), shA = V.shots ? V.shots[1] : e2(as.shots / aN, hs.shotsAgainst / hN);
   const coH = V.corners ? V.corners[0] : e2(hs.corners / hN, as.cornersAgainst / aN), coA = V.corners ? V.corners[1] : e2(as.corners / aN, hs.cornersAgainst / hN);
-  if (isFinite(shH) && isFinite(shA)) out.push(`Volume offensivo atteso: ${hn} circa ${fx(shH, 0)} tiri e ${fx(coH, 0)} angoli, ${an} circa ${fx(shA, 0)} tiri e ${fx(coA, 0)} angoli. Cartellini gialli attesi: circa ${fx(P.cards.home + P.cards.away, 1)} (${fx(P.cards.home, 1)} per ${nm(h)}, ${fx(P.cards.away, 1)} per ${nm(a)}).`);
+  if (isFinite(shH) && isFinite(shA)) out.push(`Tiri e angoli attesi: ${hn} ${fx(shH, 0)} e ${fx(coH, 0)}, ${an} ${fx(shA, 0)} e ${fx(coA, 0)}. Gialli: ${fx(P.cards.home, 1)} e ${fx(P.cards.away, 1)}.`);
   if (P.referee && P.referee.games) {
     const f = P.referee.factor;
-    out.push(`Arbitro: <b>${esc(P.referee.name)}</b>, ${fx(P.referee.ypg, 1)} gialli a partita: ${f >= 1.1 ? 'severo, i cartellini attesi salgono' : f <= .9 ? 'di manica larga, i cartellini attesi scendono' : 'nella media'}.`);
+    out.push(`Arbitro <b>${esc(P.referee.name)}</b>: ${fx(P.referee.ypg, 1)} gialli a partita, ${f >= 1.1 ? 'severo' : f <= .9 ? 'di manica larga' : 'nella media'}.`);
   }
   const tot = P.lh + P.la;
-  out.push(`${tot < 2.2 ? 'Si prevede una partita chiusa, con pochi gol' : tot > 3 ? 'Partita potenzialmente ricca di gol' : 'Numero di gol atteso nella media del campionato'} (${fx(tot, 1)} gol attesi): Over 2,5 al ${pc(P.over25)}, entrambe a segno al ${pc(P.btts)}.`);
+  out.push(`${tot < 2.2 ? 'Partita chiusa, con pochi gol' : tot > 3 ? 'Partita da gol' : 'Gol nella media'}: ${fx(tot, 1)} attesi in tutto.`);
   const top = P.scores[0], pk = P.pick;
   out.push(pk.score.i === top.i && pk.score.j === top.j
     ? `Punteggio esatto più probabile: <b>${top.i}–${top.j}</b> (${fx(top.v * 100, 1)}%).`
-    : `Il punteggio esatto più probabile in assoluto è <b>${top.i}–${top.j}</b> (${fx(top.v * 100, 1)}%), ma l'esito più probabile è ${pk.k === 'X' ? 'il pareggio' : `la vittoria di <b>${pk.k === '1' ? nm(h) : nm(a)}</b>`} (${pc(pk.p)}), con <b>${pk.score.i}–${pk.score.j}</b> come punteggio tipico.`);
+    : `Risultato esatto più probabile: <b>${top.i}–${top.j}</b> (${fx(top.v * 100, 1)}%). Il pronostico dice <b>${pk.score.i}–${pk.score.j}</b> perché l'esito più probabile è ${pk.k === 'X' ? 'il pareggio' : `la vittoria di <b>${pk.k === '1' ? nm(h) : nm(a)}</b>`} (${pc(pk.p)}).`);
   const abs = [...P.absent.home.map(x => [h, x]), ...P.absent.away.map(x => [a, x])].filter(([, x]) => x.att >= .1 || x.def >= .1 || x.pos === 'G');
   if (abs.length) out.push(`Assenze che pesano: ${abs.map(([t, x]) => `<b>${esc(x.name)}</b> (${nm(t)}, ${esc(x.why.toLowerCase())})`).join(', ')}.`);
   const fh = (H.m || {}).form, fa = (A.m || {}).form;
-  if (fh != null && fa != null && Math.abs(fh - fa) >= .8) out.push(`Forma: ${fh > fa ? hn : an} arriva in un momento migliore (${fx(Math.max(fh, fa), 1)} punti a partita nelle ultime gare contro ${fx(Math.min(fh, fa), 1)}).`);
+  if (fh != null && fa != null && Math.abs(fh - fa) >= .8) out.push(`Forma: meglio ${fh > fa ? hn : an}, ${fx(Math.max(fh, fa), 1)} punti a partita nelle ultime gare contro ${fx(Math.min(fh, fa), 1)}.`);
   return out.map(p => `<p>${p}</p>`).join('');
 }
 function clashCard(P, h, a) {
@@ -958,7 +1016,7 @@ function clashCard(P, h, a) {
     <div class="legend"><span><i style="background:var(--home)"></i>${nm(h)}</span><span><i style="background:var(--away)"></i>${nm(a)}</span><span>posizione tra le ${D.N} squadre (0-100)</span></div>
     <ul class="keys" style="margin-top:12px">${items || '<li class="muted">Nessuno scontro di stili marcato: le due squadre non si ostacolano né si favoriscono in modo netto.</li>'}</ul>
     ${h2h ? `<h4>Precedenti</h4><div class="small">${h2h}</div>` : ''}
-    <p class="small muted">Lo scontro di stili descrive come si incontrano i due modi di giocare. Provato su 3500 partite dei cinque campionati maggiori, non migliora il pronostico: non sposta i gol attesi, fa solo salire un po' i cartellini attesi (fino al 5%) nelle partite più intense.${st.matches ? ` I precedenti tra stili si basano su ${st.matches} partite di ${LGN}.` : ''}</p></div>`;
+    <p class="small muted">Come si incontrano i due modi di giocare. Provato su 3.500 partite: non sposta i gol attesi, alza solo un po' i cartellini (fino al 5%) nelle partite più intense.${st.matches ? ` I precedenti tra stili si basano su ${st.matches} partite di ${LGN}.` : ''}</p></div>`;
 }
 function adjCard(P, h, a) {
   const block = (id, base, fin) => {
@@ -1021,7 +1079,7 @@ function refCard(P) {
       <div class="fact"><small>Effetto sui gialli attesi</small><b class="num">${eff >= 0 ? '+' : ''}${eff}%</b></div>
     </div>
     ${r.dom ? `<p class="small" style="margin:8px 0 0">Partite contate: ${[[LGN, r.games - Object.values(r.dom).reduce((a, b) => a + b, 0)], ...Object.entries(r.dom)].filter(([, n]) => n).map(([l, n]) => `${n} in ${esc(l)}`).join(', ')} (questa stagione e la scorsa). In coppa le partite sono poche: contano anche quelle nel suo campionato, confrontate con la media di gialli di quel campionato.</p>` : ''}
-    <p class="small muted">Con poche partite il suo dato pesa meno e resta vicino alla media. Il rischio giallo di ogni giocatore e i gialli attesi della partita ne tengono già conto. ${(D.league || {}).cup ? 'Arbitro designato dalla UEFA (uefa.com).' : LG.fantacalcio === false ? 'Arbitro da ESPN.' : 'Designazione da Fantacalcio.it, poi confermata da ESPN il giorno della partita.'}</p></div>`;
+    <p class="small muted">Con poche partite il suo dato pesa meno. Rischio giallo e gialli attesi ne tengono già conto. ${(D.league || {}).cup ? 'Arbitro designato dalla UEFA (uefa.com).' : LG.fantacalcio === false ? 'Arbitro da ESPN.' : 'Designazione da Fantacalcio.it, poi confermata da ESPN il giorno della partita.'}</p></div>`;
 }
 function scorersCard(P, h, a) {
   const list = (key, c) => P.players[key].filter(p => p.pos !== 'G').sort((x, y) => y.pGoal - x.pGoal).slice(0, 4)
@@ -1038,7 +1096,7 @@ function yellowCard(P, h, a) {
       <b>${esc(x.name)}</b> <span class="muted" style="font-size:12px">${esc(x.role || '')}</span>${x.diffidato ? ' <span class="st mid">Diffidato</span>' : ''}
       ${x.why.length ? `<small>${x.why.map(esc).join(' · ')}</small>` : ''}</li>`).join('')}</ul>
     ${dif.length ? `<p class="small muted">Diffidati in campo (con un giallo saltano la prossima): ${dif.map(x => `${esc(x.name)} ${pc(x.p)}`).join(', ')}.</p>` : ''}
-    <p class="small muted">La probabilità combina i gialli presi in stagione, il ruolo in campo, i minuti attesi, l'avversario diretto, quante punizioni si procura l'altra squadra, l'arbitro e l'intensità dello scontro di stili. Gialli attesi: circa ${fx(P.cards.home + P.cards.away, 1)}.</p></div>`;
+    <p class="small muted">Contano gialli in stagione, ruolo, minuti attesi, avversario diretto, falli che subisce l'altra squadra, arbitro e intensità della partita. Gialli attesi: circa ${fx(P.cards.home + P.cards.away, 1)}.</p></div>`;
 }
 function heatCard(P, h, a) {
   const n = 5, max = P.scores[0].v;
@@ -1071,7 +1129,7 @@ function radarCard(h, a) {
   });
   for (const [f, c] of [[F(h), 'var(--home)'], [F(a), 'var(--away)']]) {
     const v = val(f);
-    g += `<polygon points="${v.map((x, i) => pt(i, R * x).join(',')).join(' ')}" style="fill:${c};fill-opacity:.15;stroke:${c};stroke-width:2;stroke-linejoin:round"/>`;
+    g += `<polygon points="${v.map((x, i) => pt(i, R * x).join(',')).join(' ')}" style="fill:${c};fill-opacity:.2;stroke:${c};stroke-width:2.5;stroke-linejoin:round;filter:drop-shadow(0 0 6px ${c})"/>`;
     v.forEach((x, i) => { const [px, py] = pt(i, R * x); g += `<circle cx="${px}" cy="${py}" r="3.5" style="fill:${c}"/>`; });
   }
   return `<div class="card"><h3>Profilo a confronto <small class="muted">percentile nel campionato</small></h3>
@@ -1106,7 +1164,7 @@ function lessonsCard(x) {
   return `<div class="card"><h3>Dalle partite giocate <small class="muted">come segnano e come subiscono</small></h3>
     ${ks.length ? `<ul class="keys">${ks.map(k => `<li><b>${esc(k.t)}</b><small>${esc(k.x)}</small></li>`).join('')}</ul><h4>In stagione</h4>` : ''}
     <ul class="keys">${line(x.home, ph)}${line(x.away, pa)}</ul>
-    <p class="small muted">Dalle letture delle partite giocate (cronaca Opta di ESPN, ${(D.league || {}).cup ? 'xG dalla posizione dei tiri' : 'xG di Understat'}). Sono indicazioni sul modo in cui le squadre segnano e subiscono: il pronostico non le usa direttamente.</p></div>`;
+    <p class="small muted">Dalle letture delle partite giocate (cronaca Opta di ESPN, ${(D.league || {}).cup ? 'xG dalla posizione dei tiri' : 'xG di Understat'}). Descrivono come le squadre segnano e subiscono: il pronostico non le usa.</p></div>`;
 }
 // il mercato: le quote dei bookmaker trasformate in probabilità, togliendo il loro margine
 function mkLine(M, P, h, a) {
@@ -1131,7 +1189,7 @@ const betRow = (it, bk) => `<div class="brow${bk ? '' : ' nb'}"><span class="bn"
 const betHead = bk => `<div class="brow bh${bk ? '' : ' nb'}"><span>Giocata</span><span>Probabilità</span><span>Quota minima</span>${bk ? '<span>Bookmaker</span>' : ''}</div>`;
 // la colonna del bookmaker solo se in tabella c'è almeno una quota vera
 const betTable = list => { const bk = list.some(it => it.odds != null); return betHead(bk) + list.map(it => betRow(it, bk)).join(''); };
-const BET_NOTE = `<b>Quota minima</b> = 1 / probabilità: prendi la giocata solo se il tuo bookmaker paga almeno questa quota, meglio se di più; sotto, ti paga meno di quanto vale secondo il modello. Le consigliate sono, per ogni fascia di quota (più sicura 1,35-1,50, equilibrata 1,50-1,65, quota più alta 1,65-1,80), la più probabile, ognuna da un mercato diverso. Probabilità: esito, doppia chance e pareggio rimborsato per l'80% dai bookmaker e per il 20% dal modello quando c'è il mercato (sull'1X2 il mercato prevede meglio); i gol dal pronostico; tiri, tiri in porta, angoli e ammonizioni da una distribuzione tarata su 3.500 partite dei cinque campionati maggiori (quando dice 70%, esce circa il 70% delle volte). <b>Valore</b> = probabilità × quota − 1, solo dove c'è la quota vera del bookmaker (1X2 e una linea di over/under da ESPN, di solito uno o due giorni prima; ≈ = doppia chance stimata dall'1X2): provato su 3.500 partite, i valori del solo modello sopra il 10% hanno perso tra il 9% e il 16% della posta, quindi si segnala solo dal 3% in su con la probabilità mescolata. Le linee di tiri e angoli cambiano da bookmaker a bookmaker e i conteggi possono differire (le ammonizioni sono i soli gialli). Gioca responsabilmente: vietato ai minori di 18 anni, nessuna previsione è una certezza.`;
+const BET_NOTE = `<b>Quota minima</b> = 1 / probabilità: gioca solo se il bookmaker paga almeno questa quota; sotto, ti paga meno di quanto vale. Le consigliate sono la giocata più probabile di ogni fascia (più sicura 1,35-1,50, equilibrata 1,50-1,65, quota più alta 1,65-1,80), ognuna da un mercato diverso. Esito, doppia chance e pareggio rimborsato: per l'80% probabilità dei bookmaker e per il 20% del modello, quando c'è il mercato (sull'1X2 prevede meglio); gol dal pronostico; tiri, angoli e ammonizioni da una distribuzione tarata su 3.500 partite (quando dice 70%, esce circa il 70% delle volte). <b>Valore</b> = probabilità × quota − 1, solo con la quota vera (1X2 e una linea di gol da ESPN, uno o due giorni prima; ≈ = doppia chance stimata): si segnala dal 3% in su, perché su 3.500 partite i valori del solo modello sopra il 10% hanno perso tra il 9% e il 16% della posta. Linee e conteggi di tiri e angoli cambiano da bookmaker a bookmaker; le ammonizioni sono solo i gialli.`;
 function betsCard(P) {
   const B = P.bets;
   if (!B || !(B.items || []).length) return '';
@@ -1142,12 +1200,13 @@ function betsCard(P) {
     ${(B.picks || []).length ? `<h4 style="margin-top:0">Le giocate consigliate</h4>${betTable(B.picks)}` : ''}
     ${value.length ? `<h4>Con valore secondo modello e bookmaker</h4>${betTable(value)}` : `<p class="small muted">${odds ? 'Nessuna giocata con valore tra quelle di cui c\'è la quota vera del bookmaker.' : 'Quote del bookmaker non ancora pubblicate (di solito arrivano uno o due giorni prima della partita): confronta la quota minima con quella del tuo bookmaker.'}</p>`}
     <details class="acc"><summary>Tutte le giocate in fascia (${inBand.length})</summary>${groups.map(g => `<h4>${esc(g)}</h4>${betTable(inBand.filter(it => it.g === g))}`).join('')}</details>
-    <p class="small muted">${BET_NOTE}</p></div>`;
+    ${nota(BET_NOTE, 'Come si leggono quota minima e valore')}
+    <p class="small muted">Gioca responsabilmente: vietato ai minori di 18 anni, nessuna previsione è una certezza.</p></div>`;
 }
 
 /* chicche statistiche della partita, dalla più particolare alla più semplice (calcolo: chicche.py) */
 const CH_LV = [['Rara', 'Le più particolari', 3], ['Curiosa', 'Curiose', 2], ['Semplice', 'Da sapere', 1], ['Ritardo', 'Ritardi statistici', 0]];
-const CH_RIT = "Cose che secondo le quote delle partite già giocate, o secondo gli xG, sarebbero dovute succedere e non sono ancora successe. Attenzione: un ritardo non rende l'evento più probabile nella prossima partita. Provato su 10.504 casi delle ultime tre stagioni dei cinque campionati maggiori: dopo lunghe serie senza pareggi, vittorie o sconfitte l'evento è uscito come dicevano le quote, o un po' meno.";
+const CH_RIT = "Cose che le quote o gli xG davano per probabili e che non sono ancora successe. Attenzione: un ritardo non rende l'evento più probabile. Provato su 10.504 casi delle ultime tre stagioni: dopo lunghe serie l'evento è uscito come dicevano le quote, o un po' meno.";
 function chMark(c, h, a) {
   if (c.team) return crest(c.team, true);
   const col = id => { const t = T[id] || {}; return /^#[0-9a-f]{6}$/i.test(t.color || '') ? t.color : '#6C7A72'; };
@@ -1162,7 +1221,7 @@ function chicheCard(P, h, a) {
       const L = C.filter(c => c.lv === lv);
       return L.length ? `<div class="ch-grp${n ? '' : ' ch-rit'}"><h4>${n ? pips(n) : ''}${title}</h4>${n ? '' : `<p class="small muted">${CH_RIT}</p>`}<ul class="ch-list">${L.map(c => `<li>${chMark(c, h, a)}<div><small>${esc(c.cat)}${c.team ? ' · ' + nm(c.team) : ''}</small><p>${esc(c.t)}</p></div></li>`).join('')}</ul></div>` : '';
     }).join('')}
-    <p class="small muted">Più una chicca è rara, più sta in alto: ogni dato è confrontato con quello delle altre squadre della ${esc(LGN)}, e in cima ci sono quelli a cui nessun'altra squadra arriva. Solo dati veri: risultati e cronaca dei gol di ESPN, statistiche della stagione, precedenti, stagione scorsa e partite dell'arbitro; per i ritardi le quote dei bookmaker delle partite già giocate e gli xG di Understat. Nessuna stima del modello.</p></div>`;
+    <p class="small muted">Più è rara, più sta in alto: ogni dato è confrontato con le altre squadre della ${esc(LGN)}. Solo dati veri (ESPN, statistiche della stagione, precedenti, arbitro; per i ritardi quote già giocate e xG di Understat), nessuna stima del modello.</p></div>`;
 }
 
 /* partite più gustose: divario ampio, una squadra top e una flop, giocate in fascia con valore (calcolo: model.gustose) */
@@ -1178,7 +1237,7 @@ function gustoCard(g) {
   const why = g.why.length ? `<ul class="g-why">${g.why.map(w => `<li class="${w.tf ? 'tf' : ''}">${w.tf ? '<span class="tfb">Top contro flop</span>' : ''}${esc(w.t)}</li>`).join('')}</ul>` : '';
   const warn = (g.mk ? `<p class="g-mk">${esc(g.mk)}</p>` : '') + (g.warn ? `<p class="g-warn"><b>Da tenere d'occhio.</b> ${esc(g.warn)}</p>` : '');
   const value = g.value.length ? `<h4>Con valore secondo modello e bookmaker</h4>${betTable(g.value)}`
-    : `<p class="small muted">${g.odds ? 'Nessuna giocata con valore tra quelle di cui c\'è la quota vera del bookmaker.' : 'Quote del bookmaker non ancora pubblicate (di solito arrivano uno o due giorni prima): una giocata conviene se il tuo bookmaker paga più della quota giusta.'}</p>`;
+    : `<p class="small muted">${g.odds ? 'Nessuna giocata con valore tra quelle di cui c\'è la quota vera del bookmaker.' : 'Quote del bookmaker non ancora pubblicate (di solito arrivano uno o due giorni prima): una giocata conviene se il tuo bookmaker paga più della quota minima.'}</p>`;
   const top = g.top.length ? `<h4>Le giocate consigliate</h4>${betTable(g.top)}` : '';
   return `<article class="card gusto" style="${glowVars(g.home, g.away)}">
     <div class="g-top"><span class="g-score num">${g.score}<small>/100</small></span><span class="g-lvl">${gustoLevel(g.score)}</span><span class="g-when">${when(g.start)}</span></div>
@@ -1191,10 +1250,11 @@ function gustoCard(g) {
 function vGustose() {
   const G = D.gustose || [];
   return `<h2>Le partite più gustose <small>in ordine di data</small></h2>
-    <p class="lead">Le partite con il divario più netto: la favorita è tra le migliori della ${esc(LGN)} e l'avversaria tra le peggiori nelle stesse voci. Sotto ognuna le giocate con quota tra 1,40 e 1,80 più probabili e, dove c'è già la quota vera del bookmaker, quelle con valore.</p>
+    <p class="lead">Le partite più sbilanciate: una delle migliori della ${esc(LGN)} contro una delle peggiori. Per ognuna le giocate più probabili tra 1,35 e 1,80 e, quando c'è la quota del bookmaker, quelle con valore.</p>
     ${G.length ? `<div class="stack">${G.map(gustoCard).join('')}</div>` : `<div class="card"><p>Nei prossimi giorni nessuna partita ha un divario abbastanza netto: serve la favorita almeno al 55% con almeno due voci «top contro flop», oppure almeno al 65%.</p></div>`}
     ${allPicks()}
-    <p class="small muted">Come si sceglie: il punteggio va da 0 a 100 ed è per il 55% il divario (probabilità della favorita dal 45% all'80%) e per il 45% i contrasti «top contro flop» (la favorita nel 30% migliore della ${esc(LGN)}, l'avversaria nel 30% peggiore: forza del modello in attacco e in difesa, xG creati e concessi, punti in casa e in trasferta, forma, classifica; i numeri della stagione solo con almeno tre partite) (il divario è la probabilità della favorita, per l'80% quella dei bookmaker quando c'è: sull'1X2 il mercato prevede meglio del modello). Il valore delle giocate non entra nel punteggio: provato su 3.500 partite, quello del solo modello contro il bookmaker non regge. Entrano le partite con la favorita almeno al 55% e almeno due contrasti, o almeno al 65%. Un divario ampio non rende sicura nessuna giocata: una favorita al 75% non vince una partita su quattro, e sull'1X2 il mercato in media prevede meglio del modello. Gioca responsabilmente: vietato ai minori di 18 anni.</p>`;
+    ${nota(`Il punteggio (0-100) è per il 55% il divario, cioè la probabilità della favorita (dal 45% all'80%; per l'80% quella dei bookmaker, quando c'è), e per il 45% i contrasti «top contro flop»: favorita nel 30% migliore della ${esc(LGN)} e avversaria nel 30% peggiore nelle stesse voci (attacco e difesa del modello, xG creati e concessi, punti in casa e fuori, forma, classifica; i numeri della stagione da tre partite in su). Entrano le partite con la favorita almeno al 55% e due contrasti, o almeno al 65%. Il valore delle giocate non conta: su 3.500 partite quello del solo modello non regge contro il bookmaker. Un divario ampio non rende sicura nessuna giocata: una favorita al 75% non vince comunque una partita su quattro.`, 'Come si sceglie')}
+    <p class="small muted">Gioca responsabilmente: vietato ai minori di 18 anni.</p>`;
 }
 // le tre giocate consigliate di una partita, in breve (giornata e pagina gustose)
 function pickList(P) {
@@ -1206,7 +1266,7 @@ function allPicks() {
   const fs = D.fixtures.filter(f => f.P && f.P.bets && (f.P.bets.picks || []).length);
   if (!fs.length) return '';
   return `<h2>Le giocate consigliate di tutte le partite <small>quota tra 1,35 e 1,80</small></h2>
-    <p class="lead">Per ogni partita tre giocate da mercati diversi: la più sicura (quota 1,35-1,50), l'equilibrata (1,50-1,65) e quella con più quota (1,65-1,80). «Da» è la quota minima: sotto, non conviene.</p>
+    <p class="lead">Tre giocate per partita, da mercati diversi: più sicura (quota 1,35-1,50), equilibrata (1,50-1,65) e quota più alta (1,65-1,80). «Da» è la quota minima: sotto non conviene.</p>
     <div class="list">${fs.map(f => `<a class="card cardlink" href="#p${f.id}"><div class="fx-top"><span>${when(f.start)}</span><span>${nm(f.home)}–${nm(f.away)}</span></div>${pickList(f.P)}</a>`).join('')}</div>`;
 }
 // richiamo in cima alla giornata: le tre partite più gustose
@@ -1252,15 +1312,15 @@ function matchSecs(x, P, h, a) {
     .filter(([n]) => n).map(([n, pl, sg]) => `${n} ${n === 1 ? sg : pl}`).join(' · ');
   const B = P.bets || {}, pk = (B.picks || [])[0], st = P.style;
   return [
-    ['gioco', 'Come giocano', `${st ? `${esc(st.home.arch.name)} contro ${esc(st.away.arch.name)} · ` : ''}stili, chiavi tattiche, statistiche a confronto`,
+    ['gioco', 'Come giocano', st ? `${esc(st.home.arch.name)} contro ${esc(st.away.arch.name)}` : 'stili, chiavi tattiche, statistiche a confronto',
       lessonsCard(x) + clashCard(P, h, a) + keysCard(P, h) + radarCard(h, a) + mirrorCard(h, a) + swCard(h, a)],
     ['formazioni', 'Formazioni e assenti', `${src}${forms} · ${nAbs ? `${nAbs} tra indisponibili e in dubbio` : 'nessuna assenza nota'}`,
       lineupCard(P, 'home', h) + lineupCard(P, 'away', a) + absentCard(P, h, a)],
     ['giocatori', 'Giocatori e arbitro', `${sc ? `${esc(sc.name)} il più probabile marcatore (${pc(sc.pGoal)}) · ` : ''}${ref}`,
       scorersCard(P, h, a) + yellowCard(P, h, a) + refCard(P)],
-    ['chicche', 'Chicche statistiche', `dalla più particolare alla più semplice${chs ? ' · ' + chs : ''}`, chicheCard(P, h, a)],
+    ['chicche', 'Chicche statistiche', chs || 'dalla più particolare alla più semplice', chicheCard(P, h, a)],
     ['scommesse', 'Scommesse', pk ? `più sicura: ${esc(pk.k)} (${pc(pk.p)}, da ${fx(pk.fair, 2)})` : `giocate con quota tra ${fx(B.lo ?? 1.35, 2)} e ${fx(B.hi ?? 1.8, 2)}`, betsCard(P)],
-    ['come', 'Come funziona', 'da dove viene il pronostico e cosa è stato provato', `<div class="card">${howNote()}</div>`],
+    ['come', 'Come funziona', 'da dove viene il pronostico', `<div class="card">${howNote()}</div>`],
   ].filter(z => z[3] && z[3].trim());
 }
 const secNav = S => `<nav class="secbar" aria-label="Sezioni della partita">${S.map(([k, t]) => `<button type="button" onclick="secGo('${k}')">${t}</button>`).join('')}
@@ -1291,7 +1351,7 @@ function vPartita(id) {
       <div class="fact"><small>Gol attesi</small><b class="num">${fx(P.lh, 2)}–${fx(P.la, 2)}</b></div>
       <div class="fact"><small>Over 2,5</small><b>${pc(P.over25)}</b></div>
       <div class="fact"><small>Under 2,5</small><b>${pc(1 - P.over25)}</b></div>
-      <div class="fact"><small>Entrambe segnano</small><b>${pc(P.btts)}</b></div>
+      <div class="fact"><small>Gol/Gol</small><b>${pc(P.btts)}</b></div>
       <div class="fact"><small>Porta inviolata ${nm(h)}</small><b>${pc(P.csH)}</b></div>
       <div class="fact"><small>Porta inviolata ${nm(a)}</small><b>${pc(P.csA)}</b></div>
       <div class="fact"><small>Gialli attesi</small><b class="num">${fx(P.cards.home + P.cards.away, 1)}</b></div>
@@ -1676,7 +1736,7 @@ function vEvidenza() {
       <span class="rk num">${i + 1}</span>${crest(r.team, true)}
       <span class="evn"><b>${esc(r.name)}</b><small>${nm(r.team)} ${r.home ? 'vs' : '@'} ${nm(r.opp)} · ${day(r.start)}${r.official ? ' · <span class="uff">ufficiale</span>' : ''}</small></span>
       <span class="evv num">${val(r)}</span></a>`).join('')}</div>
-    <p class="small muted">Solo i titolari previsti. I numeri tengono conto dei minuti previsti, dell'avversario, di chi marca chi e dell'arbitro, e sommano ai totali realistici di ogni squadra. Si aggiornano con le probabili formazioni e poi con quelle ufficiali, circa un'ora prima di ogni partita: chi ha già la formazione ufficiale è segnato con «ufficiale». Tocca un giocatore per aprire la sua scheda, con le previsioni per la partita.</p>`;
+    <p class="small muted">Solo i titolari previsti. I numeri tengono conto di minuti, avversario, marcatura e arbitro, e si aggiornano con le probabili e poi con le formazioni ufficiali (circa un'ora prima, segnate «ufficiale»). Tocca un giocatore per la sua scheda.</p>`;
 }
 const VIEWS = {giornata: vGiornata, evidenza: vEvidenza, gustose: vGustose, classifica: vClassifica, squadre: vSquadre, storico: vStorico, cerca: vCerca};
 function show(name) {
@@ -1705,6 +1765,15 @@ document.addEventListener('click', e => {
   if (m) { emode = m.dataset.em; document.getElementById('evidenza').innerHTML = vEvidenza(); }
 });
 window.addEventListener('hashchange', () => { if (D) show(location.hash.slice(1)); });
+// grafici: toccando (o passando con il mouse su) una zona o un tiro, il suo valore va nella riga sotto il grafico
+function chartRead(e) {
+  const t = e.target.closest && e.target.closest('[data-tip]'), box = t && t.closest('.chartbox');
+  if (!box) return;
+  box.querySelector('.chart-read').textContent = t.dataset.tip;
+  box.querySelectorAll('.on').forEach(x => x.classList.remove('on')); t.classList.add('on');
+}
+document.addEventListener('pointerover', chartRead);
+document.addEventListener('pointerdown', chartRead);
 // l'intestazione resta fissa solo con le sezioni: sale di quanto occupano nome e leghe (cambia con la larghezza)
 function fitHeader() { document.documentElement.style.setProperty('--hdr-hide', document.getElementById('nav').offsetTop + 'px'); }
 window.addEventListener('resize', fitHeader);
