@@ -53,7 +53,7 @@ HEAD = """<!doctype html>
 """
 TAIL = "\n</body></html>\n"
 MANIFEST = {"name": "Serie A Tascabile", "short_name": "Serie A", "start_url": "./", "scope": "./", "display": "standalone",
-            "background_color": "#F3F5F9", "theme_color": "#0F1B2D",
+            "background_color": "#050A14", "theme_color": "#0F1B2D",
             "icons": [{"src": "icona-192.png", "sizes": "192x192", "type": "image/png"},
                       {"src": "icona-512.png", "sizes": "512x512", "type": "image/png"}]}
 

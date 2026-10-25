@@ -4,53 +4,31 @@
 <link href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@62..125,100..900&display=swap" rel="stylesheet">
 <style>
 :root{
-  /* palette «Notte di stadio», scelta dall'utente il 09/10/2026: blu notte e verde lime */
-  --ground:#F3F5F9;--surface:#FFFFFF;--surface2:#E8ECF3;--ink:#0F1B2D;--ink2:#3B4659;--muted:#5B6678;--line:#DCE2EC;
-  --accent:#4D7C0F;--on-accent:#FFFFFF;--home:#2F5BEA;--draw:#A9B2C3;--away:#E8590C;--good:#15803D;--warn:#B45309;--bad:#C0392B;
-  --conf:#0D9488;--brand:var(--ground);--band:none;
+  /* palette «Notte di stadio» (scelta dall'utente il 09/10/2026), dal 26/10 sempre scura come le app di DAZN e Sky:
+     fondo blu notte, schede di vetro (--glass-hi/--glass-lo), fili chiari trasparenti */
+  color-scheme:dark;
+  --ground:#050A14;--surface:#0E1628;--surface2:rgba(255,255,255,.07);--ink:#F2F5FA;--ink2:#BAC4D6;--muted:#8190AA;
+  --line:rgba(255,255,255,.09);--line2:rgba(255,255,255,.17);--glass-hi:rgba(255,255,255,.065);--glass-lo:rgba(255,255,255,.02);
+  --accent:#5CB3FF;--on-accent:#06122A;--home:#4F7BFF;--draw:#66728C;--away:#FF7A2E;--good:#2FD27A;--warn:#F5B53D;--bad:#FF5D5D;
+  --conf:#2DD4BF;--brand:var(--ground);--band:none;
   --hdr:linear-gradient(120deg,#0F1B2D,#22314F);--hdr-ink:#0F1B2D;--hdr-hi:#FFFFFF;--hdr-hi-ink:#0F1B2D;
   /* un solo carattere, Archivo, in più larghezze: stretto e nero per risultati e titoli (come i tabelloni degli stadi),
      normale per il testo. --dw = larghezza dei titoli, --sw = dei risultati */
   --display:"Archivo","Arial Narrow",system-ui,sans-serif;--body:"Archivo",system-ui,-apple-system,"Segoe UI",sans-serif;--dw:78%;--sw:66%;
-  --r:16px;--shadow:0 1px 2px rgba(15,27,45,.05),0 6px 18px -10px rgba(15,27,45,.22);
+  --r:16px;--shadow:none;
 }
-@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
-  color-scheme:dark;--ground:#0A1120;--surface:#121B2E;--surface2:#1A2540;--ink:#EEF2F8;--ink2:#C3CCDA;--muted:#93A0B8;--line:#24314D;
-  --accent:#A3E635;--on-accent:#0A1120;--home:#6B8CFF;--draw:#4A566E;--away:#FF8A4C;--good:#34C26B;--warn:#E0A63A;--bad:#F07167;--conf:#2DD4BF;--shadow:none;}}
-:root[data-theme="dark"]{
-  color-scheme:dark;--ground:#0A1120;--surface:#121B2E;--surface2:#1A2540;--ink:#EEF2F8;--ink2:#C3CCDA;--muted:#93A0B8;--line:#24314D;
-  --accent:#A3E635;--on-accent:#0A1120;--home:#6B8CFF;--draw:#4A566E;--away:#FF8A4C;--good:#34C26B;--warn:#E0A63A;--bad:#F07167;--conf:#2DD4BF;--shadow:none;}
 /* ogni lega con i suoi colori (data-lega su <html>: lo mette sito.prepara, e boot() nell'anteprima). L'intestazione è
    tutta nel colore della lega (--hdr, testo bianco, pulsante attivo --hdr-hi), con in cima una fascia dei colori del
    paese (--band); nella pagina cambia l'accento. Blu e arancione restano di casa e ospiti, in tutte le leghe. */
-:root[data-lega="serie-a"]{--accent:#1565C0;--on-accent:#FFFFFF;--brand:#0B3D91;--hdr:linear-gradient(120deg,#0B3D91,#1E7BE0);--hdr-ink:#0B3D91;--hdr-hi:#FFFFFF;--hdr-hi-ink:#0B3D91;--band:linear-gradient(90deg,#009246 0 33.4%,#F4F5F0 33.4% 66.6%,#CE2B37 66.6%)}
-:root[data-lega="premier"]{--accent:#37003C;--on-accent:#FFFFFF;--brand:#37003C;--hdr:linear-gradient(120deg,#37003C,#6A1475);--hdr-ink:#37003C;--hdr-hi:#00FF85;--hdr-hi-ink:#37003C;--band:linear-gradient(90deg,#00FF85,#04F5FF 40%,#E90052 75%,#963CFF)}
-:root[data-lega="liga"]{--accent:#C8231B;--on-accent:#FFFFFF;--brand:#D42A22;--hdr:linear-gradient(120deg,#E8382E,#FF6B57);--hdr-ink:#B81E17;--hdr-hi:#F1BF00;--hdr-hi-ink:#5A0B07;--band:linear-gradient(90deg,#AA151B 0 25%,#F1BF00 25% 75%,#AA151B 75%)}
-:root[data-lega="bundesliga"]{--accent:#C8030F;--on-accent:#FFFFFF;--brand:#D20515;--hdr:linear-gradient(120deg,#6B0209,#C8030F);--hdr-ink:#8A030C;--hdr-hi:#FFFFFF;--hdr-hi-ink:#8A030C;--band:linear-gradient(90deg,#000000 0 33.4%,#DD0000 33.4% 66.6%,#FFCE00 66.6%)}
-:root[data-lega="ligue1"]{--accent:#1A3F8F;--on-accent:#FFFFFF;--brand:#091C3E;--hdr:linear-gradient(120deg,#0B1F3A,#1E4D8F);--hdr-ink:#0B1F3A;--hdr-hi:#EF4135;--hdr-hi-ink:#FFFFFF;--band:linear-gradient(90deg,#0055A4 0 33.4%,#F4F5F0 33.4% 66.6%,#EF4135 66.6%)}
-:root[data-lega="eredivisie"]{--accent:#C24E00;--on-accent:#FFFFFF;--brand:#E65100;--hdr:linear-gradient(120deg,#E65100,#FF8A1F);--hdr-ink:#B23F00;--hdr-hi:#FFFFFF;--hdr-hi-ink:#B23F00;--band:linear-gradient(90deg,#AE1C28 0 33.4%,#F4F5F0 33.4% 66.6%,#21468B 66.6%)}
-:root[data-lega="portugal"]{--accent:#00754A;--on-accent:#FFFFFF;--brand:#00553A;--hdr:linear-gradient(120deg,#00553A,#00874E);--hdr-ink:#00553A;--hdr-hi:#E4202E;--hdr-hi-ink:#FFFFFF;--band:linear-gradient(90deg,#006600 0 40%,#FF0000 40%)}
-:root[data-lega="superlig"]{--accent:#C8102E;--on-accent:#FFFFFF;--brand:#16161C;--hdr:linear-gradient(120deg,#16161C,#3A0A10 55%,#C8102E);--hdr-ink:#16161C;--hdr-hi:#E30A17;--hdr-hi-ink:#FFFFFF;--band:linear-gradient(90deg,#E30A17 0 30%,#F4F5F0 30% 70%,#E30A17 70%)}
-:root[data-lega="champions"]{--accent:#1B3A8C;--on-accent:#FFFFFF;--brand:#0A1A4A;--hdr:radial-gradient(circle at 12% 30%,rgba(255,255,255,.55) 0 1px,transparent 1.6px),radial-gradient(circle at 34% 72%,rgba(255,255,255,.45) 0 1px,transparent 1.6px),radial-gradient(circle at 58% 22%,rgba(255,255,255,.5) 0 1px,transparent 1.6px),radial-gradient(circle at 81% 64%,rgba(255,255,255,.45) 0 1px,transparent 1.6px),radial-gradient(circle at 93% 18%,rgba(255,255,255,.4) 0 1px,transparent 1.6px),linear-gradient(120deg,#030A26,#14236E);--hdr-ink:#0A1A4A;--hdr-hi:#D9E2F2;--hdr-hi-ink:#0A1A4A;--band:linear-gradient(90deg,#0A1A4A,#3B5BB8 45%,#D9E2F2)}
-@media (prefers-color-scheme:dark){
-  :root[data-lega="serie-a"]:not([data-theme="light"]){--accent:#5CB3FF;--on-accent:#06122A}
-  :root[data-lega="premier"]:not([data-theme="light"]){--accent:#00FF85;--on-accent:#37003C}
-  :root[data-lega="liga"]:not([data-theme="light"]){--accent:#FF6B5E;--on-accent:#1A0705}
-  :root[data-lega="bundesliga"]:not([data-theme="light"]){--accent:#FF5A5F;--on-accent:#1A0505}
-  :root[data-lega="ligue1"]:not([data-theme="light"]){--accent:#8DB3FF;--on-accent:#08142E}
-  :root[data-lega="eredivisie"]:not([data-theme="light"]){--accent:#FF9A4D;--on-accent:#2A1000}
-  :root[data-lega="portugal"]:not([data-theme="light"]){--accent:#3DDC97;--on-accent:#00261A}
-  :root[data-lega="superlig"]:not([data-theme="light"]){--accent:#FF5A6A;--on-accent:#1A0408}
-  :root[data-lega="champions"]:not([data-theme="light"]){--accent:#C9D6EE;--on-accent:#0A1A4A}}
-:root[data-lega="serie-a"][data-theme="dark"]{--accent:#5CB3FF;--on-accent:#06122A}
-:root[data-lega="premier"][data-theme="dark"]{--accent:#00FF85;--on-accent:#37003C}
-:root[data-lega="liga"][data-theme="dark"]{--accent:#FF6B5E;--on-accent:#1A0705}
-:root[data-lega="bundesliga"][data-theme="dark"]{--accent:#FF5A5F;--on-accent:#1A0505}
-:root[data-lega="ligue1"][data-theme="dark"]{--accent:#8DB3FF;--on-accent:#08142E}
-:root[data-lega="eredivisie"][data-theme="dark"]{--accent:#FF9A4D;--on-accent:#2A1000}
-:root[data-lega="portugal"][data-theme="dark"]{--accent:#3DDC97;--on-accent:#00261A}
-:root[data-lega="superlig"][data-theme="dark"]{--accent:#FF5A6A;--on-accent:#1A0408}
-:root[data-lega="champions"][data-theme="dark"]{--accent:#C9D6EE;--on-accent:#0A1A4A}
+:root[data-lega="serie-a"]{--accent:#5CB3FF;--on-accent:#06122A;--brand:#0B3D91;--hdr:linear-gradient(120deg,#0B3D91,#1E7BE0);--hdr-ink:#0B3D91;--hdr-hi:#FFFFFF;--hdr-hi-ink:#0B3D91;--band:linear-gradient(90deg,#009246 0 33.4%,#F4F5F0 33.4% 66.6%,#CE2B37 66.6%)}
+:root[data-lega="premier"]{--accent:#00FF85;--on-accent:#37003C;--brand:#37003C;--hdr:linear-gradient(120deg,#37003C,#6A1475);--hdr-ink:#37003C;--hdr-hi:#00FF85;--hdr-hi-ink:#37003C;--band:linear-gradient(90deg,#00FF85,#04F5FF 40%,#E90052 75%,#963CFF)}
+:root[data-lega="liga"]{--accent:#FF6B5E;--on-accent:#1A0705;--brand:#D42A22;--hdr:linear-gradient(120deg,#E8382E,#FF6B57);--hdr-ink:#B81E17;--hdr-hi:#F1BF00;--hdr-hi-ink:#5A0B07;--band:linear-gradient(90deg,#AA151B 0 25%,#F1BF00 25% 75%,#AA151B 75%)}
+:root[data-lega="bundesliga"]{--accent:#FF5A5F;--on-accent:#1A0505;--brand:#D20515;--hdr:linear-gradient(120deg,#6B0209,#C8030F);--hdr-ink:#8A030C;--hdr-hi:#FFFFFF;--hdr-hi-ink:#8A030C;--band:linear-gradient(90deg,#000000 0 33.4%,#DD0000 33.4% 66.6%,#FFCE00 66.6%)}
+:root[data-lega="ligue1"]{--accent:#8DB3FF;--on-accent:#08142E;--brand:#091C3E;--hdr:linear-gradient(120deg,#0B1F3A,#1E4D8F);--hdr-ink:#0B1F3A;--hdr-hi:#EF4135;--hdr-hi-ink:#FFFFFF;--band:linear-gradient(90deg,#0055A4 0 33.4%,#F4F5F0 33.4% 66.6%,#EF4135 66.6%)}
+:root[data-lega="eredivisie"]{--accent:#FF9A4D;--on-accent:#2A1000;--brand:#E65100;--hdr:linear-gradient(120deg,#E65100,#FF8A1F);--hdr-ink:#B23F00;--hdr-hi:#FFFFFF;--hdr-hi-ink:#B23F00;--band:linear-gradient(90deg,#AE1C28 0 33.4%,#F4F5F0 33.4% 66.6%,#21468B 66.6%)}
+:root[data-lega="portugal"]{--accent:#3DDC97;--on-accent:#00261A;--brand:#00553A;--hdr:linear-gradient(120deg,#00553A,#00874E);--hdr-ink:#00553A;--hdr-hi:#E4202E;--hdr-hi-ink:#FFFFFF;--band:linear-gradient(90deg,#006600 0 40%,#FF0000 40%)}
+:root[data-lega="superlig"]{--accent:#FF5A6A;--on-accent:#1A0408;--brand:#16161C;--hdr:linear-gradient(120deg,#16161C,#3A0A10 55%,#C8102E);--hdr-ink:#16161C;--hdr-hi:#E30A17;--hdr-hi-ink:#FFFFFF;--band:linear-gradient(90deg,#E30A17 0 30%,#F4F5F0 30% 70%,#E30A17 70%)}
+:root[data-lega="champions"]{--accent:#C9D6EE;--on-accent:#0A1A4A;--brand:#0A1A4A;--hdr:radial-gradient(circle at 12% 30%,rgba(255,255,255,.55) 0 1px,transparent 1.6px),radial-gradient(circle at 34% 72%,rgba(255,255,255,.45) 0 1px,transparent 1.6px),radial-gradient(circle at 58% 22%,rgba(255,255,255,.5) 0 1px,transparent 1.6px),radial-gradient(circle at 81% 64%,rgba(255,255,255,.45) 0 1px,transparent 1.6px),radial-gradient(circle at 93% 18%,rgba(255,255,255,.4) 0 1px,transparent 1.6px),linear-gradient(120deg,#030A26,#14236E);--hdr-ink:#0A1A4A;--hdr-hi:#D9E2F2;--hdr-hi-ink:#0A1A4A;--band:linear-gradient(90deg,#0A1A4A,#3B5BB8 45%,#D9E2F2)}
 *{box-sizing:border-box}
 body{background:var(--ground);color:var(--ink);font-family:var(--body);font-stretch:100%;font-size:15px;line-height:1.45}
 .wrap{max-width:720px;margin:0 auto;padding-inline:16px;padding-block:0 40px}
@@ -194,9 +172,7 @@ details.msec .acc-t{font-size:19px}
 @media (max-width:380px){.shead,.srow{grid-template-columns:minmax(0,1fr) 54px 54px 48px;gap:8px}.ph-band h2{font-size:28px}}
 /* piccoli dettagli nei colori di ogni lega: fondo appena tinto, titoli sottolineati con i colori del paese, tacca sui
    titoli dei riquadri, simbolo della capolista */
-:root[data-lega]{--ground:color-mix(in srgb,var(--accent) 4%,#F3F5F9)}
-@media (prefers-color-scheme:dark){:root[data-lega]:not([data-theme="light"]){--ground:color-mix(in srgb,var(--accent) 5%,#0A1120)}}
-:root[data-lega][data-theme="dark"]{--ground:color-mix(in srgb,var(--accent) 5%,#0A1120)}
+:root[data-lega]{--ground:color-mix(in srgb,var(--accent) 4%,#050A14)}
 h2::after{content:"";display:block;width:36px;height:4px;border-radius:2px;margin-top:8px;background-color:var(--accent);background-image:var(--band)}
 .ph-band h2::after{display:none}
 .card h3{border-left:3px solid var(--accent);padding-left:9px}
@@ -207,8 +183,10 @@ h2 small{font-family:var(--body);font-stretch:100%;font-weight:500;font-size:13.
 .lead{color:var(--ink2);margin:0 0 12px;max-width:62ch}
 .crest{--c:#777;display:inline-grid;place-items:center;flex:none;width:30px;height:30px;border-radius:50%;background:var(--c);color:var(--cf,#fff);font-family:var(--display);font-stretch:var(--dw);font-weight:700;font-size:11px;letter-spacing:.02em;box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--ink) 14%,transparent)}
 .crest.s{width:22px;height:22px;font-size:9px}
-.tlogo{width:30px;height:30px;flex:none;border-radius:50%;background:#fff;padding:3px;object-fit:contain;box-shadow:inset 0 0 0 1px rgba(0,0,0,.08)}
-.tlogo.s{width:22px;height:22px;padding:2px}
+/* stemmi puliti, senza disco bianco dietro (richiesta dell'utente del 26/10): un filo di luce attorno perché quelli scuri
+   (Juventus, Udinese) non spariscano sul fondo notte, e un'ombra sotto */
+.tlogo{width:30px;height:30px;flex:none;object-fit:contain;filter:drop-shadow(0 0 1px rgba(255,255,255,.45)) drop-shadow(0 4px 8px rgba(0,0,0,.55))}
+.tlogo.s{width:22px;height:22px}
 .team{display:flex;align-items:center;gap:8px;min-width:0}
 .team b{font-weight:650;font-size:15.5px;font-stretch:88%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .dots{display:inline-flex;gap:3px}
@@ -437,6 +415,89 @@ a.plain{color:inherit;text-decoration:none}
 @media (max-width:420px){.pick .sc{font-size:36px}.dims{grid-template-columns:repeat(2,minmax(0,1fr))}}
 @media (prefers-reduced-motion:no-preference){section:not([hidden]){animation:in .2s ease-out}}
 @keyframes in{from{opacity:.75;transform:translateY(4px)}to{opacity:1;transform:none}}
+/* ===== aspetto moderno (26/10/2026, riferimenti scelti dall'utente: Sofascore e DAZN/Sky). Notte di stadio con i
+   riflettori nel colore della lega, schede di vetro con il bagliore dei colori delle due squadre, numeri da tabellone,
+   la casella favorita della schedina illuminata, zone della classifica a quadratini colorati ===== */
+body::before{content:"";position:fixed;inset:0;z-index:-1;pointer-events:none;
+  background:radial-gradient(120% 55% at 50% -10%,color-mix(in srgb,var(--accent) 30%,transparent),transparent 62%),
+             radial-gradient(70% 40% at 100% 108%,color-mix(in srgb,var(--accent) 13%,transparent),transparent 70%)}
+header{box-shadow:inset 0 -1px 0 rgba(255,255,255,.08),0 16px 36px -18px color-mix(in srgb,var(--accent) 75%,transparent)}
+nav a[aria-current="page"]::after{box-shadow:0 0 14px var(--hdr-hi),0 0 3px var(--hdr-hi)}
+h2{font-size:30px;letter-spacing:-.015em;color:#FFFFFF}
+h2::after{box-shadow:0 0 16px color-mix(in srgb,var(--accent) 80%,transparent)}
+.card{background:linear-gradient(180deg,var(--glass-hi),var(--glass-lo));border:1px solid var(--line);border-radius:20px;box-shadow:inset 0 1px 0 rgba(255,255,255,.06),0 22px 44px -30px rgba(0,0,0,.95)}
+.card h3{color:#FFFFFF}
+.cardlink{box-shadow:inset 0 1px 0 rgba(255,255,255,.06),0 22px 44px -30px rgba(0,0,0,.95);transition:transform .3s cubic-bezier(.2,.7,.2,1),border-color .3s,box-shadow .3s}
+@media (hover:hover){.cardlink:hover{transform:translateY(-3px);border-color:var(--line2);box-shadow:inset 0 1px 0 rgba(255,255,255,.08),0 30px 54px -28px rgba(0,0,0,1),0 0 0 1px color-mix(in srgb,var(--accent) 30%,transparent)}}
+.cardlink:active{transform:scale(.985);background:linear-gradient(180deg,var(--glass-hi),var(--glass-lo))}
+/* bagliore dei colori delle squadre (--hc casa, --ac ospiti, da glowVars) dietro gli stemmi */
+.card.fx,.card.hero,.card.gusto{position:relative;overflow:hidden;isolation:isolate}
+.card.fx::before,.card.hero::before,.card.gusto::before{content:"";position:absolute;inset:0;z-index:-1;pointer-events:none;
+  background:radial-gradient(80% 75% at 0% 0%,color-mix(in srgb,var(--hc,#5B6678) 62%,transparent),transparent 70%),
+             radial-gradient(80% 75% at 100% 0%,color-mix(in srgb,var(--ac,#5B6678) 62%,transparent),transparent 70%)}
+/* in cima una riga nei colori delle due squadre, come nelle grafiche della tv */
+.card.fx::after,.card.hero::after,.card.gusto::after{content:"";position:absolute;left:0;right:0;top:0;height:3px;pointer-events:none;
+  background:linear-gradient(90deg,var(--hc,#5B6678),color-mix(in srgb,var(--hc,#5B6678) 0%,transparent) 42%,color-mix(in srgb,var(--ac,#5B6678) 0%,transparent) 58%,var(--ac,#5B6678))}
+.pick .sc{font-size:52px;background:linear-gradient(180deg,#FFFFFF 38%,#97A8C6);-webkit-background-clip:text;background-clip:text;color:transparent;filter:drop-shadow(0 6px 16px rgba(0,0,0,.55))}
+.pick small{color:var(--ink2)}
+.fx-teams .crest,.fx-teams .tlogo{width:48px;height:48px;font-size:14px}
+.fx-teams .crest{box-shadow:0 10px 22px -8px rgba(0,0,0,.9),0 0 0 2px rgba(255,255,255,.1)}
+#dettaglio article .fx-teams .crest,#dettaglio article .fx-teams .tlogo{width:60px;height:60px;font-size:17px}
+.fx-teams .team b{font-size:17px;color:#FFFFFF}
+.dots i.V{box-shadow:0 0 8px color-mix(in srgb,var(--good) 75%,transparent)}
+.dots i.P{box-shadow:0 0 8px color-mix(in srgb,var(--bad) 65%,transparent)}
+.sched .c{background:rgba(255,255,255,.035);border-color:var(--line);border-radius:12px;transition:transform .3s}
+.sched b{box-shadow:inset 0 0 0 1.5px var(--line2)}
+.sched .on{background:linear-gradient(135deg,color-mix(in srgb,var(--o) 46%,transparent),color-mix(in srgb,var(--o) 10%,transparent));border-color:color-mix(in srgb,var(--o) 80%,transparent);box-shadow:0 12px 28px -12px var(--o),inset 0 1px 0 rgba(255,255,255,.14)}
+.sched .on em{color:#FFFFFF}
+.sched .x.on b{color:#FFFFFF}
+.sched i{box-shadow:0 0 10px var(--o)}
+.fx-nums b,.fact b{color:#FFFFFF}
+.clash{background:linear-gradient(90deg,color-mix(in srgb,var(--accent) 16%,transparent),transparent 85%);padding:9px 12px;border-left-width:3px}
+.picks .pk small{justify-self:start;padding:2px 9px;border-radius:999px;background:color-mix(in srgb,currentColor 16%,transparent)}
+.more{text-shadow:0 0 18px color-mix(in srgb,var(--accent) 60%,transparent)}
+details.acc>summary{background:linear-gradient(180deg,var(--glass-hi),var(--glass-lo));border-color:var(--line);border-radius:18px;box-shadow:inset 0 1px 0 rgba(255,255,255,.06),0 18px 36px -28px rgba(0,0,0,.95);transition:border-color .25s,box-shadow .25s}
+details.acc[open]>summary{border-color:color-mix(in srgb,var(--accent) 55%,transparent);box-shadow:0 0 0 1px color-mix(in srgb,var(--accent) 22%,transparent),0 16px 36px -20px color-mix(in srgb,var(--accent) 65%,transparent)}
+.acc-t{color:#FFFFFF}
+.acc-ch{background:linear-gradient(135deg,var(--accent),color-mix(in srgb,var(--accent) 50%,#000));color:var(--on-accent);box-shadow:0 6px 16px -6px var(--accent)}
+.secbar button{background:rgba(255,255,255,.06);border:1px solid var(--line);color:var(--ink);transition:border-color .25s,box-shadow .25s}
+@media (hover:hover){.secbar button:hover{border-color:color-mix(in srgb,var(--accent) 60%,transparent);box-shadow:0 0 18px -6px var(--accent)}}
+.secbar button.all{border:0;background:transparent;box-shadow:none}
+.seg button{background:rgba(255,255,255,.05);border-color:var(--line);color:var(--ink2)}
+.seg button[aria-pressed="true"]{background:linear-gradient(135deg,var(--accent),color-mix(in srgb,var(--accent) 55%,#000));border-color:transparent;color:var(--on-accent);box-shadow:0 8px 20px -8px var(--accent)}
+.evl{background:linear-gradient(180deg,var(--glass-hi),var(--glass-lo));border-color:var(--line);border-radius:20px}
+.evl>.card{background:transparent}
+@media (hover:hover){.evl>.cardlink:hover{transform:none;background:rgba(255,255,255,.04);box-shadow:none}}
+.evl>.ev:nth-child(1) .rk{color:#F5C542;text-shadow:0 0 12px rgba(245,197,66,.6)}
+.evl>.ev:nth-child(2) .rk{color:#D5DEEC}.evl>.ev:nth-child(3) .rk{color:#E0A070}
+.ev .evv{color:#FFFFFF}
+th{border-bottom-color:var(--line)}
+td{border-bottom-color:var(--line)}
+@media (hover:hover){tbody tr:hover td{background:rgba(255,255,255,.035)}}
+.pos{border-left:0;width:26px;height:24px;display:inline-grid;place-items:center;padding:0;border-radius:7px;font-weight:750;font-size:13px;background:rgba(255,255,255,.07)}
+.pos.z-cl{background:var(--home);color:#FFFFFF;box-shadow:0 0 12px -2px var(--home)}
+.pos.z-el{background:var(--away);color:#FFFFFF;box-shadow:0 0 12px -2px var(--away)}
+.pos.z-co{background:var(--conf);color:#03231F}
+.pos.z-rp{background:var(--warn);color:#241600}
+.pos.z-rel{background:var(--bad);color:#FFFFFF;box-shadow:0 0 12px -2px var(--bad)}
+.back{background:rgba(255,255,255,.06);border-color:var(--line);color:var(--ink)}
+.search{background:rgba(255,255,255,.05);border-color:var(--line2)}
+.tile{background:linear-gradient(180deg,var(--glass-hi),var(--glass-lo));border-color:var(--line)}
+.sbar i,.g-meter i{box-shadow:0 0 10px var(--accent)}
+.card.live{border-color:color-mix(in srgb,var(--bad) 60%,transparent)}
+@media (prefers-reduced-motion:no-preference){
+  .card.live{animation:livepulse 2.2s ease-in-out infinite}
+  .list>.card,.stack>.card,details.acc,.card.hero{animation:rise .55s cubic-bezier(.2,.7,.2,1) both}
+  .list>.card:nth-child(2),.stack>.card:nth-child(2){animation-delay:.05s}
+  .list>.card:nth-child(3),.stack>.card:nth-child(3){animation-delay:.1s}
+  .list>.card:nth-child(4),.stack>.card:nth-child(4){animation-delay:.15s}
+  .list>.card:nth-child(5),.stack>.card:nth-child(5){animation-delay:.2s}
+  .list>.card:nth-child(n+6),.stack>.card:nth-child(n+6){animation-delay:.25s}
+  .sched .on{animation:mark .6s .25s cubic-bezier(.2,.7,.2,1) both}
+}
+@keyframes rise{from{opacity:0;transform:translateY(16px) scale(.985)}to{opacity:1;transform:none}}
+@keyframes mark{from{box-shadow:0 0 0 0 var(--o)}50%{box-shadow:0 0 0 6px color-mix(in srgb,var(--o) 25%,transparent)}to{box-shadow:0 12px 28px -12px var(--o),inset 0 1px 0 rgba(255,255,255,.14)}}
+@keyframes livepulse{50%{box-shadow:0 0 0 1px color-mix(in srgb,var(--bad) 45%,transparent),0 0 26px -6px var(--bad)}}
 </style>
 
 <header><div class="wrap">
@@ -489,6 +550,15 @@ function crest(id, small) {
 }
 const team = (id, small) => `<span class="team">${crest(id, small)}<b>${esc((T[id] || {}).name || '?')}</b></span>`;
 const dots = f => `<span class="dots" aria-label="Forma: ${esc((f || []).join(' '))}">${(f || []).slice().reverse().map(r => `<i class="${r}"></i>`).join('')}</span>`;
+// colore di una squadra per il bagliore delle schede: quelli quasi neri un po' schiariti, se no sul fondo scuro spariscono
+function glow(id) {
+  const c = (T[id] || {}).color;
+  if (!/^#[0-9a-f]{6}$/i.test(c || '')) return '#5B6678';
+  if (lum(c) > .02) return c;
+  const n = parseInt(c.slice(1), 16);
+  return '#' + [n >> 16, (n >> 8) & 255, n & 255].map(v => Math.round(v + (255 - v) * .45).toString(16).padStart(2, '0')).join('');
+}
+const glowVars = (h, a) => `--hc:${glow(h)};--ac:${glow(a)}`;
 // la schedina 1X2: tre caselle come sul Totocalcio, segnata la più probabile; la barretta è la probabilità e sotto, se
 // c'è M, quella del mercato
 function sched(p1, px, p2, M, big) {
@@ -515,7 +585,7 @@ function vGiornata() {
   const rounds = Object.keys(byRound).sort((a, b) => (+a || 99) - (+b || 99)).slice(0, 2);
   return live + gustoTeaser() + roundCard() + rounds.map(r => `<h2>${r === 'altre' ? 'Prossime partite' : rname(r)} <small>pronostici</small></h2>
     <div class="list">${byRound[r].map(f => { const tone = refTone(f.P && f.P.referee), yr = f.P && f.P.yellowRisk;
-      return `<a class="card cardlink fx" href="#p${f.id}">
+      return `<a class="card cardlink fx" style="${glowVars(f.home, f.away)}" href="#p${f.id}">
       <div class="fx-top"><span class="fx-when">${when(f.start)}</span>${luTag(f.lineups)}</div>
       <div class="fx-teams">
         <div class="side">${team(f.home)}${dots((T[f.home] || {}).form)}</div>
@@ -1110,7 +1180,7 @@ function gustoCard(g) {
   const value = g.value.length ? `<h4>Con valore secondo modello e bookmaker</h4>${betTable(g.value)}`
     : `<p class="small muted">${g.odds ? 'Nessuna giocata con valore tra quelle di cui c\'è la quota vera del bookmaker.' : 'Quote del bookmaker non ancora pubblicate (di solito arrivano uno o due giorni prima): una giocata conviene se il tuo bookmaker paga più della quota giusta.'}</p>`;
   const top = g.top.length ? `<h4>Le giocate consigliate</h4>${betTable(g.top)}` : '';
-  return `<article class="card gusto">
+  return `<article class="card gusto" style="${glowVars(g.home, g.away)}">
     <div class="g-top"><span class="g-score num">${g.score}<small>/100</small></span><span class="g-lvl">${gustoLevel(g.score)}</span><span class="g-when">${when(g.start)}</span></div>
     <div class="g-meter" role="img" aria-label="Punteggio ${g.score} su 100"><i style="width:${g.score}%"></i></div>
     ${sides}${bars}${fact}${why}${warn}
@@ -1212,7 +1282,7 @@ function vPartita(id) {
   const S = matchSecs(x, P, h, a);
   const side = (t, cls) => `<a class="side ${cls}" href="#s${t}">${team(t)}<small class="muted">${row(t).pos ?? '–'}ª · ${row(t).pts ?? 0} pt</small>${dots((T[t] || {}).form)}</a>`;
   return `${back('giornata', 'Giornata')}
-  <article class="card hero">
+  <article class="card hero" style="${glowVars(h, a)}">
     <div class="fx-top"><span class="fx-when">${when(x.start)}${x.round ? ' · ' + rname(x.round) : ''}</span><span class="lu ${sc}">${st}</span></div>
     <div class="fx-teams">${side(h, '')}<div class="pick"><div class="sc num">${P.pick.score.i}–${P.pick.score.j}</div><small>${esc(P.pick.label)}</small><small>${pc(P.pick.p)}</small></div>${side(a, 'r')}</div>
     ${sched(P.p1, P.px, P.p2, P.market, true)}
