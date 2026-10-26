@@ -19,6 +19,11 @@ import chicche
 
 K_PRIOR = 12           # peso della stagione scorsa sulle squadre, in partite equivalenti (un buon inizio conta, ma poco)
 K_PRIOR_NEW = 6        # con un allenatore nuovo la stagione scorsa pesa meno (confermato dalla prova del 13/10/2026)
+# base della forza a inizio stagione: un quarto viene da due stagioni fa (Understat). Prova del 26/10/2026
+# (ricerca/prova_stagione.py, cinque campionati maggiori): 1X2 −0,0012 ± 0,0007 sul 2025/26 e −0,0028 ± 0,0022 sul
+# 2026/27, in nessun campionato peggio; over/under pari. Dare più peso alla stagione in corso (K_PRIOR 4-8), pesare
+# di più la fine della stagione scorsa o avvicinarla alla media peggiora; con 0,15-0,5 il guadagno è simile
+PRIOR2_W = 0.25
 # Prova all'indietro del 13/10/2026 su 1520 partite (Serie A e Premier 2024/25 e 2025/26, ogni partita prevista solo
 # con le precedenti): la forza misurata con gli xG senza rigori (80%) più i gol veri (20%) prevede meglio della vecchia
 # formula (55% gol, 45% xG; in difesa tiri in porta e palloni concessi vicino all'area). Correggere per espulsioni,
@@ -42,6 +47,12 @@ PLAYER_PRIOR_MIN = 450  # peso del dato di base nelle statistiche per 90' dei gi
 RARE_PRIOR_MIN = 1200   # per gol, assist, xG e xA (eventi rari): circa 13 partite
 RARE_KEYS = {"goals", "assists", "expectedGoals", "expectedAssists"}
 RHO = -0.08            # correzione Dixon-Coles
+# in Champions al contrario: meno pareggi con pochi gol. Prova del 26/10/2026 (ricerca/prova_livello_coppa.py) sulle 432
+# partite di Champions 2024/25-2026/27: con −0,08 i pareggi previsti erano il 22%, quelli veri il 15% (in tutte e tre
+# le stagioni); con +0,05 l'1X2 migliora di 0,0073 ± 0,0026 di log loss, il gol/gol di 0,0013, l'over/under resta
+# uguale. Con 0 −0,0049 ± 0,0016, con +0,1 −0,0093 ± 0,0036: si tiene il valore prudente. Nei campionati invece −0,08
+# resta il migliore (con 0 l'1X2 peggiora di 0,0011 ± 0,0007, ricerca/prova_stagione.py)
+RHO_CUP = 0.05
 CALIB = 1.0            # avvicinamento alla media delle forze di attacco e difesa: era 0,80, ma i pronostici risultavano troppo
                        # prudenti (al 74% previsto l'esito usciva l'86% delle volte); con 1,0 sono tarati
 FORM_EFF = 0.05        # effetto massimo della forma recente sui gol attesi (dal 14/10/2026 non si applica: vedi predict)
@@ -709,9 +720,12 @@ def npx_of(s, n):
     return (a / n, b / n) if a is not None and b is not None and n else None
 
 
-def build(data, prior=None, matches=None, now=None, coaches=None, role_rows=None, changes=None, us_hist=None, ext=None):
+def build(data, prior=None, matches=None, now=None, coaches=None, role_rows=None, changes=None, us_hist=None, ext=None,
+          prior2=None):
     """changes: {squadra: {"at": data dell'ultimo cambio di allenatore in corsa, "pre": cambiato anche d'estate}}; us_hist: {squadra: partite
     di Understat con data, gol e xG senza rigori} (per pesare meno le partite prima del cambio).
+    prior2: due stagioni fa, da Understat {squadra: {"G", "GA", "npxG", "npxGA"} a partita, "_lg": medie del campionato}
+    (vedi PRIOR2_W).
     ext: forza europea (europa.py, per la Champions) {"mu", "he", "teams": {id: {A, D, league, n}}}: sostituisce la forza
     calcolata dalle partite della competizione, che in coppa sono poche e tra squadre di campionati diversi."""
     now = now or time.time()
@@ -763,6 +777,16 @@ def build(data, prior=None, matches=None, now=None, coaches=None, role_rows=None
         b = [pr_rating[t] for t in bottom if t in pr_rating]
         if b:
             pr_rating["_promoted"] = {k: mean([x[k] for x in b]) for k in ("att", "de", "xg")}
+        # due stagioni fa: un quarto della base, per chi era in campionato in tutte e due (le neopromosse restano come sono)
+        lg2 = (prior2 or {}).get("_lg") or {}
+        if all(lg2.get(k) for k in ("G", "npxG")):
+            for tid, o in prior2.items():
+                if tid in pr_rating and tid != "_promoted" and not tid.startswith("_"):
+                    att2 = W_GOALS * o["G"] / lg2["G"] + (1 - W_GOALS) * o["npxG"] / lg2["npxG"]
+                    de2 = W_GOALS * o["GA"] / lg2["G"] + (1 - W_GOALS) * o["npxGA"] / lg2["npxG"]
+                    r_ = pr_rating[tid]
+                    pr_rating[tid] = dict(r_, att=(1 - PRIOR2_W) * r_["att"] + PRIOR2_W * att2,
+                                          de=(1 - PRIOR2_W) * r_["de"] + PRIOR2_W * de2, two=True)
 
     HA_p = pr_league["hgf"] / pr_league["hp"] if pr_league and pr_league["hp"] else 1.45
     AA_p = pr_league["hga"] / pr_league["hp"] if pr_league and pr_league["hp"] else 1.15
@@ -827,6 +851,7 @@ def build(data, prior=None, matches=None, now=None, coaches=None, role_rows=None
         t["de"] = w * r["de"] + (1 - w) * base["de"]
         t["xgBase"] = w * r["xg"] + (1 - w) * base.get("xg", r["xg"])
         t["priorWeight"] = 1 - w if t["prior"] else 0
+        t["priorTwo"] = bool((pr_rating.get(tid) or {}).get("two"))   # base anche da due stagioni fa (PRIOR2_W)
         t["rank"], t["pct"], t["z"] = rank[tid], pct[tid], z[tid]
         t["style"] = style_tags(t["m"], t["pct"], t["rank"])
         t["dims"] = style_dims(t["pct"])
@@ -936,7 +961,8 @@ def public_analysis(A):
                       "form": t["ctx"]["form"][:10], "style": t["style"], "rel": rel,
                       "formations": [{"f": f, "n": c} for f, c in fm],
                       "rating": {"att": round(t["att"], 3), "de": round(t["de"], 3), "prior": t["prior"],
-                                 "priorWeight": round(t["priorWeight"], 2), "midChange": t.get("midChange"), "euro": t.get("euro")},
+                                 "priorWeight": round(t["priorWeight"], 2), "priorTwo": t.get("priorTwo"), "midChange": t.get("midChange"),
+                                 "euro": t.get("euro")},
                       "dims": t["dims"], "dimsPrev": t["dimsPrev"], "arch": t["arch"], "changes": t["changes"],
                       "summary": t["summary"], "coach": t["coach"], "coachRoles": t.get("coachRoles"),
                       "vacant": t.get("vacant")}
@@ -987,7 +1013,8 @@ def pois(lam, n):
     return p
 
 
-def score_matrix(lh, la):
+def score_matrix(lh, la, rho=None):
+    rho = RHO if rho is None else rho
     ph, pa = pois(lh, MAXG), pois(la, MAXG)
     mat, tot = [], 0.0
     for i in range(MAXG + 1):
@@ -995,13 +1022,13 @@ def score_matrix(lh, la):
         for j in range(MAXG + 1):
             tau = 1.0
             if i == 0 and j == 0:
-                tau = 1 - lh * la * RHO
+                tau = max(0.0, 1 - lh * la * rho)
             elif i == 0 and j == 1:
-                tau = 1 + lh * RHO
+                tau = 1 + lh * rho
             elif i == 1 and j == 0:
-                tau = 1 + la * RHO
+                tau = 1 + la * rho
             elif i == 1 and j == 1:
-                tau = 1 - RHO
+                tau = 1 - rho
             v = ph[i] * pa[j] * tau
             row.append(v)
             tot += v
@@ -1215,7 +1242,7 @@ def bets(P, names):
     quelle con valore da VALUE_MIN in su e quota del bookmaker in quella fascia; picks: le tre consigliate.
     names: {"home", "away"} -> nome della squadra."""
     lh, la = P["lh"], P["la"]
-    mat = score_matrix(lh, la)
+    mat = score_matrix(lh, la, RHO_CUP if P.get("cup") else RHO)
     cells = [(i, j, v) for i, row in enumerate(mat) for j, v in enumerate(row)]
     pr = lambda f: sum(v for i, j, v in cells if f(i, j))
     hn, an = names["home"], names["away"]
@@ -2067,7 +2094,7 @@ def predict(A, hid, aid, ev=None, extra=None):
         lh, la = lh * fac["h"] * k, la * fac["a"] * k
     lh, la = clamp(lh, .2, 4.5), clamp(la, .2, 4.5)
 
-    mat = score_matrix(lh, la)
+    mat = score_matrix(lh, la, RHO_CUP if cup else RHO)
     res, scores = outcome_probs(mat)
     tie = tie_probs(mat, lh, la, (ev or {}).get("tie")) if cup and (ev or {}).get("tie") else None
     outs = [("1", res["p1"], lambda s: s["i"] > s["j"], "Vittoria " + H["team"]["name"]),

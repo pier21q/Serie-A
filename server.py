@@ -937,6 +937,41 @@ def us_history(d):
     return out
 
 
+def us_prior2(d):
+    """Due stagioni fa da Understat, per un quarto della base della forza (model.PRIOR2_W): gol e xG senza rigori a
+    partita di ogni squadra e le medie del campionato. Una squadra si collega solo se lo stesso nome Understat c'è anche
+    nella stagione scorsa e porta alla stessa squadra, e a ogni squadra un solo nome."""
+    if CUP or ESPN_XG:
+        return None
+    y = season_year(d)
+    u2, u1 = load_json(us_file(y - 2), {}) or {}, load_json(us_file(y - 1), {}) or {}
+    t2 = list((u2.get("teams") or {}).values())
+    titles1 = {t.get("title") for t in (u1.get("teams") or {}).values()}
+    if len(t2) < 10 or not titles1:
+        return None
+    tot, n_all, out, seen = {"G": 0.0, "npxG": 0.0}, 0, {}, {}
+    for t in t2:
+        h = t.get("history") or []
+        if not h:
+            continue
+        row = {"G": sum(model.num(x.get("scored")) or 0 for x in h), "GA": sum(model.num(x.get("missed")) or 0 for x in h),
+               "npxG": sum(model.num(x.get("npxG")) or 0 for x in h), "npxGA": sum(model.num(x.get("npxGA")) or 0 for x in h)}
+        tot["G"] += row["G"]
+        tot["npxG"] += row["npxG"]
+        n_all += len(h)
+        tid = team_by_name(d, t.get("title")) if t.get("title") in titles1 else None
+        if tid:
+            seen.setdefault(tid, []).append(t.get("title"))
+            out[tid] = {k: v / len(h) for k, v in row.items()}
+    for tid, ts in seen.items():
+        if len(ts) > 1:
+            out.pop(tid, None)
+    if not n_all:
+        return None
+    out["_lg"] = {"G": tot["G"] / n_all, "npxG": tot["npxG"] / n_all}
+    return out
+
+
 ANALYSIS = {"key": None}
 
 
@@ -944,9 +979,10 @@ def analysis():
     d = STATE["data"]
     key = (d.get("updatedAt"), VERSION["matches"], VERSION["squads"], VERSION["coaches"], VERSION["forza"], PRIOR.get("sid"),
            len(PRIOR.get("results") or []), len(FANTA.get("teams", [])),
-           sum(1 for v in (PRIOR.get("refCards") or {}).values() if "roles" in v) // 20)
+           sum(1 for v in (PRIOR.get("refCards") or {}).values() if "roles" in v) // 20, us_file(season_year(d) - 2).exists())
     if ANALYSIS["key"] != key:
         A = model.build(d, PRIOR, MATCHES, coaches=COACHES, role_rows=role_rows(d), changes=coach_changes(d), us_hist=us_history(d),
+                        prior2=us_prior2(d),
                         ext=cup_ext(d))
         nxt = sorted((e for e in d.get("next") or [] if e.get("status") == "notstarted"
                       and str(e["home"]["id"]) in A["T"] and str(e["away"]["id"]) in A["T"]), key=lambda e: e["start"])
@@ -2618,8 +2654,9 @@ async def sources_step(d, now):
                 save_json(CACHE / f"understat-{lg}-{y - 1}.json", await us_league_get(lg, y - 1))
     else:
         save_json(us_file(y), await us_get(y))
-        if not us_file(y - 1).exists():
-            save_json(us_file(y - 1), await us_get(y - 1))
+        for yy in (y - 1, y - 2):   # due stagioni fa: per la base della forza (us_prior2)
+            if not us_file(yy).exists():
+                save_json(us_file(yy), await us_get(yy))
     STATUS["usAt"] = time.time()
     if LEGA["fantacalcio"]:
         try:
