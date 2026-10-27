@@ -215,9 +215,10 @@ h2 small{font-family:var(--body);font-stretch:100%;font-weight:500;font-size:13.
 .card.fx{display:grid;gap:12px}
 .fx>*{margin:0}
 .fx-when{font-weight:600;color:var(--ink2)}
-.lu{display:inline-flex;align-items:center;gap:6px;white-space:nowrap}
-.lu::before{content:"";width:7px;height:7px;border-radius:50%;background:var(--draw)}
-.lu.ok::before{background:var(--good)}.lu.mid::before{background:var(--warn)}
+/* span.lu: anche le tabelle dei giocatori hanno la classe lu, e con queste regole diventavano flex (intestazione di lato) */
+span.lu{display:inline-flex;align-items:center;gap:6px;white-space:nowrap}
+span.lu::before{content:"";width:7px;height:7px;border-radius:50%;background:var(--draw)}
+span.lu.ok::before{background:var(--good)}span.lu.mid::before{background:var(--warn)}
 /* la schedina 1X2, come sul Totocalcio: tre caselle, segnata quella più probabile; la barretta in fondo è la probabilità
    (tutta la casella = 100%), sotto quella del mercato quando c'è */
 .sched{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:6px}
