@@ -3665,7 +3665,7 @@ def snapshot():
     for e in sorted(d.get("next") or [], key=lambda e: e["start"])[:20]:
         if e.get("status") != "notstarted" or str(e["home"]["id"]) not in A["T"] or str(e["away"]["id"]) not in A["T"]:
             continue
-        P = model.predict(A, e["home"]["id"], e["away"]["id"], e, MATCHES.get(str(e["id"])))
+        P = model.predict(A, e["home"]["id"], e["away"]["id"], e, MATCHES.get(str(e["id"])), combos=True)
         fixtures.append({"id": e["id"], "round": e.get("round"), "start": e["start"], "home": str(e["home"]["id"]),
                          "away": str(e["away"]["id"]), "p1": round(P["p1"], 3), "px": round(P["px"], 3), "p2": round(P["p2"], 3),
                          "lh": round(P["lh"], 2), "la": round(P["la"], 2), "over25": round(P["over25"], 3), "btts": round(P["btts"], 3),
@@ -3797,7 +3797,7 @@ async def h_match(req):
     A = analysis()["A"]
     if not e or str(e["home"]["id"]) not in A["T"] or str(e["away"]["id"]) not in A["T"]:
         raise web.HTTPNotFound()
-    P = model.predict(A, e["home"]["id"], e["away"]["id"], e, MATCHES.get(str(e["id"])))
+    P = model.predict(A, e["home"]["id"], e["away"]["id"], e, MATCHES.get(str(e["id"])), combos=True)
     P["keys"] = keys_of(readings(), e)
     return web.json_response(P)
 

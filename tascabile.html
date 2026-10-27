@@ -89,6 +89,16 @@ details.acc[open] .acc-ch{transform:rotate(90deg)}
 .bets .bv.up{color:var(--good);background:color-mix(in srgb,var(--good) 14%,transparent)}
 .bets .bv.dn{color:var(--muted)}
 .bets .brow.nb{grid-template-columns:minmax(0,1fr) 92px 62px}
+/* combo della partita: tre riquadri uno sotto l'altro, giocate e riga della probabilità */
+.cmbs{display:grid;gap:12px}
+.cmb{border:1px solid var(--line);border-radius:14px;padding:10px 12px;background:var(--surface2)}
+.cmb-h{display:flex;justify-content:space-between;align-items:baseline;gap:8px}
+.cmb-h b{font-size:16px}
+.cmb ol{margin:4px 0 0;padding:0;list-style:none}
+.cmb li{display:flex;justify-content:space-between;gap:10px;font-size:13.5px;padding:5px 0;border-top:1px solid var(--line)}
+.cmb li b{flex:none}
+.cmb-f{margin-top:6px;font-size:12px;color:var(--muted);line-height:1.45}
+.cmb-f b{color:var(--ink)}
 .tier{display:block;font-style:normal;font-size:11.5px;font-weight:700}
 .tier.t1,.pk.t1 small{color:var(--good)}.tier.t2,.pk.t2 small{color:var(--home)}.tier.t3,.pk.t3 small{color:var(--warn)}
 .picks{display:grid;margin-top:10px}
@@ -1205,6 +1215,20 @@ function betsCard(P) {
     ${nota(BET_NOTE, 'Come si leggono quota minima e valore')}
     <p class="small muted">Gioca responsabilmente: vietato ai minori di 18 anni, nessuna previsione è una certezza.</p></div>`;
 }
+// combo della partita (model.mycombo, solo Serie A e Premier): tre combinazioni di giocate sulla stessa partita vicine a
+// quota 10, 15 e 20, fatte solo di giocate probabili per il modello (richiesta dell'utente del 27/10/2026). Sul sito
+// pubblico senza nomi di bookmaker.
+const COMBO_NOTE = `Più giocate della stessa partita in una sola quota. Ogni giocata il modello la dà almeno al 65% (al 60 o al 55% solo se a quella quota non si arriva); i giocatori sono sempre «o chi entra al suo posto», niente cartellini dei singoli. <b>Esce al</b>: probabilità che escano tutte, dal pronostico per gol ed esito e dalle distribuzioni tarate per tiri, angoli e cartellini (prese come indipendenti: per le combo di soli over è un po' prudente). <b>Quota stimata</b>: da quanto un grande bookmaker italiano fa pagare ogni tipo di giocata rispetto al modello, misurato su 5 partite e 4 combo vere il 27/10/2026; sbaglia di ±20%, quella vera si vede componendo la combo. <b>Resa attesa</b> = probabilità × quota stimata − 1: quasi sempre negativa, perché ogni giocata porta il margine del bookmaker. Le più care sono i tiri dei singoli giocatori: pagati come se uscissero il 20% più spesso di quanto dice il modello, che su questi è tarato entro 2-4 punti.`;
+function comboCard(P) {
+  const C = P.mycombo;
+  if (!C || !(C.items || []).length) return '';
+  return `<div class="card"><div class="cmbs">${C.items.map(c => `<div class="cmb">
+      <div class="cmb-h"><b>Quota ~${c.t}</b><span class="small muted" style="margin:0">${c.legs.length} giocate</span></div>
+      <ol>${c.legs.map(l => `<li><span>${esc(l.k)}</span><b class="num">${pc(l.p)}</b></li>`).join('')}</ol>
+      <div class="cmb-f">Esce al <b>${fx(c.p * 100, 1)}%</b> (quota giusta ${fx(c.fair, 1)}) · quota stimata circa <b>${fx(c.est, 1)}</b> · resa attesa ${c.ev > 0 ? '+' : ''}${Math.round(c.ev * 100)}%</div></div>`).join('')}</div>
+    ${nota(COMBO_NOTE, 'Come sono fatte le combo')}
+    <p class="small muted">Gioca responsabilmente: vietato ai minori di 18 anni, nessuna previsione è una certezza.</p></div>`;
+}
 
 /* chicche statistiche della partita, dalla più particolare alla più semplice (calcolo: chicche.py) */
 const CH_LV = [['Rara', 'Le più particolari', 3], ['Curiosa', 'Curiose', 2], ['Semplice', 'Da sapere', 1], ['Ritardo', 'Ritardi statistici', 0]];
@@ -1322,6 +1346,7 @@ function matchSecs(x, P, h, a) {
       scorersCard(P, h, a) + yellowCard(P, h, a) + refCard(P)],
     ['chicche', 'Chicche statistiche', chs || 'dalla più particolare alla più semplice', chicheCard(P, h, a)],
     ['scommesse', 'Scommesse', pk ? `più sicura: ${esc(pk.k)} (${pc(pk.p)}, da ${fx(pk.fair, 2)})` : `giocate con quota tra ${fx(B.lo ?? 1.35, 2)} e ${fx(B.hi ?? 1.8, 2)}`, betsCard(P)],
+    ['combo', 'Combo della partita', (P.mycombo && P.mycombo.items.length) ? P.mycombo.items.map(c => `~${c.t}: ${c.legs.length} giocate, ${fx(c.p * 100, 1)}%`).join(' · ') : '', comboCard(P)],
     ['come', 'Come funziona', 'da dove viene il pronostico', `<div class="card">${howNote()}</div>`],
   ].filter(z => z[3] && z[3].trim());
 }
