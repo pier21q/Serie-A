@@ -1350,21 +1350,37 @@ def bets(P, names):
 COMBO_LEAGUES = ("Serie A", "Premier League")
 COMBO_TARGETS = (10, 15, 20)
 COMBO_TOL = .10                      # quota stimata entro il 10% dall'obiettivo
-COMBO_PMIN, COMBO_PMAX = .65, .92    # giocate probabili, ma non quasi certe: sotto 1,10 alzano poco la quota
-COMBO_PSTEPS = (.65, .60, .55)       # se a una quota non si arriva con giocate dal 65% in su, si scende fino al 55%
+# giocate probabili, ma non quasi certe (sotto 1,10 alzano poco la quota). Dal 27/10 sera niente giocate sotto il 65%
+# per arrivare alla quota (richiesta dell'utente: «leva giocate più difficili e poco probabili»; al 70% non si arriva
+# a 15 e 20 in quasi nessuna partita)
+COMBO_PMIN, COMBO_PMAX = .65, .92
+# (probabilità minima, giocate sui giocatori solo se alzano la quota di COMBO_BOOST): se a una quota non si arriva, si
+# accettano prima i tiri che la alzano poco, poi giocate fino al 62%, mai sotto
+COMBO_PSTEPS = ((.65, True), (.65, False), (.62, False))
 # Quanto Sisal fa pagare ogni tipo di giocata rispetto al modello: (1 / quota Sisal) / probabilità del modello, mediana
 # sulle giocate tra 50% e 95% di 5 partite di Serie A lette il 27/10/2026 (n tra 4 e 61 per tipo). I tiri dei
 # giocatori sono i più cari (1,20: Sisal li paga come se uscissero il 20% più spesso di quanto dice il modello, che
 # su questi è tarato entro 2-4 punti), i punti cartellini i più giusti (1,01).
 COMBO_Q = {"esito": 1.04, "gol": 1.06, "gg": 1.10, "golsq": 1.08, "angoli": 1.07, "angoliET": 1.03, "angoli2": 1.10,
            "porta": 1.07, "portaET": 1.09, "porta2": 1.05, "tiri": 1.07, "cart": 1.01, "cart2": 1.14,
-           "gioc_gol": 1.03, "gioc_tiri": 1.20}
-# Quota MyCombo di Sisal = quota giusta del modello / prodotto dei COMBO_Q × COMBO_K. Misurata il 27/10/2026 su 4 combo
-# costruite su Sisal (Parma-Udinese 3 giocate: 10,19 contro 8,19 stimata con K = 1; Fiorentina-Atalanta 5: 8,17 contro
-# 7,70; Monza-Napoli 6: 5,99 contro 7,20; Venezia-Inter 8: 10,43 contro 9,2): K tra 0,83 e 1,24, in media 1,07. La
-# stima sbaglia quindi di ±20%: la quota vera si vede componendo la combo.
-COMBO_K = 1.07
-COMBO_PLAYERS = 3                    # giocatori diversi in una combo, al massimo
+           "gioc_gol": 1.03, "gioc_tiri": 1.20, "gioc_tiri2": 1.20 ** 2}
+# Quota MyCombo di Sisal = prodotto delle quote stimate delle giocate (1 / (p × COMBO_Q), mai sotto 1,02) × COMBO_K:
+# Sisal non sconta le giocate legate tra loro (Venezia-Inter con 15 giocate, quasi tutte tiri dell'Inter: 19,16 contro
+# 15,54 del prodotto delle sue quote singole; nelle 5 combo composte il 27/10/2026 la MyCombo vale da 1,10 a 1,51 volte
+# il prodotto delle quote vere). Con le quote stimate K va da 0,90 a 1,16 per le combo di giocate probabili
+# (Monza-Napoli 6 giocate, Venezia-Inter 8 e 15) e da 1,8 a 2,2 dove il modello vede le giocate molto più probabili
+# di Sisal (Parma-Udinese 3, Fiorentina-Atalanta 5): lì la stima è troppo bassa. La quota vera si vede componendo la
+# combo.
+COMBO_K = 1.0
+# Tiri dei giocatori per alzare la quota, soprattutto della squadra favorita (richiesta dell'utente del 27/10 sera,
+# come nelle sue schedine): fino a COMBO_PLAYERS giocatori, per ognuno «almeno n tiri», «almeno n tiri in porta» o le
+# due insieme (probabilità calcolata insieme: i tiri in porta sono una parte dei tiri). Nella scelta ogni loro giocata vale
+# COMBO_FAV in più se il giocatore è della favorita (COMBO_BOTH se non c'è una favorita netta, COMBO_OTHER se è
+# dell'altra squadra). Favorita: probabilità di vittoria del pronostico più 0,03 per ogni chiave tattica («forze contro
+# debolezze») che vince, con almeno COMBO_FAV_GAP di distacco.
+COMBO_PLAYERS = 10
+COMBO_FAV, COMBO_BOTH, COMBO_OTHER, COMBO_FAV_GAP = .3, .2, .05, .05
+COMBO_BOOST = 1.05                   # quota stimata minima di una giocata su un giocatore (1,10 per tiri + tiri in porta)
 COMBO_GOALS = 3                      # giocate sui gol (esito, gol, gol di squadra) in una combo, al massimo
 # tiri del giocatore «o chi entra al suo posto»: chi entra tira come lui, dispersione 5. Prova del 27/10/2026 sulle 61
 # partite con formazione ufficiale dello storico di Serie A e Premier (1.120 titolari, 422 sostituiti, ritrovati 500
@@ -1415,14 +1431,75 @@ def combo_prob(spec, X):
     raise ValueError(kind)
 
 
+def nb_pmf(mu, n, r):
+    """P(conteggio = n) per una binomiale negativa con media mu e dispersione r."""
+    return math.exp(math.lgamma(n + r) - math.lgamma(r) - math.lgamma(n + 1) + r * math.log(r / (r + mu)) + n * math.log(mu / (r + mu)))
+
+
+def binom_ge(n, p, k):
+    """P(binomiale(n, p) almeno k)."""
+    if k <= 0:
+        return 1.0
+    if n < k:
+        return 0.0
+    return 1 - sum(math.comb(n, i) * p ** i * (1 - p) ** (n - i) for i in range(k))
+
+
+def combo_corr(X, legs, NMAX=50):
+    """Quanto le giocate su tiri e tiri in porta di una stessa squadra escono insieme più spesso che se fossero
+    indipendenti: i tiri dei giocatori sono parti dei tiri della squadra (binomiale negativa, NB_R), quindi in una
+    partita in cui la squadra tira tanto escono più giocate insieme. -> P(insieme) / prodotto delle P, con lo stesso
+    modello; tutte le altre giocate restano indipendenti."""
+    corr = 1.0
+    for side, i in (("h", 0), ("a", 1)):
+        mu = X["vol"]["shots"][i]
+        th_t = min(X["vol"]["shotsOnTarget"][i] / mu, 1.0) if mu else 0
+        fs = []
+        for l in legs:
+            s = l["spec"]
+            if s[0] in ("pnb", "pair") and l.get("side") == ("home" if side == "h" else "away") and mu:
+                if s[0] == "pnb":
+                    sh = min(s[1] / mu, 1.0)
+                    fs.append(lambda N, sh=sh, k=s[2]: binom_ge(N, sh, k))
+                else:
+                    _, ls, th, a, b = s
+                    sh = min(ls / mu, 1.0)
+                    fs.append(lambda N, sh=sh, th=th, a=a, b=b: sum(math.comb(N, m) * sh ** m * (1 - sh) ** (N - m) * binom_ge(m, th, b)
+                                                                   for m in range(a, N + 1)))
+            elif s[0] == "nb" and s[2] == side and s[4]:
+                if s[1] == "shots":
+                    fs.append(lambda N, L=s[3]: 1.0 if N > L else 0.0)
+                elif s[1] == "shotsOnTarget":
+                    fs.append(lambda N, L=s[3]: binom_ge(N, th_t, int(L) + 1))
+        if len(fs) < 2:
+            continue
+        pm = [nb_pmf(mu, N, NB_R[("shots", 1)]) for N in range(NMAX + 1)]
+        f = [[fn(N) for N in range(NMAX + 1)] for fn in fs]
+        joint = sum(pm[N] * math.prod(fi[N] for fi in f) for N in range(NMAX + 1))
+        marg = math.prod(sum(pm[N] * fi[N] for N in range(NMAX + 1)) for fi in f)
+        if marg > 0:
+            corr *= joint / marg
+    return corr
+
+
+def pair_prob(ls, th, a, b):
+    """P(il giocatore fa almeno a tiri e almeno b tiri in porta): tiri binomiale negativa (media ls, COMBO_R_PLAYER),
+    ognuno in porta con probabilità th."""
+    tot = 0.0
+    for n in range(a, 41):
+        pin = 1 - (1 - th) ** n if b == 1 else 1 - (1 - th) ** n - n * th * (1 - th) ** (n - 1)
+        tot += nb_pmf(ls, n, COMBO_R_PLAYER) * pin
+    return tot
+
+
 def combo_legs(P, names, X):
     """Tutte le giocate possibili della partita: {g: gruppo (una per gruppo in una combo), k: testo, spec, ply,
     q: quanto Sisal la fa pagare rispetto al modello (COMBO_Q)}."""
     hn, an = names["home"], names["away"]
     L = []
 
-    def add(g, k, spec, ply=None, q=None):
-        L.append({"g": g, "k": k, "spec": spec, "ply": ply, "q": COMBO_Q[q or g]})
+    def add(g, k, spec, ply=None, q=None, side=None):
+        L.append({"g": g, "k": k, "spec": spec, "ply": ply, "q": COMBO_Q[q or g], "side": side})
     for k, f in ((f"1 · vince {hn}", lambda i, j: i > j), ("X · pareggio", lambda i, j: i == j), (f"2 · vince {an}", lambda i, j: i < j),
                  (f"1X · {hn} o pareggio", lambda i, j: i >= j), (f"X2 · {an} o pareggio", lambda i, j: i <= j),
                  ("12 · non finisce pari", lambda i, j: i != j)):
@@ -1481,18 +1558,27 @@ def combo_legs(P, names, X):
             nm, g = q["name"], f"pl{q['id']}"
             lg, la_ = (q.get("lamG") or 0) * f90, (q.get("lamA") or 0) * f90
             if lg:
-                add(g, f"{nm} (o chi entra al suo posto) segna", ("ply",), ply=(side, min(lg / lam_t, .95)), q="gioc_gol")
+                add(g, f"{nm} (o chi entra al suo posto) segna", ("ply",), ply=(side, min(lg / lam_t, .95)), q="gioc_gol",
+                    side=side)
             if lg + la_:
                 add(g, f"{nm} (o chi entra al suo posto) segna o fa assist", ("ply",), ply=(side, min((lg + la_) / lam_t, .95)),
-                    q="gioc_gol")
+                    q="gioc_gol", side=side)
             for n in (1, 2, 3, 4):
                 if q.get("shots"):
-                    add(g, f"{nm} (o chi entra al suo posto) almeno {n} tir{'o' if n == 1 else 'i'}", ("pnb", q["shots"] * f90, n),
-                        q="gioc_tiri")
+                    add(g, f"{nm} (o chi entra al suo posto) almeno {n} tir{'o' if n == 1 else 'i'}", ("pnb", q["shots"] * f90, n, "shots"),
+                        q="gioc_tiri", side=side)
             for n in (1, 2):
                 if q.get("sot"):
-                    add(g, f"{nm} (o chi entra al suo posto) almeno {n} tir{'o' if n == 1 else 'i'} in porta", ("pnb", q["sot"] * f90, n),
-                        q="gioc_tiri")
+                    add(g, f"{nm} (o chi entra al suo posto) almeno {n} tir{'o' if n == 1 else 'i'} in porta",
+                        ("pnb", q["sot"] * f90, n, "sot"), q="gioc_tiri", side=side)
+            if q.get("shots") and q.get("sot"):
+                ls, th = q["shots"] * f90, min(q["sot"] / q["shots"], 1.0)
+                for a in (2, 3, 4):
+                    for b in (1, 2):
+                        if b < a:
+                            add(g, [f"{nm} (o chi entra al suo posto) almeno {a} tiri",
+                                    f"{nm} (o chi entra al suo posto) almeno {b} tir{'o' if b == 1 else 'i'} in porta"],
+                                ("pair", ls, th, a, b), q="gioc_tiri2", side=side)
     return L
 
 
@@ -1520,12 +1606,15 @@ def combo_joint(X, legs):
 
 
 def mycombo(A, P, names):
-    """Tre combo per la partita, vicine alle quote COMBO_TARGETS su Sisal. Quota stimata di una combo = quota giusta del
-    modello / prodotto dei COMBO_Q delle sue giocate × COMBO_K. Ogni giocata ha probabilità tra COMBO_PMIN e
-    COMBO_PMAX; c'è sempre almeno una giocata sui gol o sull'esito e, se c'è, una su un giocatore. Tra le combo vicine
-    alla quota si sceglie quella che rende di più secondo il modello (giocate che Sisal fa pagare meno care, e quindi
-    anche meno giocate), poi quella con le giocate più legate a questa partita (probabilità contro quella di una
-    partita qualunque della lega); la seconda e la terza riusano il meno possibile le giocate delle precedenti."""
+    """Tre combo per la partita, vicine alle quote COMBO_TARGETS su Sisal. Quota stimata di una combo = prodotto delle
+    quote stimate delle sue giocate (1 / (probabilità del modello × COMBO_Q), mai sotto 1,02) × COMBO_K: Sisal non
+    sconta le giocate legate tra loro. Probabilità della combo: gol, esito e marcatori dalla matrice dei risultati, i
+    tiri della stessa squadra legati dal volume di tiri (combo_corr), il resto indipendente. Ogni giocata tra
+    COMBO_PMIN e COMBO_PMAX; c'è sempre almeno una giocata sui gol o sull'esito e almeno un giocatore. Tra le combo
+    vicine alla quota si sceglie quella con le giocate più probabili, usando i tiri dei giocatori (soprattutto della
+    squadra favorita) per alzare la quota, e a parità quella con le giocate più legate a questa partita (probabilità
+    contro quella di una partita qualunque della lega); la seconda e la terza riusano il meno possibile le giocate
+    delle precedenti."""
     rho = RHO_CUP if P.get("cup") else RHO
     vol = {k: [P["vol"][k][0], P["vol"][k][1]] for k in ("shots", "shotsOnTarget", "corners")}
     X = combo_inputs(P["lh"], P["la"], vol, [P["cards"]["home"], P["cards"]["away"]], rho)
@@ -1533,6 +1622,12 @@ def mycombo(A, P, names):
     V0 = (Lg.get("shares") or {}).get("vol") or {}
     vol0 = {k: [(V0.get(k) or {}).get("home") or vol[k][0], (V0.get(k) or {}).get("away") or vol[k][1]] for k in vol}
     X0 = combo_inputs(Lg.get("HA") or P["lh"], Lg.get("AA") or P["la"], vol0, [Lg.get("yellow") or X["cards"][0]] * 2, rho)
+    # squadra favorita: probabilità di vittoria del pronostico e chiavi tattiche vinte («forze contro debolezze»)
+    ins = P.get("ins") or []
+    sc = {s: P[pk] + .03 * sum(1 for i in ins if str(i.get("winner")) == str(P[s])) for s, pk in (("home", "p1"), ("away", "p2"))}
+    fav = ("home" if sc["home"] - sc["away"] >= COMBO_FAV_GAP else "away" if sc["away"] - sc["home"] >= COMBO_FAV_GAP
+           else None)
+    odds1 = lambda p, q: max(1.02, 1 / (p * q))   # quota stimata su Sisal di una giocata
     legs = []
     for l in combo_legs(P, names, X):
         s = l["spec"]
@@ -1542,12 +1637,28 @@ def mycombo(A, P, names):
         elif s[0] == "pnb":
             l["p"] = nb_over(s[1], s[2] - .5, COMBO_R_PLAYER)
             p0 = l["p"]
+        elif s[0] == "pair":
+            _, ls, th, a, b = s
+            l["p"] = pair_prob(ls, th, a, b)
+            l["parts"] = [nb_over(ls, a - .5, COMBO_R_PLAYER), nb_over(ls * th, b - .5, COMBO_R_PLAYER)]
+            p0 = l["p"]
         else:
             l["p"], p0 = combo_prob(s, X), combo_prob(s, X0)
-        if min(COMBO_PSTEPS) <= l["p"] <= COMBO_PMAX:
-            # valore della giocata nella combo: quanto poco Sisal la fa pagare, un po' quanto è legata alla partita
-            l["v"] = -math.log(l["q"]) + .1 * math.log(l["p"] / clamp(p0, .01, .99)) - .02
-            legs.append(l)
+        pmin_all = min(p for p, _ in COMBO_PSTEPS)
+        if not (pmin_all <= l["p"] <= COMBO_PMAX) or (s[0] == "pair" and min(l["parts"]) < pmin_all):
+            continue
+        # peso nella quota: log della quota stimata (le due giocate di una coppia ognuna con la sua)
+        l["w"] = (sum(math.log(odds1(p, COMBO_Q["gioc_tiri"])) for p in l["parts"]) if s[0] == "pair"
+                  else math.log(odds1(l["p"], l["q"])))
+        # i tiri dei giocatori servono ad alzare la quota: quelli che la alzano meno di COMBO_BOOST (quasi certi, su Sisal
+        # a 1,02-1,04) tolgono probabilità senza dare niente, e si usano solo se non c'è altro modo
+        l["weak"] = bool(l.get("side")) and l["w"] < math.log(COMBO_BOOST) * (2 if s[0] == "pair" else 1)
+        # valore nella combo: la probabilità (per intero), più un premio ai tiri dei giocatori della favorita, che
+        # così sono il primo modo per arrivare alla quota; un poco quanto la giocata è legata a questa partita
+        bonus = (COMBO_BOTH if fav is None else COMBO_FAV if l["side"] == fav else COMBO_OTHER) if l.get("side") else 0.0
+        bonus *= 2 if s[0] == "pair" else 1   # due giocate su Sisal
+        l["v"] = math.log(l["p"]) + bonus + .1 * math.log(l["p"] / clamp(p0, .01, .99))
+        legs.append(l)
     GOAL = ("esito", "gol", "gg", "golh", "gola")
     STEP = .02
     NB_ = int(math.log(max(COMBO_TARGETS) * 1.3) / STEP) + 2
@@ -1569,8 +1680,8 @@ def mycombo(A, P, names):
         return out_
 
     def dp(stat, exclude, used):
-        """Zaino a gruppi sulle statistiche: per ogni somma di −log(p × q) (passi di STEP) e numero di giocatori, la
-        scelta con il valore più alto."""
+        """Zaino a gruppi sulle statistiche: per ogni somma dei pesi nella quota (passi di STEP) e numero di
+        giocatori, la scelta con il valore più alto."""
         groups = {}
         for l in stat:
             if l["g"] not in exclude:
@@ -1581,7 +1692,7 @@ def mycombo(A, P, names):
             new = dict(best)
             for (b, k), (v, ch) in best.items():
                 for l in items:
-                    nb = b + int(round(-math.log(l["p"] * l["q"]) / STEP))
+                    nb = b + int(round(l["w"] / STEP))
                     nk = k + isp
                     if nb >= NB_ or nk > COMBO_PLAYERS:
                         continue
@@ -1601,9 +1712,9 @@ def mycombo(A, P, names):
                     cache[pls] = dp(stat, pls, used)
                 best = cache[pls]
                 vg = sum(l["v"] - (REUSE if id(l) in used else 0) for l in c)
-                lpg = -math.log(pj) - sum(math.log(l["q"]) for l in c)
+                wg = sum(l["w"] for l in c)
                 # solo i passi dello zaino vicini alla quota cercata (la somma arrotondata sbaglia di qualche passo)
-                lo, hi = int((target - lpg - tol) / STEP) - 3, int((target - lpg + tol) / STEP) + 3
+                lo, hi = int((target - wg - tol) / STEP) - 3, int((target - wg + tol) / STEP) + 3
                 for b in range(max(lo, 0), min(hi, NB_ - 1) + 1):
                     for k in range(COMBO_PLAYERS + 1):
                         e = best.get((b, k))
@@ -1612,9 +1723,9 @@ def mycombo(A, P, names):
                         v, ch = e
                         if cand is not None and vg + v <= cand[0]:
                             continue
-                        lp = lpg + sum(-math.log(l["p"] * l["q"]) for l in ch)
-                        if abs(lp - target) <= tol:
-                            cand = (vg + v, c + ch, pj * math.prod(l["p"] for l in ch), math.exp(lp) * COMBO_K)
+                        lw = wg + sum(l["w"] for l in ch)
+                        if abs(lw - target) <= tol:
+                            cand = (vg + v, c + ch, pj * math.prod(l["p"] for l in ch), math.exp(lw) * COMBO_K)
             if cand:
                 return cand
         return None
@@ -1624,22 +1735,26 @@ def mycombo(A, P, names):
     for T in COMBO_TARGETS:
         target = math.log(T / COMBO_K)
         cand = None
-        for pmin in COMBO_PSTEPS:
-            if pmin not in pools:
-                ok = [l for l in legs if l["p"] >= pmin]
+        for step in COMBO_PSTEPS:
+            pmin, boost = step
+            if step not in pools:
+                ok = [l for l in legs if l["p"] >= pmin and (l["spec"][0] != "pair" or min(l["parts"]) >= pmin)
+                      and not (boost and l["weak"])]
                 goal = [l for l in ok if l["g"] in GOAL or l["spec"][0] == "ply"]
-                pools[pmin] = (goal_sets(goal), [l for l in ok if l not in goal])
-            gsets, stat = pools[pmin]
+                pools[step] = (goal_sets(goal), [l for l in ok if l not in goal])
+            gsets, stat = pools[step]
             cand = search(target, gsets, stat, used)
             if cand:
                 break
         if not cand:
             continue
         _, chosen, pj, est = cand
+        pj *= combo_corr(X, chosen)   # i tiri della stessa squadra escono più spesso insieme
         used |= {id(l) for l in chosen}
         out.append({"t": T, "p": round(pj, 4), "fair": round(1 / pj, 2), "est": round(est, 1), "ev": round(pj * est - 1, 3),
-                    "legs": [{"k": l["k"], "p": round(l["p"], 3)} for l in sorted(chosen, key=lambda l: -l["p"])]})
-    return {"k": COMBO_K, "pmin": COMBO_PMIN, "items": out}
+                    "legs": [{"k": k, "p": round(p, 3)} for l in sorted(chosen, key=lambda l: -l["p"])
+                             for k, p in (zip(l["k"], l["parts"]) if l["spec"][0] == "pair" else [(l["k"], l["p"])])]})
+    return {"k": COMBO_K, "pmin": COMBO_PMIN, "fav": names[fav] if fav else None, "items": out}
 
 
 # ---------- partite più gustose: divario ampio, una squadra top e una flop, giocate in fascia con valore ----------
