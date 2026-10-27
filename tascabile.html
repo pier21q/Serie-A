@@ -734,7 +734,12 @@ function vStorico() {
     <div class="facts">${[['Esito azzeccato', pc(mk.pick), pc(mk.pickMk)], ['Log loss', fx(mk.ll, 3), fx(mk.llMk, 3)], ['Brier', fx(mk.brier, 3), fx(mk.brierMk, 3)]].map(([l, a, b]) =>
       `<div class="fact"><small>${l} · pronostico · mercato</small><b class="num">${a} · ${b}</b></div>`).join('')}</div>
     <p class="small muted">Stesse partite: pronostico al calcio d'inizio contro quote dei bookmaker senza margine (${esc((mk.src || []).join(', '))}). Log loss e Brier: più bassi è meglio. Il mercato è il rivale più duro: sulle 3.500 partite 2024-2026 dei cinque campionati maggiori ha fatto meglio del modello (0,970 contro 0,981).</p></div>` : '';
-  return `<h2>Storico pronostici${s.n ? ` <small>${s.n} partite</small>` : ''}</h2>${tiles}${cal}${mkc}${plc}${checksCard()}${items.length ? `<div class="list evl" style="margin-top:10px">${items.map(row).join('')}</div>
+  // combo della partita salvate e controllate sui risultati (model.combo_summary)
+  const cs = s.combo;
+  const csc = cs && cs.tiers ? `<div class="card" style="margin-top:10px"><h3>Combo controllate <small class="muted">sui risultati veri</small></h3>
+    <div class="facts">${Object.entries(cs.tiers).map(([t, v]) => `<div class="fact"><small>Quota ~${t} · ${v.n} combo</small><b class="num">${v.won} uscite</b><small>attese ${fx(v.exp, 1)}</small></div>`).join('')}</div>
+    <p class="small muted">Per tipo di giocata, prevista → vera: ${Object.entries(cs.legs || {}).map(([k, v]) => `${esc(k)} ${pc(v.p)} → ${pc(v.hit)}`).join(' · ')}. Solo le combo con tutte le giocate controllabili. Prova sulle partite già giocate (27/10/2026, combo rifatte togliendo ogni partita dalle statistiche dei giocatori): Serie A 10 uscite su 249 contro 9,8 attese, Premier 11 su 240 contro 9,0; con le quote stimate la resa sarebbe stata −50% e −43%.</p></div>` : '';
+  return `<h2>Storico pronostici${s.n ? ` <small>${s.n} partite</small>` : ''}</h2>${tiles}${cal}${mkc}${csc}${plc}${checksCard()}${items.length ? `<div class="list evl" style="margin-top:10px">${items.map(row).join('')}</div>
       <p class="small muted">Tocca una partita giocata per vedere com'è andata rispetto al pronostico.</p>` : ''}`;
 }
 
