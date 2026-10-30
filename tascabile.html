@@ -71,7 +71,7 @@ details.acc[open]>summary{border-color:color-mix(in srgb,var(--accent) 60%,var(-
 .acc-hd{display:flex;flex-direction:column;gap:3px;min-width:0}
 .acc-t{font-family:var(--display);font-stretch:var(--dw);font-weight:750;font-size:20px;letter-spacing:-.005em;line-height:1.1}
 .acc-s{font-size:12.5px;color:var(--muted);line-height:1.35}
-.acc-ch{margin-left:auto;flex:none;width:30px;height:30px;border-radius:50%;display:grid;place-items:center;font-size:21px;line-height:1;padding-bottom:2px;color:var(--accent);background:color-mix(in srgb,var(--accent) 13%,transparent);transition:transform .2s}
+.acc-ch{margin-left:auto;flex:none;width:30px;height:30px;border-radius:50%;display:grid;place-items:center;font-size:21px;line-height:1;padding-bottom:2px;color:var(--accent);background:color-mix(in srgb,var(--accent) 13%,transparent);transition:transform .2s cubic-bezier(.23,1,.32,1)}
 details.acc[open] .acc-ch{transform:rotate(90deg)}
 .acc-b{margin-top:10px}
 .bl.mk{color:var(--muted);margin-top:2px}
@@ -462,9 +462,15 @@ h2{font-size:30px;letter-spacing:-.015em;color:#FFFFFF}
 h2::after{box-shadow:0 0 16px color-mix(in srgb,var(--accent) 80%,transparent)}
 .card{background:linear-gradient(180deg,var(--glass-hi),var(--glass-lo));border:1px solid var(--line);border-radius:20px;box-shadow:inset 0 1px 0 rgba(255,255,255,.06),0 22px 44px -30px rgba(0,0,0,.95)}
 .card h3{color:#FFFFFF}
-.cardlink{box-shadow:inset 0 1px 0 rgba(255,255,255,.06),0 22px 44px -30px rgba(0,0,0,.95);transition:transform .3s cubic-bezier(.2,.7,.2,1),border-color .3s,box-shadow .3s}
+/* movimento (30/10/2026, regole di Emil Kowalski): curva d'uscita decisa, tempi sotto i 300 ms, pressione rapida */
+:root{--ease-out:cubic-bezier(.23,1,.32,1)}
+.cardlink{box-shadow:inset 0 1px 0 rgba(255,255,255,.06),0 22px 44px -30px rgba(0,0,0,.95);transition:transform .25s var(--ease-out),border-color .25s,box-shadow .25s}
 @media (hover:hover){.cardlink:hover{transform:translateY(-3px);border-color:var(--line2);box-shadow:inset 0 1px 0 rgba(255,255,255,.08),0 30px 54px -28px rgba(0,0,0,1),0 0 0 1px color-mix(in srgb,var(--accent) 30%,transparent)}}
-.cardlink:active{transform:scale(.985);background:linear-gradient(180deg,var(--glass-hi),var(--glass-lo))}
+.cardlink:active{transform:scale(.98);transition-duration:.12s;background:linear-gradient(180deg,var(--glass-hi),var(--glass-lo))}
+.secbar button,.seg button,.back,details.acc>summary,details.nota>summary{-webkit-tap-highlight-color:transparent}
+.secbar button,.seg button,.back{transition:transform .16s var(--ease-out),border-color .25s,box-shadow .25s}
+.secbar button:active,.seg button:active,.back:active{transform:scale(.96)}
+details.acc>summary:active{transform:scale(.985)}
 /* bagliore dei colori delle squadre (--hc casa, --ac ospiti, da glowVars) dietro gli stemmi */
 .card.fx,.card.hero,.card.gusto{position:relative;overflow:hidden;isolation:isolate}
 .card.fx::before,.card.hero::before,.card.gusto::before{content:"";position:absolute;inset:0;z-index:-1;pointer-events:none;
@@ -491,11 +497,11 @@ h2::after{box-shadow:0 0 16px color-mix(in srgb,var(--accent) 80%,transparent)}
 .clash{background:linear-gradient(90deg,color-mix(in srgb,var(--accent) 16%,transparent),transparent 85%);padding:9px 12px;border-left-width:3px}
 .picks .pk small{justify-self:start;padding:2px 9px;border-radius:999px;background:color-mix(in srgb,currentColor 16%,transparent)}
 .more{text-shadow:0 0 18px color-mix(in srgb,var(--accent) 60%,transparent)}
-details.acc>summary{background:linear-gradient(180deg,var(--glass-hi),var(--glass-lo));border-color:var(--line);border-radius:18px;box-shadow:inset 0 1px 0 rgba(255,255,255,.06),0 18px 36px -28px rgba(0,0,0,.95);transition:border-color .25s,box-shadow .25s}
+details.acc>summary{background:linear-gradient(180deg,var(--glass-hi),var(--glass-lo));border-color:var(--line);border-radius:18px;box-shadow:inset 0 1px 0 rgba(255,255,255,.06),0 18px 36px -28px rgba(0,0,0,.95);transition:transform .16s var(--ease-out),border-color .25s,box-shadow .25s}
 details.acc[open]>summary{border-color:color-mix(in srgb,var(--accent) 55%,transparent);box-shadow:0 0 0 1px color-mix(in srgb,var(--accent) 22%,transparent),0 16px 36px -20px color-mix(in srgb,var(--accent) 65%,transparent)}
 .acc-t{color:#FFFFFF}
 .acc-ch{background:linear-gradient(135deg,var(--accent),color-mix(in srgb,var(--accent) 50%,#000));color:var(--on-accent);box-shadow:0 6px 16px -6px var(--accent)}
-.secbar button{background:rgba(255,255,255,.06);border:1px solid var(--line);color:var(--ink);transition:border-color .25s,box-shadow .25s}
+.secbar button{background:rgba(255,255,255,.06);border:1px solid var(--line);color:var(--ink);transition:transform .16s var(--ease-out),border-color .25s,box-shadow .25s}
 @media (hover:hover){.secbar button:hover{border-color:color-mix(in srgb,var(--accent) 60%,transparent);box-shadow:0 0 18px -6px var(--accent)}}
 .secbar button.all{border:0;background:transparent;box-shadow:none}
 .seg button{background:rgba(255,255,255,.05);border-color:var(--line);color:var(--ink2)}
@@ -522,15 +528,17 @@ td{border-bottom-color:var(--line)}
 .card.live{border-color:color-mix(in srgb,var(--bad) 60%,transparent)}
 @media (prefers-reduced-motion:no-preference){
   .card.live{animation:livepulse 2.2s ease-in-out infinite}
-  .list>.card,.stack>.card,details.acc,.card.hero{animation:rise .55s cubic-bezier(.2,.7,.2,1) both}
-  .list>.card:nth-child(2),.stack>.card:nth-child(2){animation-delay:.05s}
-  .list>.card:nth-child(3),.stack>.card:nth-child(3){animation-delay:.1s}
-  .list>.card:nth-child(4),.stack>.card:nth-child(4){animation-delay:.15s}
-  .list>.card:nth-child(5),.stack>.card:nth-child(5){animation-delay:.2s}
-  .list>.card:nth-child(n+6),.stack>.card:nth-child(n+6){animation-delay:.25s}
-  .sched .on{animation:mark .6s .25s cubic-bezier(.2,.7,.2,1) both}
+  /* entrata delle schede: .3 s al posto di .55 s e 40 ms tra una scheda e l'altra, così tutto è a posto entro mezzo secondo */
+  .list>.card,.stack>.card,details.acc,.card.hero{animation:rise .3s var(--ease-out) both}
+  .list>.card:nth-child(2),.stack>.card:nth-child(2){animation-delay:.04s}
+  .list>.card:nth-child(3),.stack>.card:nth-child(3){animation-delay:.08s}
+  .list>.card:nth-child(4),.stack>.card:nth-child(4){animation-delay:.12s}
+  .list>.card:nth-child(5),.stack>.card:nth-child(5){animation-delay:.16s}
+  .list>.card:nth-child(n+6),.stack>.card:nth-child(n+6){animation-delay:.2s}
+  .sched .on{animation:mark .5s .15s var(--ease-out) both}
+  .quiet .card,.quiet details.acc,.quiet .sched .on,.quiet .sched i{animation:none}
 }
-@keyframes rise{from{opacity:0;transform:translateY(16px) scale(.985)}to{opacity:1;transform:none}}
+@keyframes rise{from{opacity:0;transform:translateY(10px) scale(.985)}to{opacity:1;transform:none}}
 @keyframes mark{from{box-shadow:0 0 0 0 var(--o)}50%{box-shadow:0 0 0 6px color-mix(in srgb,var(--o) 25%,transparent)}to{box-shadow:0 12px 28px -12px var(--o),inset 0 1px 0 rgba(255,255,255,.14)}}
 @keyframes livepulse{50%{box-shadow:0 0 0 1px color-mix(in srgb,var(--bad) 45%,transparent),0 0 26px -6px var(--bad)}}
 </style>
@@ -1731,7 +1739,7 @@ function cercaRes() {
 }
 function vCerca() {
   return `<h2>Cerca</h2><input id="q" class="search" type="search" placeholder="Giocatore o squadra" value="${esc(CQ)}" autocomplete="off" aria-label="Cerca un giocatore o una squadra">
-    <div id="qres" style="margin-top:10px">${cercaRes()}</div>`;
+    <div id="qres" class="quiet" style="margin-top:10px">${cercaRes()}</div>`;
 }
 document.addEventListener('input', e => { if (e.target.id === 'q') { CQ = e.target.value; document.getElementById('qres').innerHTML = cercaRes(); } });
 
@@ -1778,7 +1786,7 @@ function show(name) {
   for (const k of Object.keys(VIEWS)) {
     const el = document.getElementById(k);
     el.hidden = k !== view;
-    if (k === view) el.innerHTML = VIEWS[k]();
+    if (k === view) { el.classList.remove('quiet'); el.innerHTML = VIEWS[k](); }
   }
   const det = document.getElementById('dettaglio');
   det.hidden = !m;
@@ -1788,13 +1796,15 @@ function show(name) {
   if (m) window.scrollTo(0, 0);
   if (view === 'cerca') { const q = document.getElementById('q'); if (q) q.focus(); }
 }
+// cambiando filtro la vista si ridisegna sul posto: «quiet» spegne l'entrata delle schede, che resta solo per le viste nuove
+function evRedraw() { const el = document.getElementById('evidenza'); el.classList.add('quiet'); el.innerHTML = vEvidenza(); }
 document.addEventListener('click', e => {
   const v = e.target.closest('[data-e]');
-  if (v) { esel = +v.dataset.e; document.getElementById('evidenza').innerHTML = vEvidenza(); }
+  if (v) { esel = +v.dataset.e; evRedraw(); }
   const g = e.target.closest('[data-eg]');
-  if (g && g.dataset.eg !== egrp) { egrp = g.dataset.eg; esel = 0; document.getElementById('evidenza').innerHTML = vEvidenza(); }
+  if (g && g.dataset.eg !== egrp) { egrp = g.dataset.eg; esel = 0; evRedraw(); }
   const m = e.target.closest('[data-em]');
-  if (m) { emode = m.dataset.em; document.getElementById('evidenza').innerHTML = vEvidenza(); }
+  if (m) { emode = m.dataset.em; evRedraw(); }
 });
 window.addEventListener('hashchange', () => { if (D) show(location.hash.slice(1)); });
 // grafici: toccando (o passando con il mouse su) una zona o un tiro, il suo valore va nella riga sotto il grafico
