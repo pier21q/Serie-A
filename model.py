@@ -2776,6 +2776,29 @@ def update_history(H, A, data, matches, now=None, ids=None):
     return changed
 
 
+def merge_history(H, other):
+    """Prende da un altro storico (quello di GitHub, che gira anche col Mac spento) il pronostico al calcio d'inizio
+    delle partite per cui questo ha solo quello con la formazione probabile, o nessuno, e l'altro quello con la
+    formazione ufficiale: succede quando il Mac è in stop nell'ora prima della partita. Valutazioni e combo si rifanno
+    (update_history). -> quante partite prese"""
+    n = 0
+    mine = H.setdefault("matches", {})
+    for eid, o in (other.get("matches") or {}).items():
+        it, f = mine.get(eid), o.get("final") or {}
+        if not it or f.get("lineups") != "ufficiale" or (it.get("final") or {}).get("lineups") == "ufficiale":
+            continue
+        it["final"] = f
+        if o.get("market"):
+            it["market"] = o["market"]
+        it["fromCloud"] = True
+        if it.get("result"):
+            it["eval"] = evaluate(f, it["result"]["hs"], it["result"]["as"])
+        for k in ("evalMk", "comboEval"):   # si rifanno con il pronostico nuovo
+            it.pop(k, None)
+        n += 1
+    return n
+
+
 def combo_eval(it, x):
     """Le MyCombo salvate contro la partita vera: per ogni giocata True (uscita), False o None (non si può
     controllare: angoli per tempo, giocatore che non ha giocato), e la combo uscita solo se escono tutte."""

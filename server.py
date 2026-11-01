@@ -1004,6 +1004,33 @@ def analysis():
     return ANALYSIS
 
 
+CLOUD_HISTORY = ("https://raw.githubusercontent.com/pier21q/Serie-A/dati/" + (f"{LEGA['dir']}/" if LEGA["dir"] else "")
+                 + "history.json")   # lo storico di GitHub (ramo "dati", repository pubblico: si legge senza token)
+CLOUD_HISTORY_EVERY = 1800
+
+
+async def history_cloud_step(now):
+    """Sul Mac: se per qualche partita già cominciata lo storico ha il pronostico con la formazione probabile (il Mac
+    era in stop nell'ora prima, 27/10/2026), prende da GitHub quello con l'ufficiale (model.merge_history). Ogni
+    CLOUD_HISTORY_EVERY secondi al massimo, e solo per le partite degli ultimi 3 giorni, più un giro su tutte all'avvio."""
+    if CLOUD:
+        return
+    items = HISTORY.get("matches", {}).values()
+    first = not EXTRA.get("cloudHistDone")
+    need = [it for it in items if now >= it.get("start", 0) and (it.get("final") or it.get("latest"))
+            and (it.get("final") or {}).get("lineups") != "ufficiale" and (first or now - it["start"] < 3 * 86400)]
+    if not need or now - EXTRA.get("cloudHistAt", 0) < CLOUD_HISTORY_EVERY:
+        return
+    EXTRA["cloudHistAt"] = now
+    other = json.loads(await web_text(CLOUD_HISTORY))
+    n = model.merge_history(HISTORY, other)
+    EXTRA["cloudHistDone"] = True
+    if n:
+        update_history()   # valutazioni e combo con il pronostico preso
+        save_json(HISTORY_FILE, HISTORY)
+        log(f"Storico: preso da GitHub il pronostico con la formazione ufficiale di {n} partite (il Mac era in stop)")
+
+
 def update_history():
     try:
         if model.update_history(HISTORY, analysis()["A"], STATE["data"], MATCHES, ids=REG["espn"]):
@@ -3375,6 +3402,10 @@ async def refresher():
             STATE["data"] = d
             save_json(DATA_FILE, d)
             update_history()
+            try:
+                await history_cloud_step(now)
+            except Exception as e:
+                log(f"Storico di GitHub non letto: {errtxt(e)}")
             try:
                 snap = snapshot()
                 save_json(SNAPSHOT_FILE, snap)
