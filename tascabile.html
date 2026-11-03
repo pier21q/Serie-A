@@ -572,6 +572,8 @@ let D = null, T = {}, LG = {}, LGN = 'Serie A';   // dati: dentro la pagina (ant
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const prevYear = y => /^\d\d\/\d\d$/.test(y || '') ? `${String((+y.slice(0, 2) + 99) % 100).padStart(2, '0')}/${y.slice(0, 2)}` : 'stagione prima';   // «25/26» -> «24/25»
 const pc = v => v == null ? '–' : Math.round(v * 100) + '%';
+// «1 presenza», «3 presenze»
+const conta = (n, uno, molti) => `${n} ${n === 1 ? uno : molti}`;
 // «della Serie A», «della Liga», «dell'Eredivisie»
 const dellaLega = () => { const n = esc(LGN.replace(/^La /, '')); return /^[AEIOU]/.test(n) ? "dell'" + n : 'della ' + n; };
 // preposizione + minuto o percentuale con l'elisione giusta: «nel 56%», «nell'80%», «all'8'», «l'11%» (come mp in letture.py)
@@ -1671,7 +1673,7 @@ function vGiocatore(id) {
     if (p.mv != null) vote = `<div class="ph-vote"><b class="num">${fx(p.mv, 2)}</b><small>media voto</small>${p.fm != null ? `<small>FM ${fx(p.fm, 2)}</small>` : ''}</div>`;
     const tra = `tra ${pos === 'F' ? 'gli' : 'i'} ${POSP[pos]}`;
     season = `<div class="shead"><span></span><span>Totale</span><span>A partita</span><span>Pari ruolo</span></div>${groups}
-      <p class="small muted">A partita: media sulle ${fx(ap, 0)} presenze. La barra dice dove si colloca ogni 90 minuti ${tra} con almeno
+      <p class="small muted">A partita: media ${ap === 1 ? 'su 1 presenza' : `sulle ${fx(ap, 0)} presenze`}. La barra dice dove si colloca ogni 90 minuti ${tra} con almeno
       ${Math.round(minQ)} minuti (più piena = ne fa di più)${enough ? '' : `; con meno di ${Math.round(minQ)} minuti il confronto non c'è`}.
       Dati di ESPN${LG.noXg ? '' : LG.xgEspn || LG.cup ? ', xG dalla posizione dei tiri' : ', Understat'}${p.tk != null || p.gp != null ? ', Opta (Opta Analyst)' : ''}${p.mv != null ? ' e Fantacalcio.it' : ''}.</p>`;
   }
@@ -1739,7 +1741,7 @@ function cercaRes() {
   const pls = (D.players || []).filter(p => norm(p.n).includes(q) || tids.has(p.t)).sort((a, b) => (norm(b.n).includes(q) - norm(a.n).includes(q)) || (b.min || 0) - (a.min || 0)).slice(0, 40);
   if (!teams.length && !pls.length) return '<p class="small muted">Nessun giocatore o squadra trovati.</p>';
   return `<div class="list evl">${teams.map(r => `<a class="card cardlink ev" href="#s${r.team}">${crest(r.team)}<span class="evn"><b>${nm(r.team)}</b><small>${r.pos}ª in classifica · ${r.pts} punti</small></span><span class="muted">›</span></a>`).join('')}
-    ${pls.map(p => `<a class="card cardlink ev" href="#g${p.id}">${crest(p.t, true)}<span class="evn"><b>${esc(p.n)}</b><small>${nm(p.t)} · ${POSN[p.pos] || ''} · ${p.ap ?? 0} presenze${p.g ? ` · ${fx(p.g, 0)} gol` : ''}${p.a ? ` · ${fx(p.a, 0)} assist` : ''}</small></span><span class="muted">›</span></a>`).join('')}</div>`;
+    ${pls.map(p => `<a class="card cardlink ev" href="#g${p.id}">${crest(p.t, true)}<span class="evn"><b>${esc(p.n)}</b><small>${nm(p.t)} · ${POSN[p.pos] || ''} · ${conta(p.ap ?? 0, 'presenza', 'presenze')}${p.g ? ` · ${fx(p.g, 0)} gol` : ''}${p.a ? ` · ${fx(p.a, 0)} assist` : ''}</small></span><span class="muted">›</span></a>`).join('')}</div>`;
 }
 function vCerca() {
   return `<h2>Cerca</h2><input id="q" class="search" type="search" placeholder="Giocatore o squadra" value="${esc(CQ)}" autocomplete="off" aria-label="Cerca un giocatore o una squadra">
@@ -1758,7 +1760,7 @@ function vEvidenza() {
     const c = SE.cats[esel] || SE.cats[0], pg = emode === 'pg' || c.avg;
     const rows = (pg ? c.pg : c.tot) || [];
     const main = r => pg ? fx(r.pg, 2) : fx(r.tot, c.nd);
-    const side = r => c.avg ? `${r.apps} voti` : `${r.apps} presenze · ${pg ? 'totale ' + fx(r.tot, c.nd) : fx(r.pg, 2) + ' a partita'}`;
+    const side = r => c.avg ? `${conta(r.apps, 'voto', 'voti')}` : `${conta(r.apps, 'presenza', 'presenze')} · ${pg ? 'totale ' + fx(r.tot, c.nd) : fx(r.pg, 2) + ' a partita'}`;
     return `<h2>In evidenza <small>stagione</small></h2>${tabs}
       <p class="lead">Le classifiche della stagione con i dati reali di ${SE.games} giornate: per ogni voce i primi 10.</p>
       <div class="seg" role="group" aria-label="Statistica">${SE.cats.map((x, i) => `<button type="button" data-e="${i}" aria-pressed="${x === c}">${esc(x.l)}</button>`).join('')}</div>
