@@ -15,7 +15,7 @@ import unicodedata
 
 # ---------- cronaca ESPN (Opta) ----------
 
-EV_VERSION = 3   # 2: frasi del VAR tolte prima di leggere l'assist; 3: coordinate dei tiri (le partite vecchie si rileggono)
+EV_VERSION = 4   # 2: frasi del VAR tolte prima di leggere l'assist; 3: coordinate dei tiri; 4: rigore sul palo (le partite vecchie si rileggono)
 
 ZONE = [("very close range", "a due passi dalla porta", "vicino"), ("six yard box", "dall'area piccola", "vicino"),
         ("more than 35 yards", "da oltre 30 metri", "fuori"), ("long range", "dalla distanza", "fuori"),
@@ -65,7 +65,7 @@ def art(name, prep=""):
     """Nome della squadra con l'articolo giusto: «il Genoa», «l'Inter», «la Roma»; con prep="di": «dell'Inter»."""
     n = str(name or "?")
     v = n[:1].lower() in "aeiouh"
-    lo = not v and re.match(r"(?i)(s[^aeiou]|z|gn|ps|x)", n) is not None
+    lo = not v and not n.isupper() and re.match(r"(?i)(s[^aeiou]|z|gn|ps|x)", n) is not None   # il PSG, non lo PSG
     i = 2 if v else 3 if fem(n) else 1 if lo else 0
     w = PREP[prep][i] if prep else ("il", "lo", "l'", "la")[i]
     return w + ("" if w.endswith("'") else " ") + n
@@ -247,7 +247,8 @@ def parse_espn(j):
                 e["gk"] = sv.group(1)
             out.append(e)
             continue
-        m = re.match(r"^(.+?) \(([^)]+)\) hits the (left post|right post|bar)(.*)$", t)
+        # il rigore sul palo inizia con «Penalty missed! Still Lorient 0, Brest 1.»: il nome viene dopo
+        m = re.match(r"^(?:(?:Penalty )?missed! Still [^.]*\. )?(.+?) \(([^)]+)\) hits the (left post|right post|bar)(.*)$", t)
         if m:
             e.update(k="wood", s=tside(m.group(2), m.group(1)), w=m.group(1), x="traversa" if m.group(3) == "bar" else "palo",
                      **_detail(m.group(4)))
@@ -406,10 +407,15 @@ def shots_of(m):
 # ---------- i gol ----------
 
 def mp(prep, m):
-    """Preposizione + minuto con l'elisione giusta: mp("al", "8'") -> "all'8'", mp("dal", "53'") -> "dal 53'"."""
+    """Preposizione + minuto o percentuale con l'elisione giusta: mp("al", "8'") -> "all'8'", mp("dal", "53'") -> "dal 53'"."""
     m = str(m or "")
-    vowel = m[:1] == "8" or re.match(r"^1{1,2}'", m) is not None   # otto, ottanta..., uno, undici
-    return (prep[:-1] + "l'" if vowel else prep + " ") + m
+    vowel = m[:1] == "8" or re.match(r"^1{1,2}(?:'|%|$)", m) is not None   # otto, ottanta..., uno, undici
+    return (prep + "l'" if vowel else prep + " ") + m
+
+
+def il_min(m):
+    """Articolo + minuto con l'elisione giusta: il 70', l'80', l'11'."""
+    return f"l'{m}'" if str(m)[:1] == "8" or m in (1, 11) else f"il {m}'"
 
 
 def sca(prep, sc):
@@ -698,13 +704,13 @@ def read_match(m, prof=None):
             elif xg[lo] > xg[top] + .2:
                 s_ += f" Ha funzionato di più l'approccio {art(nm(lo), 'di')}: meno pallone, ma occasioni migliori ({fx(xg[lo])} xG a {fx(xg[top])})."
             elif xg[top] < 1.0:
-                s_ += f" Il possesso {art(nm(top), 'di')} è stato sterile: {fx(xg[top])} xG in {nsh[top]} tiri contro una difesa che ha respinto {int((box.get(lo) or {}).get('clearances') or 0)} palloni."
+                s_ += f" Il possesso {art(nm(top), 'di')} è stato sterile: {fx(xg[top])} xG in {plural(nsh[top], 'tiro', 'tiri')} contro una difesa che ha respinto {int((box.get(lo) or {}).get('clearances') or 0)} palloni."
             elif xg[top] - xg[lo] >= .8:
                 s_ += f" Il possesso {art(nm(top), 'di')} si è tradotto in occasioni ({fx(xg[top])} xG a {fx(xg[lo])})."
         game.append(s_)
     # 2. le occasioni
     tag = {"understat": "xG", "posizione": "xG (dalla posizione dei tiri)"}.get(src, "xG stimati dalla cronaca")
-    game.append(f"Occasioni: {nm('home')} {fx(xg['home'])} {tag} con {nsh['home']} tiri, {nm('away')} {fx(xg['away'])} con {nsh['away']}."
+    game.append(f"Occasioni: {nm('home')} {fx(xg['home'])} {tag} con {plural(nsh['home'], 'tiro', 'tiri')}, {nm('away')} {fx(xg['away'])} con {nsh['away']}."
                 + (f" Rigiocandola con le stesse occasioni finirebbe 1 {pct_in(xgp[0])} dei casi, X {pct_in(xgp[1])}, 2 {pct_in(xgp[2])}."
                    if src in ("understat", "posizione") else ""))
     # 2b. corsa e pressing: i dati ufficiali della UEFA (tracciamento), dove ci sono (Champions)
@@ -804,7 +810,8 @@ def read_match(m, prof=None):
         best = max(((a, sum(x[1] for x in shots[s] if a <= x[0] < a + 15), sum(1 for x in shots[s] if a <= x[0] < a + 15),
                      sum(x[1] for x in shots[other(s)] if a <= x[0] < a + 15)) for a in range(0, 81, 5)), key=lambda w: w[1])
         if best[1] >= .7 and best[1] >= 2.5 * best[3] and best[1] >= .35 * max(xg[s], .01):
-            game.append(f"Il momento migliore {art(nm(s), 'di')}: tra il {best[0]}' e il {best[0] + 15}' "
+            quando = f"tra {il_min(best[0])} e {il_min(best[0] + 15)}" if best[0] else "nei primi 15 minuti"
+            game.append(f"Il momento migliore {art(nm(s), 'di')}: {quando} "
                         f"({fx(best[1])} xG in {plural(best[2], 'tiro', 'tiri')}, contro {fx(best[3])} {art(nm(other(s)), 'di')}).")
     lu_text, not_started = lineup_reading(m, nm)
     out = {"v": 2, "title": headline(m, goals, xg, reds, nm), "xg": [round(xg["home"], 2), round(xg["away"], 2)], "src": src,
@@ -905,7 +912,7 @@ def ref_reading(m, ev, nm):
             ypg = R["yellow"] / R["games"]
             d = ypg / R["base"] - 1
             tone = "di solito severo" if d >= .15 else "di solito permissivo" if d <= -.15 else "nella media"
-            s_ += f", {tone}: {fx(ypg, 1)} gialli a partita in {R['games']} partite, contro {fx(R['base'], 1)} di media"
+            s_ += f", {tone}: {fx(ypg, 1)} gialli a partita in {plural(R['games'], 'partita', 'partite')}, contro {fx(R['base'], 1)} di media"
         out.append(s_ + ".")
     if b["home"] or b["away"]:
         s_ = f"Cartellini: {plural(y['home'] + y['away'], 'giallo', 'gialli')} ({nm('home')} {y['home']}, {nm('away')} {y['away']})"
@@ -1062,8 +1069,8 @@ def verdict(m, xg, xgp, goals, reds, big, nm, shots, not_started=None):
     # il pronostico: giusto ma prudente, o sicuro e sbagliato
     probs = {"1": f["p1"], "X": f["px"], "2": f["p2"]}
     if pick == out and probs[out] < .45 and xgp[{"1": 0, "X": 1, "2": 2}[out]] >= .8:
-        why.append((3, f"Il pronostico era giusto ma troppo prudente: dava questo esito al {round(probs[out] * 100)}%, "
-                       f"mentre con le occasioni create sarebbe uscito nel {round(xgp[{'1': 0, 'X': 1, '2': 2}[out]] * 100)}% dei casi."))
+        why.append((3, f"Il pronostico era giusto ma troppo prudente: dava questo esito {mp('al', str(round(probs[out] * 100)) + '%')}, "
+                       f"mentre con le occasioni create sarebbe uscito {pct_in(xgp[{'1': 0, 'X': 1, '2': 2}[out]])} dei casi."))
     if pick == out:
         if field == out:
             k, title = "ok", "Pronostico giusto, e il campo lo conferma"

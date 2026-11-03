@@ -25,6 +25,7 @@ Avvio:  python server.py            (apre la pagina nel browser)
 import asyncio
 import collections
 import difflib
+import html
 import json
 import math
 import os
@@ -2674,17 +2675,21 @@ async def sources_step(d, now):
     EXTRA["usAt"] = now - US_EVERY + 1800   # se va male, si riprova tra mezz'ora
     save_json(EXTRA_FILE, EXTRA)
     y = season_year(d)
-    if CUP:   # Understat non ha la Champions: i campionati dei giocatori, per la loro base
-        for lg in sorted(set(US_LEAGUES.values())):
-            save_json(CACHE / f"understat-{lg}-{y}.json", await us_league_get(lg, y))
-            if not (CACHE / f"understat-{lg}-{y - 1}.json").exists():
-                save_json(CACHE / f"understat-{lg}-{y - 1}.json", await us_league_get(lg, y - 1))
-    else:
-        save_json(us_file(y), await us_get(y))
-        for yy in (y - 1, y - 2):   # due stagioni fa: per la base della forza (us_prior2)
-            if not us_file(yy).exists():
-                save_json(us_file(yy), await us_get(yy))
-    STATUS["usAt"] = time.time()
+    fermo = None   # Understat che non risponde non deve fermare Fantacalcio.it, che sta nello stesso passo
+    try:
+        if CUP:   # Understat non ha la Champions: i campionati dei giocatori, per la loro base
+            for lg in sorted(set(US_LEAGUES.values())):
+                save_json(CACHE / f"understat-{lg}-{y}.json", await us_league_get(lg, y))
+                if not (CACHE / f"understat-{lg}-{y - 1}.json").exists():
+                    save_json(CACHE / f"understat-{lg}-{y - 1}.json", await us_league_get(lg, y - 1))
+        else:
+            save_json(us_file(y), await us_get(y))
+            for yy in (y - 1, y - 2):   # due stagioni fa: per la base della forza (us_prior2)
+                if not us_file(yy).exists():
+                    save_json(us_file(yy), await us_get(yy))
+        STATUS["usAt"] = time.time()
+    except Exception as e:
+        fermo = e
     if LEGA["fantacalcio"]:
         try:
             rows = statistiche.parse_fc_stats(await web_text(statistiche.FC_STATS))
@@ -2693,6 +2698,8 @@ async def sources_step(d, now):
                 STATUS["fcStatsAt"] = time.time()
         except Exception as e:
             log(f"Errore Fantacalcio.it (statistiche): {errtxt(e)}")
+    if fermo:
+        raise fermo
     EXTRA["usAt"] = now
     save_json(EXTRA_FILE, EXTRA)
     log("Statistiche aggiornate da Understat" + (" e Fantacalcio.it" if LEGA["fantacalcio"] else ""))
@@ -3664,6 +3671,20 @@ def _r(x, nd=4):
     return x
 
 
+def clean_texts(v):
+    """Testi puliti per il sito, come arrivano male dalle fonti: entità HTML (N&#039;Diaye, Bahad&#305;R, con la maiuscola
+    messa dopo la lettera codificata) e spazi doppi o in fondo («Vitória »)."""
+    if isinstance(v, str):
+        if "&" in v:
+            v = re.sub(r"ı([A-ZÇĞİÖŞÜ])", lambda m: "ı" + m.group(1).lower(), html.unescape(v))
+        return re.sub(r" {2,}", " ", v).strip() if "  " in v or v != v.strip() else v
+    if isinstance(v, list):
+        return [clean_texts(x) for x in v]
+    if isinstance(v, dict):
+        return {k: clean_texts(x) for k, x in v.items()}
+    return v
+
+
 def snapshot():
     """Dati per il sito: classifica, pronostici completi, analisi delle squadre, storico. Il fanta no: sta solo sul Mac."""
     d, an = STATE["data"], analysis()
@@ -3762,7 +3783,7 @@ def snapshot():
         snap["checks"] = STATE["checks"] = _r(dict(controlli.summary(d, snap, HISTORY, MATCHES, STATUS.get("usLinks")), at=time.time()), 3)
     except Exception as ex:
         log(f"Controlli automatici non fatti: {errtxt(ex)}")
-    return snap
+    return clean_texts(snap)
 
 
 def xpts_table(d):
