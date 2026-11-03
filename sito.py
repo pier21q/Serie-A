@@ -24,7 +24,7 @@ ICON = ROOT / "Icona Serie A.png"
 # quello che serve a GitHub Actions per aggiornare il sito: va nel ramo main
 CODICE = ["server.py", "model.py", "chicche.py", "fonti.py", "statistiche.py", "letture.py", "europa.py", "controlli.py", "sito.py", "tascabile.html", "Icona Serie A.png",
           "requirements.txt"] + [f"icone/{k}-{n}.png" for k in ("serie-a", "premier", "liga", "bundesliga", "ligue1", "eredivisie", "portugal", "superlig", "champions")
-                            for n in (180, 192, 512)]
+                            for n in (180, 192, 512)] + [f"stemmi/{k}.png" for k in ("serie-a", "premier", "liga", "bundesliga", "ligue1", "eredivisie", "portugal", "superlig", "champions")]
 # colore della barra del browser e della schermata Home per lega (il resto dei colori sta in tascabile.html)
 THEME = {"serie-a": "#0B3D91", "premier": "#37003C", "liga": "#C8231B", "bundesliga": "#B0040F", "ligue1": "#091C3E",
          "eredivisie": "#E65100", "portugal": "#00553A", "superlig": "#16161C", "champions": "#0A1A4A"}
@@ -109,6 +109,9 @@ def prepara(site, snap, img_dir=None, league="Serie A"):
     (site / "manifest.webmanifest").write_text(json.dumps(manifest, ensure_ascii=False, indent=1))
     (site / ".nojekyll").write_text("")
     (site / "robots.txt").write_text("User-agent: *\nDisallow: /\n")
+    stemma = ROOT / "stemmi" / f"{key}.png"   # lo stemma ufficiale nell'intestazione
+    if stemma.exists():
+        shutil.copyfile(stemma, site / "stemma.png")
     for size in (180, 192, 512):   # l'icona della lega (emblemi.py), se no quella dell'app
         out, src = site / f"icona-{size}.png", ROOT / "icone" / f"{key}-{size}.png"
         if src.exists():

@@ -42,7 +42,8 @@ header .wrap{padding-block:0}   /* il margine in fondo serve alla pagina, non al
 .bar1{display:flex;align-items:center;gap:12px;padding-block:12px 10px}
 .logo{display:flex;align-items:center;min-width:0;font-family:var(--display);font-stretch:70%;font-weight:800;font-size:27px;letter-spacing:-.005em;line-height:1;white-space:nowrap}
 .logo span{font-weight:300;font-stretch:100%;font-size:15px;letter-spacing:.01em;margin-left:7px;color:rgba(255,255,255,.72);align-self:flex-end;padding-bottom:3px}
-.logo .emb{width:30px;height:30px;border-radius:8px;margin-right:10px;box-shadow:0 0 0 2px rgba(255,255,255,.5)}
+.logo .emb{width:30px;height:30px;object-fit:contain;margin-right:10px;filter:drop-shadow(0 0 1px rgba(255,255,255,.55))}
+:root[data-lega="liga"] .logo .emb{filter:brightness(0) invert(1)}
 .logo.long{font-size:24px}.logo.long span{display:none}
 @media (max-width:420px){.logo span{display:none}}
 .stamp{margin-left:auto;font-size:11.5px;color:rgba(255,255,255,.8);text-align:right;line-height:1.35}
@@ -1861,7 +1862,7 @@ async function boot() {
   LG = D.league || {name: 'Serie A', dir: ''}; LGN = LG.name || 'Serie A';
   document.documentElement.dataset.lega = LG.key || 'serie-a';   // colori della lega (sul sito c'è già da sito.prepara)
   // emblema della lega: l'icona della cartella (emblemi.py); nell'anteprima senza icone sparisce
-  document.querySelector('.logo').innerHTML = `<img class="emb" src="icona-192.png" alt="" onerror="this.remove()">${esc(LGN)} <span>tascabile</span>`;
+  document.querySelector('.logo').innerHTML = `<img class="emb" src="stemma.png" alt="" onerror="this.onerror=()=>this.remove();this.src='icona-192.png'">${esc(LGN)} <span>tascabile</span>`;
   document.querySelector('.logo').classList.toggle('long', LGN.length > 10);
   const up = LG.dir ? '../' : '';
   // leghe principali come pulsanti, i campionati minori (Eredivisie, Portogallo, Turchia) nel menu «Altri»

@@ -4190,7 +4190,10 @@ def png_alpha_bbox(data):
 
 async def h_league_logo(_):
     """Logo ufficiale della lega senza i margini vuoti (le icone di OneFootball ne hanno molti: quella della Serie A
-    occupa metà dell'immagine), così nella pagina del Mac si vede grande."""
+    occupa metà dell'immagine), così nella pagina del Mac si vede grande. Prima quello pulito di stemmi/, senza sfondo."""
+    pulito = ROOT / "stemmi" / f"{LEGA_KEY}.png"
+    if pulito.exists():
+        return web.Response(body=pulito.read_bytes(), content_type="image/png", headers={"Cache-Control": "max-age=86400"})
     f = CACHE / "lega-logo-ritagliato.png"
     if not f.exists() and LEAGUE_LOGO.get(LEGA_KEY):
         try:
