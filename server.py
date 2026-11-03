@@ -4219,9 +4219,11 @@ async def h_league_logo(_):
 
 
 async def h_favicon(_):
-    """Icona della scheda del browser: l'emblema della lega (emblemi.py), o il pallone dell'app ritagliato perché si
+    """Icona della scheda del browser: lo stemma della lega (stemmi/), o l'emblema (emblemi.py), o il pallone dell'app ritagliato perché si
     veda anche piccolo."""
-    emb = ROOT / "icone" / f"{LEGA_KEY}-192.png"
+    emb = ROOT / "stemmi" / f"{LEGA_KEY}.png"
+    if not emb.exists():
+        emb = ROOT / "icone" / f"{LEGA_KEY}-192.png"
     if emb.exists():
         fav = CACHE / f"favicon-{LEGA_KEY}-64.png"
         if not fav.exists() or fav.stat().st_mtime < emb.stat().st_mtime:
