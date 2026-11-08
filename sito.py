@@ -32,8 +32,13 @@ CLOUD_FILES = {"cloud/aggiorna.yml": ".github/workflows/aggiorna.yml", "cloud/RE
 # i dati da cui riparte ogni aggiornamento su GitHub: vanno nel ramo "dati". Le rose del fanta no: il fanta sta solo
 # sul Mac (scelta dell'utente del 30/09/2026) e il repository è pubblico
 DATI = ["history.json", "cache/data.json", "cache/squads.json", "cache/prior.json", "cache/matches.json",
-        "cache/coaches.json", "cache/espn.json", "cache/fonti.json", "cache/giocatori.json",
-        "cache/fantacalcio-statistiche.json", "cache/understat-*.json"]
+        "cache/coaches.json", "cache/espn.json", "cache/fonti.json", "cache/giocatori.json", "cache/marcatori.json",
+        "cache/opta.json", "cache/fantacalcio-statistiche.json", "cache/understat-*.json",
+        # Champions: forza delle squadre europee e partite dei campionati (europa.py)
+        "cache/forza.json", "cache/uefa.json", "cache/mondo/*.json", "cache/img/*.png"]
+# le cartelle delle leghe nel ramo "dati" (la Serie A in cima, come in server.LEGHE): «sito.py dati» le carica tutte,
+# se no il push forzato cancellerebbe da GitHub le 8 che mancano (revisione dell'08/11/2026)
+LEGHE_DIR = ["", "premier", "liga", "bundesliga", "ligue1", "eredivisie", "portugal", "superlig", "champions"]
 DATI_IGNORA = "cache/img/\n*.tmp\nfotografia.json\nfanta.json\n"
 
 HEAD = """<!doctype html>
@@ -223,17 +228,23 @@ def pubblica_dati(data_dir, remote):
     with tempfile.TemporaryDirectory() as tmp:
         dest = Path(tmp) / "dati"
         dest.mkdir()
-        for pattern in DATI:
-            for src in sorted(data_dir.glob(pattern)):
-                out = dest / src.relative_to(data_dir)
-                out.parent.mkdir(parents=True, exist_ok=True)
-                shutil.copyfile(src, out)
-        extra = dest / "cache" / "fonti.json"
-        if extra.exists():   # al primo giro su GitHub si riscarica e si ripubblica tutto: si vede subito se qualcosa non va
-            e = json.loads(extra.read_text(encoding="utf-8"))
-            for k in ("usAt", "wikiAt", "rosterAt", "siteAt", "siteSig"):
-                e.pop(k, None)
-            extra.write_text(json.dumps(e, ensure_ascii=False), encoding="utf-8")
+        manca = [d or "serie-a" for d in LEGHE_DIR
+                 if not ((data_dir / d / "history.json").exists() and (data_dir / d / "cache" / "data.json").exists())]
+        if manca:   # meglio fermarsi che cancellare da GitHub una lega che sul Mac non c'è
+            return False, "Sul Mac mancano i dati di: " + ", ".join(manca) + ". Niente caricato."
+        for lega in LEGHE_DIR:
+            base = data_dir / lega
+            for pattern in DATI:
+                for src in sorted(base.glob(pattern)):
+                    out = dest / src.relative_to(data_dir)
+                    out.parent.mkdir(parents=True, exist_ok=True)
+                    shutil.copyfile(src, out)
+            extra = dest / lega / "cache" / "fonti.json"
+            if extra.exists():   # al primo giro su GitHub si riscarica e si ripubblica tutto: si vede subito se qualcosa non va
+                e = json.loads(extra.read_text(encoding="utf-8"))
+                for k in ("usAt", "wikiAt", "rosterAt", "siteAt", "siteSig"):
+                    e.pop(k, None)
+                extra.write_text(json.dumps(e, ensure_ascii=False), encoding="utf-8")
         (dest / ".gitignore").write_text(DATI_IGNORA, encoding="utf-8")
         git(dest, "init", "-q", "-b", "dati")
         git(dest, "config", "user.name", "Serie A Live")

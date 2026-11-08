@@ -550,6 +550,21 @@ def espn_odds(summary):
     return best
 
 
+EN_MONTHS = {m: i + 1 for i, m in enumerate(("january", "february", "march", "april", "may", "june", "july", "august",
+                                             "september", "october", "november", "december"))}
+
+
+def marcatori_upto(page):
+    """Data a cui è aggiornata la tabella dei marcatori di Wikipedia («Updated at 25 October 2026», «Updated to
+    match(es) played on 7 November 2026») -> (anno, mese, giorno) o None. La Süper Lig dell'08/11/2026 era ferma al
+    25/10: senza la data il confronto con ESPN segnava come diversi i gol fatti dopo."""
+    t = re.sub(r"<[^>]+>", " ", page or "")
+    m = re.search(r"[Uu]pdated\b[^.\n]{0,40}?(\d{1,2})\s+([A-Z][a-z]+)\s+(\d{4})", t)
+    if not m or m.group(2).lower() not in EN_MONTHS:
+        return None
+    return int(m.group(3)), EN_MONTHS[m.group(2).lower()], int(m.group(1))
+
+
 def parse_marcatori_en(page):
     """Tabella «Top goalscorers» di una stagione su Wikipedia in inglese -> [[giocatore, squadra, gol]]. Le righe
     riassuntive («Twelve players») si saltano."""

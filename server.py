@@ -31,6 +31,7 @@ import math
 import os
 import random
 import re
+import shlex
 import shutil
 import signal
 import subprocess
@@ -233,7 +234,28 @@ def save_json(path, obj):
 
 PRIOR = load_json(PRIOR_FILE, {})
 MATCHES = load_json(MATCH_FILE, {})
-HISTORY = load_json(HISTORY_FILE, {"matches": {}})
+def load_history():
+    """Lo storico dei pronostici non si può ricreare: se il file c'è ma non si legge, il programma si ferma (con una
+    copia del file) invece di partire con uno storico vuoto che al primo salvataggio lo sovrascriverebbe. Revisione
+    dell'08/11/2026."""
+    if not HISTORY_FILE.exists():
+        return {"matches": {}}
+    try:
+        h = json.loads(HISTORY_FILE.read_text(encoding="utf-8"))
+        if not isinstance(h, dict) or not isinstance(h.get("matches", {}), dict):
+            raise ValueError("struttura inattesa")
+        return h
+    except Exception as ex:
+        bad = HISTORY_FILE.with_name(f"{HISTORY_FILE.stem}-illeggibile-{time.strftime('%Y%m%d-%H%M%S')}.json")
+        try:
+            bad.write_bytes(HISTORY_FILE.read_bytes())
+        except Exception:
+            pass
+        raise SystemExit(f"{HISTORY_FILE} non si legge ({errtxt(ex)}): copia in {bad.name}. Lo storico non si può "
+                         f"ricreare: va sistemato a mano (o ripreso dal ramo «dati» di GitHub) prima di ripartire.")
+
+
+HISTORY = load_history()
 SQUADS = load_json(SQUAD_FILE, {})
 FANTA = load_json(FANTA_FILE, {"teams": []})
 COACHES = load_json(COACH_FILE, {})
@@ -267,7 +289,7 @@ ESPN_STATUS_IT = {"STATUS_FIRST_HALF": ("inprogress", "1° tempo", 6), "STATUS_H
                   "STATUS_SECOND_HALF": ("inprogress", "2° tempo", 7), "STATUS_FULL_TIME": ("finished", "Finale", 100),
                   "STATUS_FINAL": ("finished", "Finale", 100), "STATUS_SCHEDULED": ("notstarted", "Da giocare", 0),
                   "STATUS_POSTPONED": ("postponed", "Rinviata", 60), "STATUS_CANCELED": ("postponed", "Annullata", 70),
-                  "STATUS_ABANDONED": ("postponed", "Sospesa", 70)}
+                  "STATUS_ABANDONED": ("postponed", "Sospesa", 70), "STATUS_SUSPENDED": ("postponed", "Sospesa", 70)}
 DEPTH = {"G": 0, "CD": 1, "CD-L": 1, "CD-R": 1, "RB": 1, "LB": 1, "RWB": 1.5, "LWB": 1.5, "DM": 1.6, "CDM": 1.6,
          "RM": 2, "LM": 2, "CM": 2, "CM-L": 2, "CM-R": 2, "AM": 3, "AM-L": 3, "AM-R": 3, "RW": 3.5, "LW": 3.5,
          "SS": 3.8, "CF-L": 3.8, "CF-R": 3.8, "CF": 4, "F": 4, "RF": 4, "LF": 4}
@@ -345,7 +367,11 @@ def espn_event(e, teams):
     state, text, code = ESPN_STATUS_IT.get(typ.get("name"), (
         {"pre": "notstarted", "in": "inprogress", "post": "finished"}.get(typ.get("state"), "notstarted"),
         typ.get("description") or "", None))
-    score = lambda x: int(x["score"]) if state in ("inprogress", "finished") and str(x.get("score", "")).isdigit() else None
+    # finita ma non conclusa (sospesa o interrotta con un nome che la tabella non ha): non è una partita giocata, se no
+    # il punteggio del momento entra in classifica, minuti e statistiche (Rayo-Athletic della Liga, 08/11/2026)
+    if state == "finished" and typ.get("completed") is False:
+        state, text, code = "postponed", "Sospesa", 70
+    score =lambda x: int(x["score"]) if state in ("inprogress", "finished") and str(x.get("score", "")).isdigit() else None
     out = {"espn": str(e["id"]), "start": espn_time(e.get("date") or c.get("date")), "status": state, "statusText": text,
            "code": code, "clock": st.get("displayClock") if state == "inprogress" and code != 31 else None,
            "home": teams[h], "away": teams[a], "hs": score(comp["home"]), "as": score(comp["away"])}
@@ -401,6 +427,13 @@ def merge_events(d, evs):
         if was in ("notstarted", "inprogress", None) and ev["status"] == "finished" and base is not None:
             ended.append(ev)
         by_id[str(eid)] = ev
+        # rinviate e sospese già passate: il loro mese si riscarica finché ESPN non dà il risultato o la data nuova
+        # (Cambuur-Go Ahead Eagles dell'Eredivisie, sospesa il 31/10 e poi finita, restava «Suspended»)
+        sosp = EXTRA.setdefault("sospese", {})
+        if ev["status"] == "postponed" and ev["start"] < time.time():
+            sosp[x["espn"]] = ev["start"]
+        else:
+            sosp.pop(x["espn"], None)
     now = time.time()
     allev = list(by_id.values())
     d["live"] = sorted([e for e in allev if e["status"] == "inprogress"], key=lambda e: e["start"])
@@ -699,8 +732,13 @@ def summaries_due(d, now):
                    or (x.get("ev") or {}).get("v") != letture.EV_VERSION)   # cronaca letta con una versione vecchia
         # l'arbitro a volte ESPN lo aggiunge giorni dopo (in Premier): si riprova ogni 6 ore per tre giorni
         noref = not (x.get("referee") or {}).get("name") and now - e["start"] < 3 * 86400
-        wait = 120 if missing else 3600 if not x.get("final") else 6 * 3600
-        if e.get("espn") and (not x.get("final") or missing or noref) and now - x.get("espnAt", 0) >= wait:
+        # la cronaca scaricata appena finita la partita può non avere ancora l'ultimo gol (Villarreal-Getafe 2-0 della
+        # Liga: il gol al 90'+1' mancava): per tre giorni si riscarica ogni ora finché i gol non tornano col risultato
+        evs = (x.get("ev") or {}).get("ev") or []
+        short = ("ev" in x and e.get("hs") is not None and now - e["start"] < 3 * 86400
+                 and sum(1 for g in evs if g.get("k") in ("goal", "og")) < e["hs"] + e["as"])
+        wait = 120 if missing else 3600 if not x.get("final") or short else 6 * 3600
+        if e.get("espn") and (not x.get("final") or missing or noref or short) and now - x.get("espnAt", 0) >= wait:
             due.append((1, e))
         elif e.get("espn") and "odds" not in x and now - x.get("espnAt", 0) >= 120:   # quote di chiusura
             due.append((2, e))
@@ -778,6 +816,8 @@ def number_rounds(d):
     giornata finisce quando una delle squadre gioca di nuovo. Le partite che hanno già la giornata la tengono."""
     evs = sorted({str(e["id"]): e for lst in ("played", "live", "next") for e in d.get(lst) or []}.values(),
                  key=lambda e: e["start"])
+    if LEGA["dir"]:
+        return number_rounds_auto(d, evs)
     teams_in, cur = {}, 0
     for e in evs:
         h, a = e["home"]["id"], e["away"]["id"]
@@ -788,6 +828,51 @@ def number_rounds(d):
             e["round"] = r
         cur = max(cur, e["round"])
         teams_in.setdefault(e["round"], set()).update((h, a))
+
+
+def number_rounds_auto(d, evs):
+    """Giornate delle leghe che non le hanno da nessuna fonte (tutte tranne la Serie A, che le ha da Fantacalcio.it; ESPN
+    non le dà nemmeno nell'API core). Le partite giocate o in corso tengono la loro, perché storico e letture la
+    usano già; le altre si rifanno a ogni giro in ordine di data: una giornata finisce quando una squadra gioca di nuovo
+    o quando ha già tutte le partite. Una giornata in mezzo al calendario con meno di metà delle partite è un gruppo di
+    recuperi (Liga, 02/12/2026: Real Sociedad-Real Madrid e Barcelona-Atlético, prima della giornata del 06/12):
+    quelle partite restano senza giornata, con «recupero», invece di finire nella giornata dopo con le squadre due
+    volte. Revisione dell'08/11/2026."""
+    per = max(1, len(d.get("teams") or {}) // 2)
+    teams_in, size, cur, auto = {}, {}, 0, []
+    for e in evs:
+        h, a = e["home"]["id"], e["away"]["id"]
+        if e.get("status") in ("finished", "inprogress") and (e.get("round") or e.get("recupero")):
+            if e.get("round"):
+                cur = max(cur, e["round"])
+                teams_in.setdefault(e["round"], set()).update((h, a))
+                size[e["round"]] = size.get(e["round"], 0) + 1
+            continue
+        e.pop("recupero", None)
+        r = cur or 1
+        if h in teams_in.get(r, ()) or a in teams_in.get(r, ()) or size.get(r, 0) >= per:
+            r = cur + 1
+        e["round"] = r
+        auto.append(e)
+        cur = r
+        teams_in.setdefault(r, set()).update((h, a))
+        size[r] = size.get(r, 0) + 1
+    ids = {id(e) for e in auto}
+    fixed = {e["round"] for e in evs if id(e) not in ids and e.get("round")}
+    rec = sorted(r for r in {e["round"] for e in auto}
+                 if r not in fixed and r > max(fixed or {0}) and r != cur and size[r] < per / 2)
+    for r in rec:   # le partite del gruppo piccolo che stanno nella giornata dopo ci vanno; le altre sono recuperi
+        for e in [e for e in auto if e["round"] == r]:
+            h, a = e["home"]["id"], e["away"]["id"]
+            if h not in teams_in[r + 1] and a not in teams_in[r + 1] and size[r + 1] < per:
+                e["round"] = r + 1
+                teams_in[r + 1].update((h, a))
+                size[r + 1] += 1
+            else:
+                e["round"], e["recupero"] = None, True
+    for e in auto:
+        if e["round"]:
+            e["round"] -= sum(1 for q in rec if q < e["round"])
 
 
 # Champions: i nomi brevi di ESPN che in italiano non si usano
@@ -1362,8 +1447,9 @@ async def wiki_scorers_step(d, now):
     get = lambda **p: web_text(fonti.WIKI_EN + "?" + urlencode(dict(base, **p)), headers={"User-Agent": WIKI_UA})
     secs = json.loads(await get(prop="sections")).get("parse", {}).get("sections") or []
     sec = next((x["index"] for x in secs if "scorer" in x["line"].lower()), None)
-    rows = fonti.parse_marcatori_en(json.loads(await get(prop="text", section=sec))["parse"]["text"]) if sec else []
-    save_json(SCORERS_FILE, {"at": now, "page": title, "rows": rows})
+    page = json.loads(await get(prop="text", section=sec))["parse"]["text"] if sec else ""
+    rows, upto = fonti.parse_marcatori_en(page), fonti.marcatori_upto(page)
+    save_json(SCORERS_FILE, {"at": now, "page": title, "rows": rows, "upto": list(upto) if upto else None})
     EXTRA["scorersAt"] = now
     save_json(EXTRA_FILE, EXTRA)
 
@@ -1408,9 +1494,20 @@ def sources_compare(d):
                 same += 1
         if n:
             out.append({"src": name, "n": n, "same": same, "nDiff": len(diff), "diff": diff[:40]})
-    # classifica marcatori di Wikipedia: solo i gol, solo chi c'è in classifica
+    # classifica marcatori di Wikipedia: solo i gol, solo chi c'è in classifica. Se Wikipedia dice fino a che giorno è
+    # aggiornata, i gol di ESPN si contano fino a quel giorno, dai tabellini delle partite
     wk = load_json(SCORERS_FILE, {}) or {}
     byid = {str(p["id"]): p for p in players}
+    upto = wk.get("upto")
+    g_upto = None
+    if upto:
+        end = datetime(*upto, tzinfo=timezone.utc).timestamp() + 86400 + 6 * 3600   # tutto quel giorno, in Europa
+        g_upto = collections.Counter()
+        for e in d.get("played") or []:
+            if e["start"] < end:
+                for pid, x in (((MATCHES.get(str(e["id"])) or {}).get("box") or {}).get("players") or {}).items():
+                    if x.get("goals") and REG["espn"].get(str(pid)) is not None:
+                        g_upto[str(REG["espn"][str(pid)])] += x["goals"]
     n = same = 0
     diff = []
     for name, club, goals in wk.get("rows") or []:
@@ -1420,8 +1517,9 @@ def sources_compare(d):
         if not p:
             continue
         n += 1
-        if (p.get("goalsEspn") or 0) != goals:
-            diff.append({"id": p["id"], "name": p.get("name"), "team": str(p.get("teamId")), "d": [["gol", p.get("goalsEspn"), goals]]})
+        mine = g_upto.get(str(p["id"]), 0) if g_upto is not None else (p.get("goalsEspn") or 0)
+        if mine != goals:
+            diff.append({"id": p["id"], "name": p.get("name"), "team": str(p.get("teamId")), "d": [["gol", mine, goals]]})
         else:
             same += 1
     if n:
@@ -3327,7 +3425,18 @@ async def refresher():
                         k = lt.tm_year * 12 + lt.tm_mon - 1
                         end = (lt.tm_year + (lt.tm_mon >= 7)) * 12 + 5
                         months = [f"{m // 12}{m % 12 + 1:02d}" for m in range(k, end + 1)]
+                    # anche i mesi delle partite sospese o rinviate (per 4 mesi al massimo) e di quelle salvate come
+                    # finite con lo stato «Suspended» di prima della correzione dell'08/11/2026
+                    sosp = EXTRA.setdefault("sospese", {})
+                    for e in d.get("played") or []:
+                        if e.get("espn") and e.get("statusText") == "Suspended":
+                            sosp.setdefault(e["espn"], e["start"])
+                    for k_, t in list(sosp.items()):
+                        if now - t > 120 * 86400:
+                            sosp.pop(k_)
+                    months += sorted({time.strftime("%Y%m", time.gmtime(t)) for t in sosp.values()} - set(months))
                     ended += await espn_schedule(d, months)
+                    save_json(EXTRA_FILE, EXTRA)
                     due["months"] = now + MONTHS_EVERY
                     due["today"] = now + (LIVE_EVERY if window else IDLE_EVERY)
                 elif now >= due["today"]:
@@ -3969,11 +4078,27 @@ def claude_bin():
     return str(found[-1]) if found else shutil.which("claude")
 
 
+def claude_restricted(exe):
+    """Se questa versione di Claude Code ha --restricted (confina i file alla cartella di lavoro): si guarda una volta."""
+    if exe not in CHAT.setdefault("restricted", {}):
+        try:
+            r = subprocess.run([exe, "--help"], capture_output=True, text=True, timeout=20)
+            CHAT["restricted"][exe] = "--restricted" in (r.stdout + r.stderr)
+        except Exception:
+            CHAT["restricted"][exe] = False
+    return CHAT["restricted"][exe]
+
+
 async def h_chat(req):
     """Una domanda a Claude: legge solo i file della cartella chat e risponde. Risposte con il tuo account Claude."""
     if not STATE["data"]:
         return not_ready()
-    body = await req.json()
+    try:   # un corpo non JSON o non oggetto è una richiesta sbagliata, non un errore del server (revisione dell'08/11/2026)
+        body = await req.json()
+    except ValueError:
+        raise web.HTTPBadRequest()
+    if not isinstance(body, dict) or not isinstance(body.get("q") or "", str):
+        raise web.HTTPBadRequest()
     q = (body.get("q") or "").strip()[:2000]
     if not q:
         raise web.HTTPBadRequest()
@@ -3987,17 +4112,27 @@ async def h_chat(req):
         prompt = CHAT_PROMPT.format(league=LEGA["name"], season=(d.get("season") or {}).get("year", ""), today=time.strftime("%d/%m/%Y %H:%M"),
                                     folder=CHAT_DIR)
         model_name = "sonnet" if CHAT_DEEP.search(q) or len(q) > 160 else "haiku"   # difficile se chiede di ragionare o è lunga
+        # solo la cartella della chat: Read, Grep e Glob leggerebbero qualsiasi file del Mac con un percorso assoluto.
+        # La guardia (chat_guardia.py) blocca ogni percorso fuori dalla cartella; --restricted fa lo stesso dove c'è
+        guard = " ".join(shlex.quote(x) for x in (sys.executable, "-I", str(ROOT / "chat_guardia.py"), str(CHAT_DIR)))
+        hooks = {"hooks": {"PreToolUse": [{"matcher": "Read|Grep|Glob", "hooks": [{"type": "command", "command": guard}]}]}}
         args = [exe, "-p", q, "--output-format", "json", "--model", model_name, "--tools", "Read,Grep,Glob",
-                "--allowedTools", "Read,Grep,Glob", "--system-prompt", prompt, "--strict-mcp-config"]
-        if body.get("session") and re.fullmatch(r"[\w-]{8,64}", body["session"]):
-            args += ["--resume", body["session"]]
+                "--allowedTools", "Read,Grep,Glob", "--system-prompt", prompt, "--strict-mcp-config",
+                "--settings", json.dumps(hooks)] + (["--restricted"] if await asyncio.to_thread(claude_restricted, exe) else [])
+        sess = body.get("session")
+        if isinstance(sess, str) and re.fullmatch(r"[\w-]{8,64}", sess):
+            args += ["--resume", sess]
+        proc = None
         try:
             proc = await asyncio.create_subprocess_exec(*args, cwd=str(CHAT_DIR), stdin=asyncio.subprocess.DEVNULL,
                                                         stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE)
             out, err = await asyncio.wait_for(proc.communicate(), timeout=180)
         except asyncio.TimeoutError:
             proc.kill()
+            await proc.wait()   # se no il processo resta zombie
             return web.json_response({"error": "Claude non ha risposto entro 3 minuti: riprova con una domanda più precisa."})
+        except OSError as ex:
+            return web.json_response({"error": f"Claude non si avvia: {errtxt(ex)}"})
     try:
         res = json.loads(out.decode() or "{}")
     except ValueError:

@@ -5,6 +5,7 @@ scala nei pronostici dei giocatori. Non correggono niente: dicono cosa guardare.
 Nati dal controllo generale del 14/10/2026: gli errori trovati quel giorno erano silenziosi (nessun crash, numeri
 sbagliati), visibili solo confrontando le parti tra loro. ricerca/controllo.py li lancia sui dati salvati del Mac."""
 import collections
+import time
 
 
 def check_data(data, snap, hist, M):
@@ -15,22 +16,29 @@ def check_data(data, snap, hist, M):
     played = [e for e in data.get("played") or [] if e.get("hs") is not None and e.get("status") == "finished"]
     rows = (data.get("standings") or {}).get("total") or []
     name = {str(r["team"]["id"]): r["team"]["name"] for r in rows}
+    # le partite finite da poche ore la classifica ESPN può non contarle ancora (Celta-Levante dell'08/11/2026): va
+    # bene sia con loro sia senza, se no era un falso allarme
+    now = time.time()   # una partita «finita» con la data nel futuro è un errore (sospesa): non è recente
+    recent = {str(e["id"]) for e in played if now - 8 * 3600 < e["start"] <= now}
+    rec_n = collections.Counter(str(e[s]["id"]) for e in played if str(e["id"]) in recent for s in ("home", "away"))
     # 1. classifica rifatta dai risultati (in coppa solo la fase campionato)
     tab = collections.defaultdict(lambda: [0, 0, 0, 0, 0, 0])   # p w d l gf ga
+    tab_old = collections.defaultdict(lambda: [0, 0, 0, 0, 0, 0])   # senza le partite delle ultime ore
     for e in played:
         if cup and e.get("stage") not in (None, "league-phase"):
             continue
         h, a = str(e["home"]["id"]), str(e["away"]["id"])
         for t, gf, ga in ((h, e["hs"], e["as"]), (a, e["as"], e["hs"])):
-            r = tab[t]
-            r[0] += 1
-            r[4] += gf
-            r[5] += ga
-            r[1 if gf > ga else 2 if gf == ga else 3] += 1
+            for tb in (tab, tab_old) if str(e["id"]) not in recent else (tab,):
+                r = tb[t]
+                r[0] += 1
+                r[4] += gf
+                r[5] += ga
+                r[1 if gf > ga else 2 if gf == ga else 3] += 1
     for r in rows:
         t = str(r["team"]["id"])
         mine = tab.get(t, [0] * 6)
-        if [r["p"], r["w"], r["d"], r["l"], r["gf"], r["ga"]] != mine:
+        if [r["p"], r["w"], r["d"], r["l"], r["gf"], r["ga"]] not in (mine, tab_old.get(t, [0] * 6)):
             bad("classifica di", name[t], "diversa dai risultati:", [r["p"], r["w"], r["d"], r["l"], r["gf"], r["ga"]], "invece di", mine)
         if r["pts"] != 3 * r["w"] + r["d"]:
             bad("punti di", name[t], r["pts"], "invece di", 3 * r["w"] + r["d"], "(penalizzazione?)")
@@ -45,6 +53,8 @@ def check_data(data, snap, hist, M):
             for s in ("home", "away"):
                 rnd[e.get("round")][str(e[s]["id"])] += 1
     for r_, c in rnd.items():
+        if r_ is None:   # i recuperi senza giornata (server.number_rounds_auto)
+            continue
         twice = [name.get(t, t) for t, n in c.items() if n > 1]
         if twice:
             bad("giornata", r_, "con squadre due volte:", ", ".join(twice))
@@ -71,7 +81,8 @@ def check_data(data, snap, hist, M):
     for p in data.get("players") or []:
         by_team[str(p.get("teamId"))].append(p)
     tm = {str(r["team"]["id"]): r["p"] for r in rows}
-    gf = {str(r["team"]["id"]): r["gf"] for r in rows}
+    # gol della squadra dai risultati, non dalla classifica ESPN, che le partite delle ultime ore può non contarle ancora
+    gf = {str(r["team"]["id"]): tab[str(r["team"]["id"])][4] for r in rows}
     for t, ps in by_team.items():
         if t not in tm:
             if sum(p.get("minutesPlayed") or 0 for p in ps) > 0:
@@ -80,14 +91,15 @@ def check_data(data, snap, hist, M):
         if not cup:
             mins = sum(p.get("minutesPlayed") or 0 for p in ps)
             exp = tm[t] * 990
-            if exp and not .93 <= mins / exp <= 1.07:
+            if exp and not any(.93 <= mins / ((tm[t] + j) * 990) <= 1.07
+                               for j in range(-rec_n[t], rec_n[t] + 1) if tm[t] + j > 0):
                 bad("minuti dei giocatori di", name[t], round(mins), "attesi circa", exp)
             g = sum(p.get("goals") or 0 for p in ps)
             g_stay = sum(p.get("goals") or 0 for p in ps if len(moved.get(p["name"]) or ()) <= 1)
             if g_stay > gf[t] - og_for[t] or gf[t] - og_for[t] - g > max(2, .12 * gf[t]):
                 bad("gol dei giocatori di", name[t], g, "contro i gol della squadra", gf[t], f"(di cui {og_for[t]} autogol)" if og_for[t] else "")
         for p in ps:
-            if (p.get("minutesPlayed") or 0) > (tm[t] if not cup else 20) * 90 + 60:
+            if (p.get("minutesPlayed") or 0) > (tm[t] + rec_n[t] if not cup else 20) * 90 + 60:
                 bad("minuti impossibili:", p["name"], p.get("minutesPlayed"), "in", tm.get(t), "partite")
         for n_, c in collections.Counter(p["name"] for p in ps).items():
             nums = [p.get("num") for p in ps if p["name"] == n_]

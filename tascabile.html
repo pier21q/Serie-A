@@ -634,11 +634,14 @@ function vGiornata() {
   D.fixtures.forEach(f => (byRound[f.round ?? 'altre'] ??= []).push(f));
   const live = D.live.length ? `<h2>Live <small>al momento della fotografia</small></h2><div class="list">${D.live.map(e => `<div class="card live"><div class="fx-teams">
       <div class="side">${team(e.home)}</div><div class="pick"><div class="sc num">${e.hs ?? 0}–${e.as ?? 0}</div><small>${esc(e.clock || '')}</small></div><div class="side r">${team(e.away)}</div></div></div>`).join('')}</div>` : '';
-  const rounds = Object.keys(byRound).sort((a, b) => (+a || 99) - (+b || 99)).slice(0, 2);
+  // in ordine di data: i recuperi (senza giornata, vedi number_rounds_auto in server.py) prima della giornata che
+  // viene dopo di loro
+  const first = r => Math.min(...byRound[r].map(f => f.start));
+  const rounds = Object.keys(byRound).sort((a, b) => first(a) - first(b)).slice(0, 2);
   // prima le partite della giornata, poi le gustose e «Com'è andata», poi la giornata dopo (critica del design del 26/10:
   // la prima partita compariva solo a metà del secondo schermo)
   const extra = gustoTeaser() + roundCard();
-  return live + rounds.map((r, i) => (i === 1 ? extra : '') + `<h2>${r === 'altre' ? 'Prossime partite' : rname(r)} <small>pronostici</small></h2>
+  return live + rounds.map((r, i) => (i === 1 ? extra : '') + `<h2>${r === 'altre' ? 'Recuperi' : rname(r)} <small>pronostici</small></h2>
     <div class="list">${byRound[r].map(f => { const pk = (((f.P || {}).bets || {}).picks || [])[0];
       return `<a class="card cardlink fx" style="${glowVars(f.home, f.away)}" href="#p${f.id}">
       <div class="fx-top"><span class="fx-when">${when(f.start)}</span>${luTag(f.lineups)}</div>
