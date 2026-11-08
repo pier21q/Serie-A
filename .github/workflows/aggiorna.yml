@@ -23,9 +23,8 @@ on:
   push:
     branches: [main]
 
-permissions:
-  contents: write
-  actions: write
+# permessi minimi (revisione dell'08/11/2026): nessuno di base, poi a ogni job solo quello che gli serve
+permissions: {}
 
 concurrency:
   group: aggiorna
@@ -35,13 +34,17 @@ jobs:
   aggiorna:
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    permissions:
+      contents: write   # scrive i rami "sito" e "dati"
+    outputs:
+      sveglia: ${{ steps.serve.outputs.sveglia }}
     env:
       TZ: Europe/Rome
       SERIEA_DATA_DIR: ${{ github.workspace }}/dati
       SERIEA_SITE_DIR: ${{ github.workspace }}/sito
     steps:
       - name: Dati salvati
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1   # v7.0.1, fissata al commit
         with:
           ref: dati
           path: dati
@@ -74,22 +77,23 @@ jobs:
           due = not timed or now - at >= 25 * 60 or (lineups and now - at >= 10 * 60)
           print(f"Ultimo aggiornamento {int((now - at) // 60)} minuti fa" + (", partita in arrivo" if lineups else "")
                 + (": si aggiorna" if due else ": niente da fare"))
-          open(os.environ["GITHUB_OUTPUT"], "a").write(f"ok={'true' if due else 'false'}\n")
+          sveglia = time.strftime("%H") == "03"   # una volta al giorno si riattiva la programmazione (job sveglia)
+          open(os.environ["GITHUB_OUTPUT"], "a").write(f"ok={'true' if due else 'false'}\nsveglia={'true' if sveglia else 'false'}\n")
           PY
       - name: Codice dell'app
         if: steps.serve.outputs.ok == 'true'
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1   # v7.0.1, fissata al commit
         with:
           path: app
       - name: Sito
         if: steps.serve.outputs.ok == 'true'
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1   # v7.0.1, fissata al commit
         with:
           ref: sito
           path: sito
       - name: Python
         if: steps.serve.outputs.ok == 'true'
-        uses: actions/setup-python@v7
+        uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0   # v7.1.0, fissata al commit
         with:
           python-version: "3.12"
           cache: pip
@@ -125,11 +129,19 @@ jobs:
           SERIEA_LEGA=superlig python -u app/server.py --cloud || ok=1
           SERIEA_LEGA=champions python -u app/server.py --cloud || ok=1
           exit $ok
+  sveglia:
+    # GitHub sospende le programmazioni dei repository fermi da 60 giorni: una volta al giorno la riattiva. Sta in un
+    # job a parte perché è l'unico passo che ha bisogno del permesso sulle Actions
+    needs: aggiorna
+    if: always() && needs.aggiorna.outputs.sveglia == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      actions: write
+    steps:
       - name: Tieni attiva la programmazione
-        # GitHub sospende le programmazioni dei repository fermi da 60 giorni: una volta al giorno la riattiva
-        if: always()
         continue-on-error: true
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          if [ "$(date +%H)" = "03" ]; then gh api -X PUT "repos/${{ github.repository }}/actions/workflows/aggiorna.yml/enable"; fi
+          gh api -X PUT "repos/${{ github.repository }}/actions/workflows/aggiorna.yml/enable"

@@ -220,14 +220,14 @@ def log(msg):
 
 def load_json(path, default):
     try:
-        return json.loads(path.read_text())
+        return json.loads(path.read_text(encoding="utf-8"))
     except Exception:
         return default
 
 
 def save_json(path, obj):
     tmp = path.with_suffix(".tmp")
-    tmp.write_text(json.dumps(obj, ensure_ascii=False))
+    tmp.write_text(json.dumps(obj, ensure_ascii=False), encoding="utf-8")
     tmp.replace(path)
 
 
@@ -3760,7 +3760,7 @@ def snapshot():
                   "clock": e.get("clock") or e.get("statusText")} for e in d.get("live") or []],
         "results": [{"home": str(e["home"]["id"]), "away": str(e["away"]["id"]), "hs": e["hs"], "as": e["as"],
                      "start": e["start"], "round": e.get("round")} for e in (d.get("played") or [])[:10]],
-        "history": {"summary": model.history_summary(HISTORY),
+        "history": {"summary": model.history_summary(HISTORY, model.freq_1x2(PRIOR.get("results"))),
                     "items": [{"id": it["id"], "round": it.get("round"), "home": str(it["home"]["id"]), "away": str(it["away"]["id"]),
                                "start": it["start"], "pick": (it.get("final") or it.get("latest") or {}).get("pick"),
                                "result": it.get("result"), "ok": (it.get("eval") or {}).get("pick"), "eval": it.get("eval"),
@@ -3893,7 +3893,7 @@ def chat_files():
     files = {}
 
     def put(fname, obj, what):
-        (CHAT_DIR / fname).write_text(json.dumps(_r(obj, 3), ensure_ascii=False, indent=1))
+        (CHAT_DIR / fname).write_text(json.dumps(_r(obj, 3), ensure_ascii=False, indent=1), encoding="utf-8")
         files[fname] = what
 
     put("classifica.json", [{"pos": r["pos"], "squadra": r["team"]["name"], "punti": r["pts"], "giocate": r["p"], "V": r["w"],
@@ -3925,7 +3925,7 @@ def chat_files():
     rows = [dict({"cerca": slug(p.get("name")).replace("-", " "), "nome": p.get("name"), "squadra": name(p.get("teamId")),
                   "ruolo": p.get("pos")}, **{k: _r(p.get(k), 3) for k in keys if p.get(k) is not None})
             for p in sorted(d.get("players") or [], key=lambda p: -(p.get("minutesPlayed") or 0))]
-    (CHAT_DIR / "giocatori.jsonl").write_text("\n".join(json.dumps(r, ensure_ascii=False) for r in rows) + "\n")
+    (CHAT_DIR / "giocatori.jsonl").write_text("\n".join(json.dumps(r, ensure_ascii=False) for r in rows) + "\n", encoding="utf-8")
     files["giocatori.jsonl"] = ("statistiche della stagione di tutti i giocatori, UNO PER RIGA (ruolo G/D/M/F; rating = media "
                                 "voto Fantacalcio.it; fouls = falli fatti, wasFouled = falli subiti; tackles, interceptions, recoveries, duelli "
                                 "(groundWon/groundDuels, aerialWon/aerialDuels), progCarries, goalsPrevented, xgotConceded = Opta; "
@@ -3942,7 +3942,7 @@ def chat_files():
     if FANTA.get("teams"):
         put("fanta.json", model.fanta(an["A"], FANTA, d, MATCHES, SQUADS.get("players", {})),
             "le squadre del fantacalcio dell'utente con i punti attesi dei giocatori")
-    put("storico.json", {"riepilogo": model.history_summary(HISTORY), "partite": list(HISTORY.get("matches", {}).values())[-40:]},
+    put("storico.json", {"riepilogo": model.history_summary(HISTORY, model.freq_1x2(PRIOR.get("results"))), "partite": list(HISTORY.get("matches", {}).values())[-40:]},
         "storico dei pronostici dell'app e quanto ci ha azzeccato")
     rr = recent_rounds(R, 3)
     put("letture.json", {"giornate": {str(k): R["rounds"][k] for k in rr},
@@ -3955,7 +3955,7 @@ def chat_files():
         "come segna e come subisce ogni squadra in stagione: gol per tipo (gf fatti, ga subiti: azione, corner, punizione, "
         "contropiede, rigore, autogol), errori individuali, gol nel finale, xG a partita per situazione (xgf/xga)")
     (CHAT_DIR / "indice.json").write_text(json.dumps({"aggiornato": time.strftime("%d/%m/%Y %H:%M"), "file": files},
-                                                      ensure_ascii=False, indent=1))
+                                                      ensure_ascii=False, indent=1), encoding="utf-8")
     CHAT["key"] = ck
 
 
@@ -4024,7 +4024,7 @@ async def h_history(_):
     items = sorted(HISTORY.get("matches", {}).values(), key=lambda it: -it["start"])
     R = readings()
     items = [dict(it, read=R["reads"].get(str(it["id"]))) for it in items]
-    return web.json_response({"items": items, "summary": model.history_summary(HISTORY)})
+    return web.json_response({"items": items, "summary": model.history_summary(HISTORY, model.freq_1x2(PRIOR.get("results")))})
 
 
 async def h_fanta(_):
@@ -4246,12 +4246,27 @@ async def h_index(_):
     return web.FileResponse(ROOT / "index.html", headers={"Cache-Control": "no-cache"})
 
 
+@web.middleware
+async def solo_dal_mac(req, handler):
+    """Risponde solo alle pagine di questo Mac (revisione dell'08/11/2026). Il server ascolta già solo su 127.0.0.1,
+    ma senza questi controlli un sito qualsiasi aperto nel browser poteva mandare domande alla chat (che usa l'account
+    Claude dell'utente) e, con il DNS rebinding, leggere anche le risposte e il fanta."""
+    hosts = {f"127.0.0.1:{PORT}", f"localhost:{PORT}"}
+    if req.host not in hosts:
+        raise web.HTTPForbidden(text="Serie A Live risponde solo su 127.0.0.1")
+    if req.method not in ("GET", "HEAD", "OPTIONS"):
+        origin = req.headers.get("Origin", "")
+        if origin not in {"http://" + h for h in hosts} or req.content_type != "application/json":
+            raise web.HTTPForbidden(text="Richiesta non accettata")
+    return await handler(req)
+
+
 async def main():
     offline = "--offline" in sys.argv
     url = f"http://127.0.0.1:{PORT}/"
     HTTP["espn"] = aiohttp.ClientSession()
     HTTP["web"] = aiohttp.ClientSession(headers={"User-Agent": UA, "Accept-Language": "it-IT,it;q=0.9"})
-    app = web.Application()
+    app = web.Application(middlewares=[solo_dal_mac])
     app.router.add_get("/", h_index)
     app.router.add_get("/favicon.png", h_favicon)
     app.router.add_get("/lega.png", h_league_logo)

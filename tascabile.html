@@ -612,6 +612,7 @@ function glow(id) {
 const glowVars = (h, a) => `--hc:${glow(h)};--ac:${glow(a)}`;
 // la schedina 1X2: tre caselle come sul Totocalcio, segnata la più probabile; la barretta è la probabilità e sotto, se
 // c'è M, quella del mercato
+// attenzione: in index.html sched() ha gli ultimi due argomenti diversi (sm, tip): non copiare le chiamate tra le pagine
 function sched(p1, px, p2, M, big, out) {
   const v = [['1', 'h', p1, M && M.p1], ['X', 'x', px, M && M.px], ['2', 'a', p2, M && M.p2]], top = Math.max(p1, px, p2);
   return `<div class="sched${big ? ' big' : ''}" role="img" aria-label="1 ${pc(p1)}, X ${pc(px)}, 2 ${pc(p2)}${M ? `; mercato 1 ${pc(M.p1)}, X ${pc(M.px)}, 2 ${pc(M.p2)}` : ''}${out ? `; è uscito ${out}` : ''}">${v.map(([k, c, v, m]) =>

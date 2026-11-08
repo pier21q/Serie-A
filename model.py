@@ -2972,13 +2972,26 @@ def evaluate(f, hs, as_):
     }
 
 
-def history_summary(H):
+def freq_1x2(results, min_n=50):
+    """Frequenze di 1, X e 2 in una lista di partite giocate (hs/as), None se sono meno di min_n."""
+    r = [x for x in results or [] if x.get("hs") is not None and x.get("as") is not None]
+    if len(r) < min_n:
+        return None
+    c = {"1": 0, "X": 0, "2": 0}
+    for x in r:
+        c["1" if x["hs"] > x["as"] else "X" if x["hs"] == x["as"] else "2"] += 1
+    return {k: v / len(r) for k, v in c.items()}
+
+
+def history_summary(H, base=None):
     done = [it for it in H.get("matches", {}).values() if it.get("eval")]
     n = len(done)
     if not n:
         return {"n": 0}
     s = lambda k: sum(1 for it in done if it["eval"][k]) / n
-    base = {"1": .44, "X": .27, "2": .29}  # frequenze storiche della Serie A
+    # pronostico «cieco»: le frequenze 1X2 della stagione scorsa della stessa lega (server.base_1x2). Fino all'08/11/2026
+    # erano quelle della Serie A per tutte le leghe; restano come riserva se la stagione scorsa manca
+    base = base or {"1": .44, "X": .27, "2": .29}
     base_brier = sum(sum((base[k] - (1 if k == it["eval"]["outcome"] else 0)) ** 2 for k in base) for it in done) / n
     # affidabilità: quando il pronostico dava il suo esito al 50-60%, quante volte ci ha preso davvero
     cal = []
@@ -3012,7 +3025,7 @@ def history_summary(H):
               "pickMk": sum(1 for it in mk if it["evalMk"]["pick"]) / len(mk),
               "src": sorted({(it.get("market") or {}).get("src") for it in mk} - {None})} if mk else None
     return {"n": n, "pick": s("pick"), "score": s("score"), "over25": s("over25"), "btts": s("btts"),
-            "brier": sum(it["eval"]["brier"] for it in done) / n, "baseBrier": base_brier, "cal": cal,
+            "brier": sum(it["eval"]["brier"] for it in done) / n, "baseBrier": base_brier, "base": base, "cal": cal,
             "players": pl if pl["n"] else None, "market": market, "combo": combo_summary(done)}
 
 

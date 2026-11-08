@@ -97,18 +97,18 @@ def prepara(site, snap, img_dir=None, league="Serie A"):
     if img_dir:
         snap = dict(snap, logos=loghi(site, snap, img_dir))
     short = league if len(league) <= 12 else league.split()[0]   # nome sotto l'icona della schermata Home
-    page = (ROOT / "tascabile.html").read_text().replace("__DATI__", "null")
+    page = (ROOT / "tascabile.html").read_text(encoding="utf-8").replace("__DATI__", "null")
     page = page.replace("<title>Serie A Tascabile</title>", f"<title>{league} Tascabile</title>")
     page = re.sub(r'\s*<div class="icona">.*?</div>', "", page, count=1, flags=re.S)   # sul sito l'icona c'è già
     key = (snap.get("league") or {}).get("key") or "serie-a"
     head = HEAD.replace('content="Serie A">', f'content="{short}">').replace('<html lang="it">', f'<html lang="it" data-lega="{key}">')
     head = head.replace('<meta name="theme-color" content="#0F1B2D">', f'<meta name="theme-color" content="{THEME.get(key, "#0F1B2D")}">')
-    (site / "index.html").write_text(head + page + TAIL)
-    (site / "dati.json").write_text(json.dumps(snap, ensure_ascii=False))
+    (site / "index.html").write_text(head + page + TAIL, encoding="utf-8")
+    (site / "dati.json").write_text(json.dumps(snap, ensure_ascii=False), encoding="utf-8")
     manifest = dict(MANIFEST, name=f"{league} Tascabile", short_name=short, theme_color=THEME.get(key, "#0F1B2D"))
-    (site / "manifest.webmanifest").write_text(json.dumps(manifest, ensure_ascii=False, indent=1))
-    (site / ".nojekyll").write_text("")
-    (site / "robots.txt").write_text("User-agent: *\nDisallow: /\n")
+    (site / "manifest.webmanifest").write_text(json.dumps(manifest, ensure_ascii=False, indent=1), encoding="utf-8")
+    (site / ".nojekyll").write_text("", encoding="utf-8")
+    (site / "robots.txt").write_text("User-agent: *\nDisallow: /\n", encoding="utf-8")
     stemma = ROOT / "stemmi" / f"{key}.png"   # lo stemma ufficiale nell'intestazione
     if stemma.exists():
         shutil.copyfile(stemma, site / "stemma.png")
@@ -230,11 +230,11 @@ def pubblica_dati(data_dir, remote):
                 shutil.copyfile(src, out)
         extra = dest / "cache" / "fonti.json"
         if extra.exists():   # al primo giro su GitHub si riscarica e si ripubblica tutto: si vede subito se qualcosa non va
-            e = json.loads(extra.read_text())
+            e = json.loads(extra.read_text(encoding="utf-8"))
             for k in ("usAt", "wikiAt", "rosterAt", "siteAt", "siteSig"):
                 e.pop(k, None)
-            extra.write_text(json.dumps(e, ensure_ascii=False))
-        (dest / ".gitignore").write_text(DATI_IGNORA)
+            extra.write_text(json.dumps(e, ensure_ascii=False), encoding="utf-8")
+        (dest / ".gitignore").write_text(DATI_IGNORA, encoding="utf-8")
         git(dest, "init", "-q", "-b", "dati")
         git(dest, "config", "user.name", "Serie A Live")
         git(dest, "config", "user.email", "serie-a-live@users.noreply.github.com")
@@ -246,7 +246,7 @@ def pubblica_dati(data_dir, remote):
 
 if __name__ == "__main__":
     data_dir = Path(os.environ.get("SERIEA_DATA_DIR") or Path.home() / "Library" / "Application Support" / "Serie A Live")
-    remote = json.loads((data_dir / "sito.json").read_text())["remote"]
+    remote = json.loads((data_dir / "sito.json").read_text(encoding="utf-8"))["remote"]
     if sys.argv[1:] == ["codice"]:
         ok, msg = pubblica_codice(remote)
     elif sys.argv[1:] == ["dati"]:

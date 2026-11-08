@@ -537,12 +537,15 @@ def espn_odds(summary):
     if best:
         for o in summary.get("odds") or summary.get("pickcenter") or []:
             name = ((o.get("provider") or {}).get("name") or "").strip()
-            line = o.get("overUnder")
-            if "live" in name.lower() or name.lower() not in ODDS_BOOKS or line is None or float(line) % 1 != .5:
+            try:   # una linea non numerica non deve far perdere anche l'1X2 già trovato (revisione dell'08/11/2026)
+                line = float(o.get("overUnder"))
+            except (TypeError, ValueError):
+                continue
+            if "live" in name.lower() or name.lower() not in ODDS_BOOKS or line % 1 != .5:
                 continue
             ov, un = _dec_us(o.get("overOdds")), _dec_us(o.get("underOdds"))
             if ov and un and 1.0 <= 1 / ov + 1 / un <= 1.15:
-                best["ou"] = {"line": float(line), "over": round(ov, 3), "under": round(un, 3), "src": name}
+                best["ou"] = {"line": line, "over": round(ov, 3), "under": round(un, 3), "src": name}
                 break
     return best
 
