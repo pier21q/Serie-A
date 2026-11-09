@@ -39,9 +39,18 @@ def num(v):
         return None
 
 
-def _minute(k):
+def _minute(k, full=90.0):
     v = (k.get("clock") or {}).get("value")
-    return min(90.0, float(v) / 60) if v is not None else None
+    return min(full, float(v) / 60) if v is not None else None
+
+
+def _full_time(j):
+    """Durata della partita: 120 minuti se ci sono stati i supplementari (eventi del 3° o 4° tempo, o finale «AET» o ai
+    rigori), se no 90. Prima era sempre 90: nei supplementari di Champions i titolari risultavano con 90 minuti e chi
+    entrava nei supplementari con 1 (revisione dell'08/11/2026)."""
+    st = ((((j.get("header") or {}).get("competitions") or [{}])[0].get("status") or {}).get("type") or {}).get("name") or ""
+    et = any(((k.get("period") or {}).get("number") or 0) >= 3 for k in j.get("keyEvents") or [])
+    return 120.0 if et or "AET" in st or "PEN" in st else 90.0
 
 
 # ---------- ESPN: una partita ----------
@@ -62,6 +71,7 @@ def box_from_summary(j):
         out[s]["headedGoals"] = 0
     # minuti giocati: dall'ingresso all'uscita (sostituzione o espulsione)
     enter, leave = {}, {}
+    full = _full_time(j)
     for k in j.get("keyEvents") or []:
         typ = ((k.get("type") or {}).get("text") or "").lower()
         ps = [str((p.get("athlete") or {}).get("id")) for p in k.get("participants") or []]
@@ -69,9 +79,9 @@ def box_from_summary(j):
         if k.get("scoringPlay") and s and "header" in typ and "own" not in typ:
             out[s]["headedGoals"] += 1
         if typ == "substitution" and len(ps) >= 2:
-            enter[ps[0]], leave[ps[1]] = _minute(k), _minute(k)
+            enter[ps[0]], leave[ps[1]] = _minute(k, full), _minute(k, full)
         elif "red card" in typ and ps:
-            leave[ps[0]] = _minute(k)
+            leave[ps[0]] = _minute(k, full)
     for s, r in ros.items():
         for a in r.get("roster") or []:
             pid = str((a.get("athlete") or {}).get("id"))
@@ -79,10 +89,10 @@ def box_from_summary(j):
             if not st.get("app"):
                 continue
             start = 0.0 if a.get("starter") else enter.get(pid)
-            end = leave.get(pid, 90.0)
+            end = leave.get(pid, full)
             st.update(side=s, start=bool(a.get("starter")), num=a.get("jersey"),
                       pos=((a.get("position") or {}).get("abbreviation") or "").upper(),
-                      min=max(1.0, round((end if end is not None else 90.0) - (start if start is not None else 75.0))),
+                      min=max(1.0, round((end if end is not None else full) - (start if start is not None else 75.0))),
                       name=(a.get("athlete") or {}).get("displayName"))
             out["players"][pid] = {k: v for k, v in st.items() if v not in (None, 0, 0.0) or k in ("side", "start", "min")}
     return out

@@ -729,7 +729,9 @@ def summaries_due(d, now):
     for e in d.get("played") or []:
         x = MATCHES.get(str(e["id"])) or {}
         missing = ("cards" not in x or "roles" not in x or "box" not in x
-                   or (x.get("ev") or {}).get("v") != letture.EV_VERSION)   # cronaca letta con una versione vecchia
+                   or (x.get("ev") or {}).get("v") != letture.EV_VERSION   # cronaca letta con una versione vecchia
+                   # cronaca vuota letta prima della cronaca ridotta dagli eventi chiave (Süper Lig, 08/11/2026)
+                   or ("ev" in x and not (x["ev"] or {}).get("ev") and (x["ev"] or {}).get("kv") != 1))
         # l'arbitro a volte ESPN lo aggiunge giorni dopo (in Premier): si riprova ogni 6 ore per tre giorni
         noref = not (x.get("referee") or {}).get("name") and now - e["start"] < 3 * 86400
         # la cronaca scaricata appena finita la partita può non avere ancora l'ultimo gol (Villarreal-Getafe 2-0 della
@@ -3698,7 +3700,8 @@ def readings():
             continue
         # senza i tiri (né Understat né la cronaca tiro per tiro: in Turchia ESPN ha solo gol, cartellini e cambi) la
         # lettura direbbe cose sbagliate («0 tiri», «partita combattuta»): meglio non farla
-        if not x.get("us") and not any(v.get("k") in ("shot", "goal", "wood", "pens") for v in x["ev"].get("ev") or []):
+        if not x.get("us") and not any(v.get("k") in ("shot", "goal", "wood", "pens") and not v.get("kr")
+                                       for v in x["ev"].get("ev") or []):   # «kr»: cronaca ridotta (letture._key_events)
             continue
         h, a = str(e["home"]["id"]), str(e["away"]["id"])
         it = HISTORY.get("matches", {}).get(str(e["id"])) or {}
@@ -3765,6 +3768,12 @@ def profiles_out(R):
 
 def recent_rounds(R, k=2):
     return sorted((r for r in R["rounds"] if r is not None), reverse=True)[:k]
+
+
+def recent_read(r, rr):
+    """Una lettura da mandare a pagine e chat: delle ultime giornate, o un recupero (senza giornata) delle ultime due
+    settimane. Prima i recuperi giocati non arrivavano mai (revisione dell'08/11/2026)."""
+    return r.get("round") in rr or (r.get("round") is None and time.time() - (r.get("start") or 0) < 14 * 86400)
 
 
 # ---------- fotografia per la versione tascabile ----------
@@ -3840,7 +3849,7 @@ def snapshot():
     hist = sorted(HISTORY.get("matches", {}).values(), key=lambda it: -it["start"])[:30]
     rr = recent_rounds(R)
     hist_ids = {str(it["id"]) for it in hist}
-    reads = {k: _r(v, 3) for k, v in R["reads"].items() if v.get("round") in rr or k in hist_ids}
+    reads = {k: _r(v, 3) for k, v in R["reads"].items() if recent_read(v, rr) or k in hist_ids}
     # tutti i giocatori con le statistiche della stagione: scheda del giocatore e ricerca
     players = [_r({"id": p["id"], "n": p.get("name"), "t": str(p.get("teamId")), "pos": p.get("pos"), "ap": p.get("appearances"),
                    "st": p.get("matchesStarted"), "min": p.get("minutesPlayed"), "g": p.get("goals"), "a": p.get("assists"),
@@ -3930,7 +3939,7 @@ async def h_data(_):
     rr = recent_rounds(R, 3)
     return web.json_response({**STATE["data"], "analysis": an["pub"], "fixtures": an["fixtures"], "extras": extras,
                               "checks": STATE.get("checks"),
-                              "reads": {k: v for k, v in R["reads"].items() if v.get("round") in rr},
+                              "reads": {k: v for k, v in R["reads"].items() if recent_read(v, rr)},
                               "rounds": {str(k): R["rounds"][k] for k in rr}, "profiles": profiles_out(R),
                               "evidenza": an["evidenza"], "gustose": an.get("gustose") or [],
                               "league": {"key": LEGA_KEY, "name": LEGA["name"], "fantacalcio": LEGA["fantacalcio"], "cup": CUP,
@@ -4056,7 +4065,7 @@ def chat_files():
     rr = recent_rounds(R, 3)
     put("letture.json", {"giornate": {str(k): R["rounds"][k] for k in rr},
                          "partite": [dict(r, partita=f"{R['names'].get(r['home'], r['home'])} {r['hs']}-{r['as']} {R['names'].get(r['away'], r['away'])}")
-                                     for r in sorted(R["reads"].values(), key=lambda r: -r["start"]) if r.get("round") in rr]},
+                                     for r in sorted(R["reads"].values(), key=lambda r: -r["start"]) if recent_read(r, rr)]},
         "letture delle ultime giornate: per ogni partita come sono nati i gol (why, lab = perché: errore, palla inattiva, "
         "transizione, seconda palla, difesa superata, prodezza), come hanno giocato le squadre (game), perché il pronostico "
         "è andato così (verdict) e i difetti che si ripetono (lessons); fonti: cronaca Opta di ESPN e tiri di Understat")

@@ -284,7 +284,51 @@ def parse_espn(j):
             e.update(k="var", x=m.group(1))
             out.append(e)
     # un rigore si trasforma in un «Goal!» con «converts the penalty»: lì la situazione è già «rigore»
-    return {"ev": [{k: v for k, v in e.items() if v is not None} for e in out if e.get("k") == "var" or e.get("s")], "v": EV_VERSION}
+    res = {"ev": [{k: v for k, v in e.items() if v is not None} for e in out if e.get("k") == "var" or e.get("s")],
+           "v": EV_VERSION, "kv": 1}
+    if not any(e.get("k") in ("goal", "og") for e in res["ev"]):
+        ridotta = _key_events(j, side_of)
+        if ridotta:
+            res.update(ev=ridotta, kr=1)
+    return res
+
+
+def _key_events(j, side_of):
+    """Cronaca ridotta dagli eventi chiave di ESPN (gol, autogol, cambi, espulsioni), per le partite senza la cronaca
+    Opta: in Süper Lig ESPN dà solo frasi come «Dusan Vlahovic (Besiktas) Goal at 20'». Niente tiri né come è nato il
+    gol, quindi niente letture (servono i tiri); bastano alle chicche su minuti, rimonte, subentrati e marcatori.
+    Revisione dell'08/11/2026. «kr» nel risultato dice che la cronaca è ridotta."""
+    comp = (((j.get("header") or {}).get("competitions") or [{}])[0].get("competitors") or [])
+    team_side = {str((c.get("team") or {}).get("id")): c.get("homeAway") for c in comp if c.get("homeAway") in ("home", "away")}
+    out = []
+    for k in j.get("keyEvents") or []:
+        typ = ((k.get("type") or {}).get("text") or "").lower()
+        names = [(p.get("athlete") or {}).get("displayName") for p in k.get("participants") or []]
+        disp = (k.get("clock") or {}).get("displayValue") or ""
+        w = names[0] if names else None
+        s = side_of.get(w) or team_side.get(str((k.get("team") or {}).get("id")))
+        # «kr» anche su ogni evento: us_like e le letture lo saltano (un gol senza posizione darebbe xG inventati)
+        e = {"t": _minute(disp), "m": disp, "p": (k.get("period") or {}).get("number") or (1 if (_minute(disp) or 0) <= 45 else 2),
+             "s": s, "w": w, "kr": 1}
+        if "own goal" in typ:
+            e["k"] = "og"   # «s» è la squadra di chi lo fa: si prende dalla rosa, la squadra dell'evento può essere l'altra
+            if not side_of.get(w):
+                continue
+        elif k.get("scoringPlay") or typ.startswith("goal") or typ.startswith("penalty - scored"):
+            e["k"] = "goal"
+            if "header" in typ:
+                e["b"] = "testa"
+            if "penalty" in typ:
+                e["sit"] = "rigore"
+        elif typ == "substitution" and len(names) >= 2:
+            e.update(k="sub", o=names[1])
+        elif "red card" in typ:
+            e.update(k="red", x="r")
+        else:
+            continue
+        if s in ("home", "away"):
+            out.append({a: v for a, v in e.items() if v is not None})
+    return out
 
 
 
@@ -371,7 +415,7 @@ def us_like(ev):
     last_of = {"cross": "Cross", "filtrante": "Throughball", "sponda": "HeadPass"}
     out = {"home": [], "away": []}
     for e in ev or []:
-        if e.get("k") not in ("goal", "shot", "wood", "pens") or e.get("s") not in out:
+        if e.get("k") not in ("goal", "shot", "wood", "pens") or e.get("s") not in out or e.get("kr"):
             continue
         pen = e["k"] == "pens" or e.get("sit") == "rigore"
         r = ("Goal" if e["k"] == "goal" else "ShotOnPost" if e["k"] == "wood" else
