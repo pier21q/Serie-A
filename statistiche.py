@@ -258,6 +258,7 @@ def team_season(results, boxes, us_teams, team_of_title, us_players=None):
                 t["_ppdaAtt"] = t.get("_ppdaAtt", 0) + (num(h["ppda"].get("att")) or 0)
                 t["_ppdaDef"] = t.get("_ppdaDef", 0) + (num(h["ppda"].get("def")) or 0)
             t["usMatches"] = t.get("usMatches", 0) + 1
+            t["_deepN"] = t.get("_deepN", 0) + (h.get("deep") is not None)
     # passaggi chiave: somma dei giocatori Understat (chi ha giocato in due squadre non si può dividere)
     for p in us_players or []:
         tid = team_of_title(p["team"]) if "," not in (p.get("team") or "") else None
@@ -271,6 +272,12 @@ def team_season(results, boxes, us_teams, team_of_title, us_players=None):
             t["ppda"] = t["_ppdaAtt"] / t["_ppdaDef"]
         t.pop("_ppdaAtt", None)
         t.pop("_ppdaDef", None)
+        # partite completate con la cronaca ESPN (Understat fermo): «deep» c'è solo nelle altre, si riporta a tutte
+        dn, um = t.pop("_deepN", 0), t.get("usMatches")
+        if dn and um and dn != um:
+            for k in ("deep", "deepAllowed"):
+                if t.get(k) is not None:
+                    t[k] = t[k] / dn * um
         # i dati Understat possono essere indietro di qualche partita: si riportano allo stesso numero di partite
         um = t.get("usMatches")
         if um and um != t["matches"]:

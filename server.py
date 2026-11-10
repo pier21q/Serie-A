@@ -184,24 +184,6 @@ SITE_EVERY = 15 * 60               # sito dal Mac: al massimo ogni 15 minuti (su
 LINEUP_EVERY = 600
 MATCH_LENGTH = 150 * 60        # durata massima stimata di una partita dal calcio d'inizio
 
-BASE_FIELDS = [
-    "goals", "assists", "rating", "expectedGoals", "expectedAssists", "minutesPlayed",
-    "appearances", "totalShots", "shotsOnTarget", "keyPasses", "bigChancesCreated",
-    "bigChancesMissed", "successfulDribbles", "tackles", "interceptions", "clearances",
-    "saves", "cleanSheet", "yellowCards", "redCards", "accuratePassesPercentage",
-    "goalsConceded", "aerialDuelsWon", "totalDuelsWon", "accurateLongBalls",
-    "penaltyGoals", "goalsPrevented",
-]
-EXTRA_FIELDS = [
-    "fouls", "wasFouled", "matchesStarted", "yellowRedCards", "directRedCards", "dispossessed",
-    "dribbledPast", "touches", "totalContest", "penaltyWon", "penaltyConceded", "possessionWonAttThird",
-    "ballRecovery", "groundDuelsWon", "aerialLost", "duelLost", "totalCross", "accurateCrosses",
-    "offsides", "blockedShots", "penaltiesTaken", "totalPasses",
-]
-
-FETCH_JS = """async u => { try { const r = await fetch(u);
-    return {s: r.status, t: await r.text()} } catch (e) { return {s: 0, t: String(e)} } }"""
-
 STATE = {"data": None}
 STATUS = {"mode": "avvio", "espnAt": None, "espnError": None, "statsAt": None, "usAt": None, "fcStatsAt": None,
           "nextCheck": None}
@@ -252,7 +234,8 @@ def load_history():
         except Exception:
             pass
         raise SystemExit(f"{HISTORY_FILE} non si legge ({errtxt(ex)}): copia in {bad.name}. Lo storico non si può "
-                         f"ricreare: va sistemato a mano (o ripreso dal ramo «dati» di GitHub) prima di ripartire.")
+                         f"ricreare: va sistemato a mano (o ripreso da un ramo «storico» di GitHub, che tiene le copie buone: il "
+                         f"ramo «dati» si riscrive a ogni giro) prima di ripartire.")
 
 
 HISTORY = load_history()
@@ -1012,9 +995,72 @@ def coach_changes(d):
     return {tid: {"at": t, "pre": tid in pre} for tid, t in out.items()}
 
 
+US_FILL_KEYS = ("games", "time", "goals", "assists", "shots", "key_passes", "yellow_cards", "red_cards", "xG", "xA", "npg", "npxG")
+
+
+def us_season(d):
+    """Stagione in corso di Understat, completata con la seconda fonte (dal 10/11/2026). Le partite finite che
+    Understat non ha (è in manutenzione dal 02/11/2026; di solito le elabora entro un'ora) prendono gli xG dalla
+    posizione dei tiri nella cronaca Opta di ESPN (statistiche.understat_from_espn, lo stesso calcolo di Eredivisie e
+    Portogallo): righe segnate con «espn» nella storia delle squadre, e i totali dei giocatori già collegati crescono
+    degli stessi tiri. Quando Understat torna e ha la partita, la riga di ESPN non si aggiunge più.
+    Misurato il 10/11/2026 sulle 438 partite 2026/27 che hanno tutte e due le fonti (5 leghe): correlazione per partita
+    0,89-0,91 (Opta contro Understat: 0,90), per squadra 0,91-0,98, totale degli xG tra −0,3% e +3,3%. Prova
+    all'indietro su 285 partite (forza 80% xG senza rigori + 20% gol, solo partite dei giorni prima): log loss 1X2
+    0,9999 con la cronaca contro 0,9986 con Understat (+0,0013 ± 0,0041: uguali); con Understat fermo da 9 giorni e la
+    cronaca al suo posto −0,0008 ± 0,0017. «fill» è il numero di partite completate così."""
+    u = load_json(us_file(season_year(d)), {}) or {}
+    if SHOT_XG or not u.get("teams"):
+        return u
+    by_tid = {}
+    for t in u["teams"].values():
+        tid = team_by_name(d, t.get("title"))
+        if tid:
+            by_tid[tid] = t
+    times = {tid: [us_time(h.get("date")) or 0 for h in t.get("history") or []] for tid, t in by_tid.items()}
+    has = lambda tid, e: any(abs(x - e["start"]) <= 36 * 3600 for x in times[tid])
+    miss = [e for e in d.get("played") or [] if e.get("hs") is not None and str(e["home"]["id"]) in by_tid
+            and str(e["away"]["id"]) in by_tid and not has(str(e["home"]["id"]), e) and not has(str(e["away"]["id"]), e)]
+    if not miss:
+        return u
+    shots = {str(e["id"]): letture.us_like(((MATCHES.get(str(e["id"])) or {}).get("ev") or {}).get("ev")) for e in miss}
+    boxes = {str(e["id"]): (MATCHES.get(str(e["id"])) or {}).get("box") for e in miss}
+    fill = statistiche.understat_from_espn(miss, shots, boxes, {tid: t.get("title") for tid, t in by_tid.items()})
+    if not fill["teams"]:
+        return u
+    out = dict(u)
+    out["teams"] = {}
+    for key, t in u["teams"].items():
+        tid = next((k for k, v in by_tid.items() if v is t), None)
+        rows = [dict(h, espn=True) for h in (fill["teams"].get(tid) or {}).get("history") or []]
+        out["teams"][key] = dict(t, history=sorted(list(t.get("history") or []) + rows, key=lambda h: h.get("date") or "")) if rows else t
+    uid_of = {str(c): uid for uid, c in REG["us"].items()}
+    add = {}
+    for q in fill["players"]:
+        cid = REG["espn"].get(str(q["id"]))
+        if cid is not None and uid_of.get(str(cid)):
+            add[str(uid_of[str(cid)])] = q
+    players = []
+    for p in u.get("players") or []:
+        q = add.get(str(p.get("id")))
+        if q:
+            p, t0 = dict(p), statistiche.num(p.get("time")) or 0
+            for k in US_FILL_KEYS:
+                p[k] = (statistiche.num(p.get(k)) or 0) + (q.get(k) or 0)
+            if t0 > 0:   # catena e costruzione non si ricavano dalla cronaca: restano al ritmo che avevano, sui minuti nuovi
+                for k in ("xGChain", "xGBuildup"):
+                    if statistiche.num(p.get(k)) is not None:
+                        p[k] = statistiche.num(p[k]) * p["time"] / t0
+        players.append(p)
+    out["players"] = players
+    out["fill"] = len(fill["dates"])
+    out["fillFrom"] = min(e["start"] for e in miss if any(x["id"] == str(e["id"]) for x in fill["dates"]))
+    return out
+
+
 def us_history(d):
     """Partite della stagione di ogni squadra da Understat (data, gol, xG senza rigori), per pesarle una a una."""
-    u = load_json(us_file(season_year(d)), {}) or {}
+    u = us_season(d)
     out = {}
     for t in (u.get("teams") or {}).values():
         tid = team_by_name(d, t.get("title"))
@@ -1784,13 +1830,23 @@ def us_file(year):
     return CACHE / f"understat-{year}.json"
 
 
+def us_json(body):
+    """Risposta di Understat -> dati. Quando è in manutenzione (dal 02/11/2026) risponde 200 con una pagina HTML
+    («We will come back soon»): va detto chiaro, non «Expecting value»."""
+    body = (body or "").lstrip()
+    if not body.startswith(("{", "[")):
+        raise RuntimeError("Understat non dà dati (pagina di manutenzione)" if "<html" in body[:300].lower() else
+                           "Understat non dà dati (risposta vuota)" if not body else "Understat: risposta non valida")
+    return json.loads(body)
+
+
 async def us_get(year):
     headers = {"X-Requested-With": "XMLHttpRequest", "Referer": statistiche.UNDERSTAT_REF.format(year=year)}
     async with HTTP["web"].get(statistiche.UNDERSTAT.format(year=year), headers=headers,
                                timeout=aiohttp.ClientTimeout(total=40)) as r:
         if r.status != 200:
             raise RuntimeError(f"Understat HTTP {r.status}")
-        return json.loads(await r.text())
+        return us_json(await r.text())
 
 
 US_MATCH = "https://understat.com/getMatchData/{id}"
@@ -3255,7 +3311,9 @@ def rebuild_stats(d):
             prev = espn_understat(d, y - 1)
             if prev:
                 save_json(us_file(y - 1), prev)
-    us = statistiche.understat_parse(load_json(us_file(y), {})) if us_file(y).exists() else None
+    us_raw = us_season(d) if us_file(y).exists() else None
+    us = statistiche.understat_parse(us_raw) if us_raw is not None else None
+    STATUS["usFill"] = (us_raw or {}).get("fill") or 0
     fc = (load_json(FC_STATS_FILE, {}) or {}).get("players") or []
     results = [e for e in d.get("played") or [] if e.get("hs") is not None]
     venue_standings(d)
@@ -3402,6 +3460,7 @@ async def site_step():
 def stats_signature(d):
     rc = PRIOR.get("refCards") or {}
     return (sum(1 for e in d.get("played") or [] if (MATCHES.get(str(e["id"])) or {}).get("box")),
+            sum(1 for e in d.get("played") or [] if (MATCHES.get(str(e["id"])) or {}).get("ev")),   # cronache: seconda fonte degli xG
             EXTRA.get("usAt"), (load_json(FC_STATS_FILE, {}) or {}).get("at"), (load_json(OPTA_FILE, {}) or {}).get("at"), sum(1 for v in rc.values() if "box" in v) // 40,
             d.get("v"))
 
@@ -3888,7 +3947,7 @@ def snapshot():
         # letture delle partite: come sono nati i gol, come hanno giocato, perché il pronostico è andato così
         "reads": reads, "rounds": {str(k): R["rounds"][k] for k in rr}, "profiles": profiles_out(R),
         "league": {"yellowGame": _r(A["L"].get("yellowGame"), 2), "key": LEGA_KEY, "name": LEGA["name"], "dir": LEGA["dir"],
-                   "fantacalcio": LEGA["fantacalcio"], "cup": CUP, "noXg": no_xg(), "xgEspn": ESPN_XG and not no_xg()},
+                   "fantacalcio": LEGA["fantacalcio"], "cup": CUP, "noXg": no_xg(), "xgEspn": ESPN_XG and not no_xg(), "xgFill": xg_fill(d)},
         # coppa: nomi dei turni («Ottavi – andata»), proiezione della fase campionato, campionato di ogni squadra
         "roundNames": round_names(d), "proj": an.get("proj"),
         # coppa: dati ufficiali della UEFA (medie delle squadre e statistiche dei giocatori in Champions)
@@ -3904,10 +3963,19 @@ def snapshot():
     return clean_texts(snap)
 
 
+def xg_fill(d):
+    """Partite con gli xG dalla seconda fonte (la cronaca ESPN) perché Understat non le ha: {"n", "from"} per le
+    pagine, None se Understat è in pari."""
+    if SHOT_XG or not LEGA["understat"]:
+        return None
+    u = us_season(d)
+    return {"n": u["fill"], "from": u["fillFrom"]} if u.get("fill") else None
+
+
 def xpts_table(d):
     """Punti attesi (xPts) di ogni squadra da Understat: quanti punti avrebbe fatto, in media, con le occasioni create e
     concesse in ogni partita. {squadra: {partite, punti, xPts, xG, xGA}}."""
-    u = load_json(us_file(season_year(d)), {}) or {}
+    u = us_season(d)
     out = {}
     for t in (u.get("teams") or {}).values():
         tid = team_by_name(d, t.get("title"))
@@ -3943,7 +4011,7 @@ async def h_data(_):
                               "rounds": {str(k): R["rounds"][k] for k in rr}, "profiles": profiles_out(R),
                               "evidenza": an["evidenza"], "gustose": an.get("gustose") or [],
                               "league": {"key": LEGA_KEY, "name": LEGA["name"], "fantacalcio": LEGA["fantacalcio"], "cup": CUP,
-                                         "noXg": no_xg(), "xgEspn": ESPN_XG and not no_xg()},
+                                         "noXg": no_xg(), "xgEspn": ESPN_XG and not no_xg(), "xgFill": xg_fill(STATE["data"])},
                               "roundNames": round_names(STATE["data"]), "proj": an.get("proj"),
                               **(uefa_out(STATE["data"]) if CUP else {}),
                               "leagues": [{"key": k, "name": v["name"], "port": v["port"], "minor": bool(v.get("minor"))}
@@ -4125,7 +4193,9 @@ async def h_chat(req):
         # La guardia (chat_guardia.py) blocca ogni percorso fuori dalla cartella; --restricted fa lo stesso dove c'è
         guard = " ".join(shlex.quote(x) for x in (sys.executable, "-I", str(ROOT / "chat_guardia.py"), str(CHAT_DIR)))
         hooks = {"hooks": {"PreToolUse": [{"matcher": "Read|Grep|Glob", "hooks": [{"type": "command", "command": guard}]}]}}
-        args = [exe, "-p", q, "--output-format", "json", "--model", model_name, "--tools", "Read,Grep,Glob",
+        # la domanda passa da stdin, non come argomento: «--version» o «--dangerously-skip-permissions» scritti come
+        # domanda diventavano opzioni di Claude (revisione del 09/11/2026)
+        args = [exe, "-p", "--output-format", "json", "--model", model_name, "--tools", "Read,Grep,Glob",
                 "--allowedTools", "Read,Grep,Glob", "--system-prompt", prompt, "--strict-mcp-config",
                 "--settings", json.dumps(hooks)] + (["--restricted"] if await asyncio.to_thread(claude_restricted, exe) else [])
         sess = body.get("session")
@@ -4133,9 +4203,11 @@ async def h_chat(req):
             args += ["--resume", sess]
         proc = None
         try:
-            proc = await asyncio.create_subprocess_exec(*args, cwd=str(CHAT_DIR), stdin=asyncio.subprocess.DEVNULL,
+            # senza la chiave dell'API nell'ambiente: la chat usa l'abbonamento, non deve poter spendere a consumo
+            env = {k: v for k, v in os.environ.items() if k not in ("ANTHROPIC_API_KEY", "ANTHROPIC_AUTH_TOKEN")}
+            proc = await asyncio.create_subprocess_exec(*args, cwd=str(CHAT_DIR), stdin=asyncio.subprocess.PIPE, env=env,
                                                         stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE)
-            out, err = await asyncio.wait_for(proc.communicate(), timeout=180)
+            out, err = await asyncio.wait_for(proc.communicate(q.encode("utf-8")), timeout=180)
         except asyncio.TimeoutError:
             proc.kill()
             await proc.wait()   # se no il processo resta zombie
@@ -4195,6 +4267,8 @@ async def h_img(req):
         f = IMGDIR / f"{kind}-{iid}.{ext}"
         if f.exists():
             return web.Response(body=f.read_bytes(), content_type=ct, headers=headers)
+    if STATUS.get("mode") == "offline":   # nessuna richiesta esterna: solo le immagini già salvate
+        raise web.HTTPNotFound()
     async with req.app["img_sem"]:
         try:
             url = img_url(kind, iid)
@@ -4339,7 +4413,7 @@ async def h_league_logo(_):
     if pulito.exists():
         return web.Response(body=pulito.read_bytes(), content_type="image/png", headers={"Cache-Control": "max-age=86400"})
     f = CACHE / "lega-logo-ritagliato.png"
-    if not f.exists() and LEAGUE_LOGO.get(LEGA_KEY):
+    if not f.exists() and LEAGUE_LOGO.get(LEGA_KEY) and STATUS.get("mode") != "offline":
         try:
             url = f"https://images.onefootball.com/icons/leagueColoredCompetition/128/{LEAGUE_LOGO[LEGA_KEY]}.png"
             async with HTTP["web"].get(url, timeout=aiohttp.ClientTimeout(total=15)) as r:
@@ -4456,12 +4530,14 @@ async def main():
             venue_standings(STATE["data"])
             STATUS["statsAt"] = STATE["data"].get("fullAt")
             log("Caricati gli ultimi dati salvati")
+    if offline:
+        STATUS.update(mode="offline")
     print(f"{LEGA['name']} pronta su {url}  (chiudi questa finestra o premi Ctrl+C per fermarla)", flush=True)
-    asyncio.ensure_future(prefetch_logos())
+    if not offline:   # --offline: nessuna richiesta esterna, nemmeno per i loghi (revisione del 09/11/2026)
+        asyncio.ensure_future(prefetch_logos())
     if "--no-open" not in sys.argv:
         webbrowser.open(url)
     if offline:
-        STATUS.update(mode="offline")
         log("Modalita' offline: nessuna richiesta esterna")
         await asyncio.Event().wait()
     else:

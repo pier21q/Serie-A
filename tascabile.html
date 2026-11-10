@@ -542,6 +542,33 @@ td{border-bottom-color:var(--line)}
 @keyframes rise{from{opacity:0;transform:translateY(10px) scale(.985)}to{opacity:1;transform:none}}
 @keyframes mark{from{box-shadow:0 0 0 0 var(--o)}50%{box-shadow:0 0 0 6px color-mix(in srgb,var(--o) 25%,transparent)}to{box-shadow:0 12px 28px -12px var(--o),inset 0 1px 0 rgba(255,255,255,.14)}}
 @keyframes livepulse{50%{box-shadow:0 0 0 1px color-mix(in srgb,var(--bad) 45%,transparent),0 0 26px -6px var(--bad)}}
+/* movimento, seconda passata (10/11/2026, chiesta dall'utente: «animazioni nei posti in cui sono belle»). Solo transform
+   e opacity, curva --ease-out, niente che si muova sotto i numeri mentre si leggono:
+   - i riflettori della lega respirano piano dietro la pagina (16 s, avanti e indietro);
+   - nelle schede delle partite la riga dei colori delle squadre si stende dai lati e il bagliore si accende;
+   - il risultato previsto compare come su un tabellone; le barre crescono da zero come quelle della schedina;
+   - la riga sotto la vista scelta si allarga; con il mouse lo stemma della scheda si avvicina;
+   - le sezioni si aprono con il contenuto che scende (script in fondo: solo al tocco, non a ogni ridisegno).
+   Con «riduci movimento» non parte niente di tutto questo. */
+@media (prefers-reduced-motion:no-preference){
+  body::before{animation:luci 16s ease-in-out infinite alternate;will-change:transform,opacity}
+  .card.fx::after,.card.hero::after,.card.gusto::after{animation:riga .5s .12s var(--ease-out) both}
+  .card.fx::before,.card.hero::before,.card.gusto::before{animation:bagliore .6s .05s ease both}
+  .pick .sc{animation:tabellone .28s .1s var(--ease-out) both}
+  .sbar i,.g-meter i,.pmir .br i{transform-origin:left;animation:grow .6s .1s var(--ease-out) both}
+  .pmir .bl i{transform-origin:right;animation:grow .6s .1s var(--ease-out) both}
+  nav a[aria-current="page"]::after{animation:linea .25s var(--ease-out) both}
+  .quiet .card::after,.quiet .card::before,.quiet .pick .sc,.quiet .sbar i,.quiet .g-meter i,.quiet .pmir i{animation:none}
+}
+@media (hover:hover) and (pointer:fine){
+  .cardlink .crest,.cardlink .tlogo{transition:transform .25s var(--ease-out)}
+  .cardlink:hover .crest,.cardlink:hover .tlogo{transform:scale(1.06)}
+}
+@keyframes luci{from{opacity:.78;transform:scale(1)}to{opacity:1;transform:scale(1.12) translateY(1.5%)}}
+@keyframes riga{from{opacity:0;transform:scaleX(.35)}}
+@keyframes bagliore{from{opacity:0}}
+@keyframes tabellone{from{opacity:0;transform:scale(.94)}}
+@keyframes linea{from{opacity:0;transform:scaleX(.4)}}
 </style>
 
 <header><div class="wrap">
@@ -654,7 +681,7 @@ function vGiornata() {
       <div class="fx-nums"><div><small>Gol attesi</small><b class="num">${fx(f.lh, 2)}–${fx(f.la, 2)}</b></div><div><small>Over 2,5</small><b class="num">${pc(f.over25)}</b></div><div><small>Gol/Gol</small><b class="num">${pc(f.btts)}</b></div></div>
       ${f.P && f.P.tie ? `<div class="chips">${tieChip(f.P)}</div>` : ''}
       ${pk ? `<div class="fx-pk"><small>Giocata più sicura</small><b>${esc(pk.k)}</b><em class="num">${pc(pk.p)} · da ${fx(pk.fair, 2)}</em></div>` : ''}
-      <div class="more">Scheda completa ›</div></a>`; }).join('')}</div>`).join('') + (rounds.length < 2 ? extra : '');
+      <div class="more">Scheda completa ›</div></a>`; }).join('')}</div>${byRound[r].some(f => (((f.P || {}).bets || {}).picks || [])[0]) ? '<p class="small muted resp">Le giocate sono stime, non certezze. Gioca responsabilmente: vietato ai minori di 18 anni.</p>' : ''}`).join('') + (rounds.length < 2 ? extra : '');
 }
 
 const ZONE = {'Champions League': ['cl', 'Champions League'], 'Champions League Qualification': ['cl', 'Champions (preliminari)'], 'Europa League': ['el', 'Europa League'], 'Europa League Qualification': ['el', 'Europa League (preliminari)'], 'Relegation Playoff': ['rp', 'Spareggio salvezza'], 'Conference League Qualification': ['co', 'Conference League (preliminari)'], 'Conference League': ['co', 'Conference League'], 'Relegation': ['rel', 'Retrocessione'],
@@ -1346,7 +1373,7 @@ function inBreve(P) {
   const pk = ((P.bets || {}).picks || [])[0], ch = (P.chicche || []).find(c => c.lv !== 'Ritardo');
   if (!pk && !ch) return '';
   return `<div class="inbreve">${pk ? `<div><small>Giocata più sicura</small><b>${esc(pk.k)}</b> <span class="muted">${pc(pk.p)} · da ${fx(pk.fair, 2)}</span></div>` : ''}
-    ${ch ? `<div><small>La chicca</small>${esc(ch.t)}</div>` : ''}</div>`;
+    ${ch ? `<div><small>La chicca</small>${esc(ch.t)}</div>` : ''}${pk ? '<div class="small muted">Gioca responsabilmente: vietato ai minori di 18 anni.</div>' : ''}</div>`;
 }
 // le sezioni: [chiave, titolo, riga di riassunto visibile da chiusa, contenuto]
 function matchSecs(x, P, h, a) {
@@ -1382,7 +1409,7 @@ const secBoxes = (mid, S) => S.map(([k, t, sub, body]) => { const id = `${mid}:$
     <div class="acc-b stack">${body}</div></details>`; }).join('');
 // come funziona il pronostico (in fondo alla pagina della partita, nella sua sezione)
 function howNote() {
-  return `${(D.league || {}).cup ? `<p class="small muted">Come funziona in Champions: la forza di ogni squadra (attacco e difesa) viene da tutte le sue partite degli ultimi tre anni, nel suo campionato e nelle coppe europee, pesate per quanto sono recenti; ogni squadra è avvicinata alla media del suo campionato e le coppe collegano i campionati tra loro. Provato all'indietro sulle 378 partite di Champions 2024/25 e 2025/26: log loss 0,898 contro 1,014 delle frequenze fisse, esito più probabile azzeccato nel 59% dei casi. Forma, accoppiamenti e stili qui non spostano i gol attesi (in coppa le partite sono troppo poche); restano le assenze. Nei ritorni la probabilità di passare il turno tiene conto dell'andata, dei supplementari e dei rigori. Provati anche gli xG al posto dei gol (Understat per i cinque campionati maggiori, la posizione dei tiri per le partite europee): sulle stesse 378 partite non migliorano il pronostico in modo misurabile (0,2%, dentro il margine d'errore), quindi la forza resta calcolata sui gol.</p>` : `<p class="small muted">Come funziona: per ogni squadra si stima la forza in attacco e in difesa rispetto alla media ${dellaLega()}: per l'80% dagli xG senza rigori creati e concessi, per il 20% dai gol veri, partendo dalla stagione scorsa e dando sempre più peso a quella in corso. Se l'allenatore è cambiato d'estate la stagione scorsa pesa meno; se è cambiato in corsa, le partite di prima contano un quarto. È la combinazione che ha previsto meglio, provata all'indietro su 1520 partite di Serie A e Premier. Poi si corregge per le assenze. Provato su 3500 partite dei cinque campionati maggiori (2024-2026, usando solo le partite giocate prima di ognuna): forma, accoppiamenti e scontro di stili non migliorano il pronostico, quindi li trovi come descrizioni ma non spostano i gol attesi. Le assenze sì: spostano i gol attesi da una squadra all'altra, lasciando uguale il totale. I gol attesi alimentano un modello di Poisson con correzione Dixon-Coles.${LG.noXg ? ' In questo campionato Understat non arriva e ESPN non ha la cronaca tiro per tiro (solo gol, cartellini e cambi): la forza delle squadre viene dai gol e dai tiri in porta, senza xG, e le letture delle partite non ci sono.' : LG.xgEspn ? ' Understat non copre questo campionato: gli xG di squadre e giocatori sono calcolati dalla posizione di ogni tiro nella cronaca Opta di ESPN, con il modello tarato sugli xG di Understat (errore medio 0,29 a partita).' : ''}</p>`}`;
+  return `${(D.league || {}).cup ? `<p class="small muted">Come funziona in Champions: la forza di ogni squadra (attacco e difesa) viene da tutte le sue partite degli ultimi tre anni, nel suo campionato e nelle coppe europee, pesate per quanto sono recenti; ogni squadra è avvicinata alla media del suo campionato e le coppe collegano i campionati tra loro. Provato all'indietro sulle 378 partite di Champions 2024/25 e 2025/26: log loss 0,898 contro 1,014 delle frequenze fisse, esito più probabile azzeccato nel 59% dei casi. Forma, accoppiamenti e stili qui non spostano i gol attesi (in coppa le partite sono troppo poche); restano le assenze. Nei ritorni la probabilità di passare il turno tiene conto dell'andata, dei supplementari e dei rigori. Provati anche gli xG al posto dei gol (Understat per i cinque campionati maggiori, la posizione dei tiri per le partite europee): sulle stesse 378 partite non migliorano il pronostico in modo misurabile (0,2%, dentro il margine d'errore), quindi la forza resta calcolata sui gol.</p>` : `<p class="small muted">Come funziona: per ogni squadra si stima la forza in attacco e in difesa rispetto alla media ${dellaLega()}: per l'80% dagli xG senza rigori creati e concessi, per il 20% dai gol veri, partendo dalla stagione scorsa e dando sempre più peso a quella in corso. Se l'allenatore è cambiato d'estate la stagione scorsa pesa meno; se è cambiato in corsa, le partite di prima contano un quarto. È la combinazione che ha previsto meglio, provata all'indietro su 1520 partite di Serie A e Premier. Poi si corregge per le assenze. Provato su 3500 partite dei cinque campionati maggiori (2024-2026, usando solo le partite giocate prima di ognuna): forma, accoppiamenti e scontro di stili non migliorano il pronostico, quindi li trovi come descrizioni ma non spostano i gol attesi. Le assenze sì: spostano i gol attesi da una squadra all'altra, lasciando uguale il totale. I gol attesi alimentano un modello di Poisson con correzione Dixon-Coles.${LG.noXg ? ' In questo campionato Understat non arriva e ESPN non ha la cronaca tiro per tiro (solo gol, cartellini e cambi): la forza delle squadre viene dai gol e dai tiri in porta, senza xG, e le letture delle partite non ci sono.' : LG.xgEspn ? ' Understat non copre questo campionato: gli xG di squadre e giocatori sono calcolati dalla posizione di ogni tiro nella cronaca Opta di ESPN, con il modello tarato sugli xG di Understat (errore medio 0,29 a partita).' : LG.xgFill ? ` Understat non ha ancora le ultime ${LG.xgFill.n} partite (dal ${new Date(LG.xgFill.from * 1000).toLocaleDateString('it-IT', {day: 'numeric', month: 'long'})}): i loro xG vengono dalla seconda fonte, la posizione di ogni tiro nella cronaca Opta di ESPN (stesso livello: correlazione 0,90 con Understat partita per partita, pronostico uguale alla prova all'indietro).` : ''}</p>`}`;
 }
 function vPartita(id) {
   const x = D.fixtures.find(f => String(f.id) === String(id));
@@ -1883,8 +1910,16 @@ async function boot() {
   MK = Object.fromEntries((D.metrics || []).map(x => [x.k, x]));
   stamp();
   fitHeader();
-  document.getElementById('foot').textContent = `Versione tascabile di ${LGN}, aggiornata in automatico ogni 30 minuti. Risultati, classifica, formazioni e statistiche delle partite da ESPN; ${LG.cup ? 'xG dalla posizione dei tiri nella cronaca Opta di ESPN; corsa, pressing, allenatori e migliori in campo dai dati ufficiali UEFA; statistiche dei giocatori nei campionati da Understat' : LG.noXg ? 'niente xG (Understat non copre il campionato e ESPN non ha la cronaca tiro per tiro)' : LG.xgEspn ? 'xG dalla posizione dei tiri nella cronaca Opta di ESPN' : 'xG da Understat'}; ${LG.fantacalcio === false ? 'probabili formazioni da OneFootball; allenatori da Wikipedia' : 'voti, probabili formazioni e designazioni arbitrali da Fantacalcio.it'}. I pronostici sono stime statistiche, non certezze.`;
+  document.getElementById('foot').textContent = `Versione tascabile di ${LGN}, aggiornata in automatico ogni 30 minuti. Risultati, classifica, formazioni e statistiche delle partite da ESPN; ${LG.cup ? 'xG dalla posizione dei tiri nella cronaca Opta di ESPN; corsa, pressing, allenatori e migliori in campo dai dati ufficiali UEFA; statistiche dei giocatori nei campionati da Understat' : LG.noXg ? 'niente xG (Understat non copre il campionato e ESPN non ha la cronaca tiro per tiro)' : LG.xgEspn ? 'xG dalla posizione dei tiri nella cronaca Opta di ESPN' : LG.xgFill ? `xG da Understat e, per le ultime ${LG.xgFill.n} partite che Understat non ha, dalla posizione dei tiri nella cronaca Opta di ESPN` : 'xG da Understat'}; ${LG.fantacalcio === false ? 'probabili formazioni da OneFootball; allenatori da Wikipedia' : 'voti, probabili formazioni e designazioni arbitrali da Fantacalcio.it'}. I pronostici sono stime statistiche, non certezze.`;
   show(location.hash.slice(1) || 'giornata');
 }
 boot();
+// sezioni che si aprono: il contenuto scende e compare (10/11/2026). Parte solo dal tocco sul titolo, così un ridisegno
+// della pagina con una sezione già aperta resta fermo; niente con «riduci movimento»
+document.addEventListener('click', e => {
+  const s = e.target.closest && e.target.closest('summary'), d = s && s.parentElement;
+  if (!d || d.tagName !== 'DETAILS' || matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+  requestAnimationFrame(() => { if (d.open) for (const c of d.children) if (c !== s && c.animate)
+    c.animate([{opacity: 0, transform: 'translateY(-6px)'}, {opacity: 1, transform: 'none'}], {duration: 220, easing: 'cubic-bezier(.23,1,.32,1)'}); });
+});
 </script>

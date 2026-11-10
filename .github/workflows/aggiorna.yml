@@ -110,7 +110,9 @@ jobs:
           for b in opta:cache opta-premier:premier/cache opta-liga:liga/cache opta-champions:champions/cache opta-bundesliga:bundesliga/cache opta-ligue1:ligue1/cache; do
             br=${b%%:*}; dir=${b#*:}
             if git -C dati fetch -q --depth=1 origin "$br" 2>/dev/null; then
-              mkdir -p "dati/$dir" && git -C dati show FETCH_HEAD:opta.json > "dati/$dir/opta.json" && echo "Dati Opta presi dal ramo $br"
+              # prima in un file a parte: se il ramo non ha opta.json, «>» lasciava il file buono a 0 byte
+              mkdir -p "dati/$dir" && git -C dati show FETCH_HEAD:opta.json > "$RUNNER_TEMP/opta.json" 2>/dev/null \
+                && [ -s "$RUNNER_TEMP/opta.json" ] && mv "$RUNNER_TEMP/opta.json" "dati/$dir/opta.json" && echo "Dati Opta presi dal ramo $br"
             fi
           done
       - name: Aggiorna dati e sito
