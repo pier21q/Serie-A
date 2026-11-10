@@ -133,8 +133,11 @@ def check_data(data, snap, hist, M):
 
 def check_predictions(snap):
     """Valori fuori scala nei pronostici dei giocatori (caso Muriqi del 14/10/2026: 6,7 falli e 73% di giallo per
-    una base senza falli): più di 4 falli, giallo oltre il 45%, gol oltre il 65%, più di 6 tiri, un giocatore con più
-    del 40% dei falli della squadra. -> elenco di testi."""
+    una base senza falli): più di 4 falli, giallo oltre il 45%, gol oltre il 75%, più di 6 tiri, un giocatore con più
+    del 40% dei falli della squadra. -> elenco di testi.
+    Gol: la soglia era il 65% e segnalava solo Harry Kane in casa contro le ultime (68-70%). L'11/11/2026, con
+    taratura.py rifatto sui soli dati di prima (5 leghe, 11.000 titolari), sopra il 50% le probabilità di segnare
+    risultano basse, non alte: previsto 55% → vero 68% (22 casi), previsto 64% → vero 80% (5). Kane è nel caso."""
     out = []
     teams = snap.get("teams") or {}
     nm = lambda t: (teams.get(str(t)) or {}).get("name") or t
@@ -149,7 +152,7 @@ def check_predictions(snap):
                     why.append(f"{p['fouls']:.1f} falli")
                 if (p.get("pYellow") or 0) > .45:
                     why.append(f"giallo al {p['pYellow']:.0%}")
-                if (p.get("pGoal") or 0) > .65:
+                if (p.get("pGoal") or 0) > .75:
                     why.append(f"gol al {p['pGoal']:.0%}")
                 if (p.get("shots") or 0) > 6:
                     why.append(f"{p['shots']:.1f} tiri")

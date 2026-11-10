@@ -4043,7 +4043,10 @@ async def h_match(req):
 # ---------- chat: domande a Claude sui dati dell'app (solo sul Mac) ----------
 
 CHAT_DIR = DATA_DIR / "chat"   # i dati per Claude, in file che può solo leggere e cercare
-CHAT = {"key": None, "lock": None}
+CHAT = {"key": None, "lock": None, "times": []}
+# domande al massimo in un'ora (11/11/2026, revisione del 09/11): la pagina del Mac risponde a chiunque raggiunga la
+# porta da questo Mac, e ogni domanda consuma l'abbonamento Claude
+CHAT_MAX_HOUR = 30
 # al posto delle istruzioni di Claude Code (pensate per programmare): solo queste, così ogni domanda pesa meno
 CHAT_PROMPT = """Sei l'assistente di Serie A Live, l'app di statistiche e pronostici dell'utente; qui parli della {league} (stagione {season}).
 Oggi è {today}. Rispondi in italiano, in modo chiaro e breve, per una persona che non è un tecnico.
@@ -4182,9 +4185,16 @@ async def h_chat(req):
     exe = claude_bin()
     if not exe:
         return web.json_response({"error": "Non trovo Claude su questo Mac: serve l'app di Claude."})
+    now = time.time()
+    CHAT["times"] = [t for t in CHAT["times"] if now - t < 3600]
+    if len(CHAT["times"]) >= CHAT_MAX_HOUR:
+        return web.json_response({"error": f"Già {CHAT_MAX_HOUR} domande nell'ultima ora: riprova più tardi."})
+    CHAT["times"].append(now)
     CHAT["lock"] = CHAT["lock"] or asyncio.Lock()
     async with CHAT["lock"]:
-        await asyncio.to_thread(chat_files)
+        # nel ciclo principale, non in un thread: chat_files legge analysis() e STATE, che il ciclo cambia (revisione
+        # del 09/11/2026). Dura circa 0,2 secondi e solo quando i dati sono cambiati
+        chat_files()
         d = STATE["data"]
         prompt = CHAT_PROMPT.format(league=LEGA["name"], season=(d.get("season") or {}).get("year", ""), today=time.strftime("%d/%m/%Y %H:%M"),
                                     folder=CHAT_DIR)
