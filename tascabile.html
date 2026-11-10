@@ -569,6 +569,64 @@ td{border-bottom-color:var(--line)}
 @keyframes bagliore{from{opacity:0}}
 @keyframes tabellone{from{opacity:0;transform:scale(.94)}}
 @keyframes linea{from{opacity:0;transform:scaleX(.4)}}
+/* movimento, terza passata (10/11/2026 sera): l'utente non notava la seconda, quindi qui gli effetti si vedono.
+   Fasci di luce che attraversano lo sfondo, una scia che corre sotto l'intestazione, schede che salgono una dopo
+   l'altra, stemmi che entrano ruotando, un lampo di luce sulle schede delle partite, righe delle tabelle a cascata.
+   Le entrate partono solo quando si apre una vista (non nei ridisegni «quiet»); niente con «riduci movimento». */
+@media (prefers-reduced-motion:no-preference){
+  body::before{animation:luci 11s ease-in-out infinite alternate}
+  body::after{content:"";position:fixed;inset:-25% -35%;z-index:-1;pointer-events:none;will-change:transform;
+    background:linear-gradient(115deg,transparent 40%,color-mix(in srgb,var(--accent) 17%,transparent) 48%,transparent 56%),
+               linear-gradient(62deg,transparent 42%,color-mix(in srgb,var(--accent) 11%,transparent) 50%,transparent 58%);
+    animation:fasci 19s ease-in-out infinite alternate}
+  header{overflow-x:clip}
+  header::after{content:"";position:absolute;left:0;bottom:0;width:25%;height:2px;pointer-events:none;
+    background:linear-gradient(90deg,transparent,rgba(255,255,255,.85),transparent);animation:scia 5.5s linear infinite}
+  .list>.card,.stack>.card{animation:entra .5s var(--ease-out) both}
+  .list>.card,.stack>.card:nth-child(2){animation-delay:70ms}
+  .list>.card,.stack>.card:nth-child(3){animation-delay:140ms}
+  .list>.card,.stack>.card:nth-child(4){animation-delay:210ms}
+  .list>.card,.stack>.card:nth-child(5){animation-delay:280ms}
+  .list>.card,.stack>.card:nth-child(6){animation-delay:350ms}
+  .list>.card,.stack>.card:nth-child(n+7){animation-delay:.42s}
+  .fx-teams .crest,.fx-teams .tlogo{animation:stemma .55s .12s var(--ease-out) both}
+  .pick .sc{animation:tabellone .5s .18s var(--ease-out) both}
+  .card.hero::before{background:linear-gradient(105deg,transparent 42%,rgba(255,255,255,.16) 50%,transparent 58%) no-repeat -160% 0/60% 100%,
+    radial-gradient(60% 85% at 0% 0%,color-mix(in srgb,var(--hc,#5B6678) 58%,transparent),transparent 70%),
+    radial-gradient(60% 85% at 100% 0%,color-mix(in srgb,var(--ac,#5B6678) 58%,transparent),transparent 70%);
+    animation:bagliore .6s .05s ease both,lampo 1.2s .4s var(--ease-out) both}
+  section:not([hidden]) .tw tbody tr{animation:riga_tab .4s var(--ease-out) both}
+  section:not([hidden]) .tw tbody tr:nth-child(1){animation-delay:22ms}
+  section:not([hidden]) .tw tbody tr:nth-child(2){animation-delay:44ms}
+  section:not([hidden]) .tw tbody tr:nth-child(3){animation-delay:66ms}
+  section:not([hidden]) .tw tbody tr:nth-child(4){animation-delay:88ms}
+  section:not([hidden]) .tw tbody tr:nth-child(5){animation-delay:110ms}
+  section:not([hidden]) .tw tbody tr:nth-child(6){animation-delay:132ms}
+  section:not([hidden]) .tw tbody tr:nth-child(7){animation-delay:154ms}
+  section:not([hidden]) .tw tbody tr:nth-child(8){animation-delay:176ms}
+  section:not([hidden]) .tw tbody tr:nth-child(9){animation-delay:198ms}
+  section:not([hidden]) .tw tbody tr:nth-child(10){animation-delay:220ms}
+  section:not([hidden]) .tw tbody tr:nth-child(11){animation-delay:242ms}
+  section:not([hidden]) .tw tbody tr:nth-child(12){animation-delay:264ms}
+  section:not([hidden]) .tw tbody tr:nth-child(13){animation-delay:286ms}
+  section:not([hidden]) .tw tbody tr:nth-child(14){animation-delay:308ms}
+  section:not([hidden]) .tw tbody tr:nth-child(15){animation-delay:330ms}
+  section:not([hidden]) .tw tbody tr:nth-child(16){animation-delay:352ms}
+  section:not([hidden]) .tw tbody tr:nth-child(17){animation-delay:374ms}
+  section:not([hidden]) .tw tbody tr:nth-child(18){animation-delay:396ms}
+  section:not([hidden]) .tw tbody tr:nth-child(19){animation-delay:418ms}
+  section:not([hidden]) .tw tbody tr:nth-child(20){animation-delay:440ms}
+  section:not([hidden]) .tw tbody tr:nth-child(n+21){animation:none}
+  .quiet .card,.quiet .crest,.quiet .tlogo,.quiet .pick .sc,.quiet .card.hero::before,.quiet tbody tr{animation:none}
+}
+@keyframes luci{from{opacity:.5;transform:scale(1)}to{opacity:1;transform:scale(1.28) translateY(3%)}}
+@keyframes fasci{from{transform:translateX(-14%) rotate(-3deg)}to{transform:translateX(14%) rotate(3deg)}}
+@keyframes entra{from{opacity:0;transform:translateY(24px) scale(.97)}to{opacity:1;transform:none}}
+@keyframes stemma{from{opacity:0;transform:scale(.6) rotate(-10deg)}}
+@keyframes tabellone{from{opacity:0;transform:scale(.72)}}
+@keyframes riga_tab{from{opacity:0;transform:translateX(-14px)}}
+@keyframes lampo{from{background-position:-160% 0,0 0,0 0}to{background-position:260% 0,0 0,0 0}}
+@keyframes scia{from{transform:translateX(-100%)}to{transform:translateX(400%)}}
 </style>
 
 <header><div class="wrap">
