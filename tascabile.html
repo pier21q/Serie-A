@@ -1585,10 +1585,10 @@ function relianceCard(id) {
 function squadCard(id) {
   const sq = (D.squads || {})[id] || [];
   if (!sq.length) return '';
-  const fc = LG.fantacalcio !== false;   // media voto e fantamedia solo in Serie A
-  return `<div class="card"><h3>Giocatori più impiegati</h3><div class="tw"><table class="lu"><thead><tr><th class="l">Giocatore</th><th>Min</th><th>Gol</th><th>Ass</th><th>xG</th>${fc ? '<th>MV</th><th>FM</th>' : ''}</tr></thead><tbody>
-    ${sq.map(p => `<tr><td class="l"><b>${esc(p.name)}</b> <span class="muted">${POSL[p.pos] || ''}</span></td><td>${p.min ?? '–'}</td><td>${p.g ?? 0}</td><td>${p.a ?? 0}</td><td>${fx(p.xg, 2)}</td>${fc ? `<td>${p.mv != null ? fx(p.mv, 2) : '–'}</td><td>${p.fm != null ? fx(p.fm, 2) : '–'}</td>` : ''}</tr>`).join('')}
-    </tbody></table></div>${fc ? '<p class="small muted">MV = media voto, FM = fantamedia (Fantacalcio.it).</p>' : ''}</div>`;
+  const fc = LG.fantacalcio !== false;   // media voto solo in Serie A
+  return `<div class="card"><h3>Giocatori più impiegati</h3><div class="tw"><table class="lu"><thead><tr><th class="l">Giocatore</th><th>Min</th><th>Gol</th><th>Ass</th><th>xG</th>${fc ? '<th>MV</th>' : ''}</tr></thead><tbody>
+    ${sq.map(p => `<tr><td class="l"><b>${esc(p.name)}</b> <span class="muted">${POSL[p.pos] || ''}</span></td><td>${p.min ?? '–'}</td><td>${p.g ?? 0}</td><td>${p.a ?? 0}</td><td>${fx(p.xg, 2)}</td>${fc ? `<td>${p.mv != null ? fx(p.mv, 2) : '–'}</td>` : ''}</tr>`).join('')}
+    </tbody></table></div>${fc ? '<p class="small muted">MV = media voto (Fantacalcio.it).</p>' : ''}</div>`;
 }
 const ZN = [['piccola', 'Area piccola'], ['centro', "Centro dell'area"], ['lati', "Lati dell'area"], ['fuori', 'Fuori area']];
 function zoneRows(p) {
@@ -1760,7 +1760,7 @@ function vGiocatore(id) {
       : [['Presenze', fx(ap, 0), p.st != null ? `${p.st} da titolare` : ''], ['Minuti', fx(p.min, 0), ap ? `${per('min', 0)}' a partita` : ''],
          ['Gol', fx(p.g, 0), `${per('g', 2)} a partita`], ['Assist', fx(p.a, 0), `${per('a', 2)} a partita`]];
     kpis = `<div class="ph-kpis">${K.map(([l, v, sub]) => `<div><small>${l}</small><b class="num">${v}</b><small>${sub}</small></div>`).join('')}</div>`;
-    if (p.mv != null) vote = `<div class="ph-vote"><b class="num">${fx(p.mv, 2)}</b><small>media voto</small>${p.fm != null ? `<small>FM ${fx(p.fm, 2)}</small>` : ''}</div>`;
+    if (p.mv != null) vote = `<div class="ph-vote"><b class="num">${fx(p.mv, 2)}</b><small>media voto</small></div>`;
     const tra = `tra ${pos === 'F' ? 'gli' : 'i'} ${POSP[pos]}`;
     season = `<div class="shead"><span></span><span>Totale</span><span>A partita</span><span>Pari ruolo</span></div>${groups}
       <p class="small muted">A partita: media ${ap === 1 ? 'su 1 presenza' : `sulle ${fx(ap, 0)} presenze`}. La barra dice dove si colloca ogni 90 minuti ${tra} con almeno
