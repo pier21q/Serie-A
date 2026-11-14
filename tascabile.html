@@ -1150,7 +1150,8 @@ function adjCard(P, h, a) {
   return `<div class="card"><h3>Perché questo pronostico</h3>
     <p class="small muted">Si parte dalla forza di attacco e difesa delle due squadre e dal fattore campo, poi si applicano le correzioni qui sotto.</p>
     ${block(h, P.baseH, P.lh)}${block(a, P.baseA, P.la)}
-    <p class="small muted">Forza di base: ${nm(h)} ${esc(pw(pr.weightH || 0, pr.home))}; ${nm(a)} ${esc(pw(pr.weightA || 0, pr.away))}.</p></div>`;
+    <p class="small muted">Forza di base: ${nm(h)} ${esc(pw(pr.weightH || 0, pr.home))}; ${nm(a)} ${esc(pw(pr.weightA || 0, pr.away))}.</p>
+    ${P.mkStrength ? `<p class="small muted">Quote delle partite già giocate: i gol attesi tengono conto per il ${pc(P.mkStrength.w)} di quanto il mercato ha stimato le due squadre nelle ${P.mkStrength.n} partite di questa stagione con le quote (le più recenti pesano di più). Le quote di questa partita non entrano nel pronostico.</p>` : ''}</div>`;
 }
 function keysCard(P, h) {
   return `<div class="card"><h3>Chiavi tattiche <small class="muted">forze contro debolezze</small></h3><ul class="keys">

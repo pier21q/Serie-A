@@ -60,6 +60,16 @@ FORM_EFF = 0.05        # effetto massimo della forma recente sui gol attesi (dal
 CARD_STYLE_K = .25     # quanto dello scontro di stili va sui cartellini attesi (prova del 14/10/2026: ottimo tra 0,2 e 0,3)
 PAIR_ADV, PAIR_NEUT, PAIR_CAP = .03, -.02, .08   # accoppiamenti tattici: effetto per vantaggio, per neutralizzazione, tetto
 MAXG = 10
+# forza dalle quote delle partite GIÀ GIOCATE (adottata il 14/11/2026 con il sì dell'utente; la partita da prevedere
+# resta senza le sue quote). Diagnosi del 13/11/2026 (ricerca/diagnosi_mercato.py): metà del distacco dal mercato sta
+# nelle partite in cui il modello dà alla favorita oltre 10 punti meno delle quote, e il disaccordo su una squadra dura
+# da una partita all'altra. Prova all'indietro (ricerca/prova_quote_passate.py, cinque campionati maggiori, 3.458
+# partite di scelta e 382 di controllo sul 2026/27): 1X2 −0,0021 ± 0,0009 e −0,0053 ± 0,0020, over 2,5 −0,0030 ±
+# 0,0008, gol/gol −0,0017 ± 0,0006, nessun campionato peggio; nelle tre leghe minori 1X2 −0,0030 ± 0,0014. Bastano le
+# quote della stagione in corso. MK_HL: emivita in giorni delle partite (20 e 90 vanno peggio, 180 perde quasi tutto);
+# MK_K: partite pesate con quote che valgono metà del peso (4 e 8 pari, 0 = solo mercato non migliora); MK_RIDGE: verso
+# la media con poche partite. In Champions non si applica (mai provato lì). MK_K = None la spegne.
+MK_HL, MK_K, MK_RIDGE = 45, 8, .5
 NO_PRIOR = {"att": 1.0, "de": 1.0}
 
 
@@ -945,7 +955,9 @@ def build(data, prior=None, matches=None, now=None, coaches=None, role_rows=None
         th, ta = T.get(str(e["home"]["id"])), T.get(str(e["away"]["id"]))
         if th and ta and e.get("hs") is not None:
             entries.append((th["arch"]["key"], ta["arch"]["key"], e["hs"], e["as"]))
-    return {"T": T, "L": L, "cup": bool(ext and ext.get("teams")), "players": {p["id"]: p for p in players}, "prior_players": prior_players,
+    cup = bool(ext and ext.get("teams"))
+    mk = market_strength(data.get("played"), matches, now) if MK_K is not None and not cup else None
+    return {"T": T, "L": L, "cup": cup, "mk": mk, "players": {p["id"]: p for p in players}, "prior_players": prior_players,
             "posavg": posavg, "matches": matches, "hasPrior": bool(pr_rating), "priorYear": (prior or {}).get("year"),
             "priorVol": prior_volume(prior),
             # chicche statistiche delle partite (chicche.py): profili delle squadre, calcolati una volta per analisi
@@ -2059,6 +2071,14 @@ def predict(A, hid, aid, ev=None, extra=None, combos=False):
         deA = (1 - VENUE_W) * deA + VENUE_W * shr(ar["ga"] / ar["p"] / L["HA"], ar["p"], 4)
     lh, la = (L["AA"] if neutral else L["HA"]) * attH * deA, L["AA"] * attA * deH
     base_h, base_a = lh, la
+    # quote delle partite già giocate (MK_HL): quanto il mercato ha stimato le due squadre nelle giornate scorse
+    mh, ma, mk_w = market_blend(A, hid, aid, lh, la, neutral)
+    if mk_w:
+        for tid, old, new_ in ((hid, lh, mh), (aid, la, ma)):
+            if abs(new_ / old - 1) >= .005:
+                adj.append({"team": int(tid), "what": "Quote delle partite già giocate: forza stimata dal mercato nelle giornate scorse",
+                            "pct": (new_ / old - 1) * 100})
+        lh, la = mh, ma
 
     # forma, accoppiamenti tattici, scontro di stili e ritmo: provati all'indietro il 14/10/2026 su 3503 partite dei
     # cinque campionati maggiori (2024/25 e 2025/26, ricerca/prova_correzioni.py), con le stesse funzioni e i dati fino
@@ -2172,6 +2192,7 @@ def predict(A, hid, aid, ev=None, extra=None, combos=False):
                   "matches": A.get("archMatches", 0)},
         "h2h": (extra or {}).get("h2h"), "tie": tie, "neutral": neutral, "cup": bool(cup),
         "market": market_of(extra),   # quote dei bookmaker senza il margine, per il confronto
+        "mkStrength": {"w": round(mk_w, 3), "n": (A.get("mk") or {}).get("n", 0)} if mk_w else None,
         "coachRoles": {"home": (H.get("coachRoles") or {}).get("text"), "away": (Aw.get("coachRoles") or {}).get("text")},
         "prior": {"home": H["prior"], "away": Aw["prior"], "weightH": H["priorWeight"], "weightA": Aw["priorWeight"],
                   "year": A["priorYear"]},
@@ -2208,11 +2229,102 @@ def tie_probs(mat, lh, la, tie):
     return {"home": ph, "away": 1 - ph, "first": f, "final": bool(tie.get("final"))}
 
 
+_MK_MEMO = {}
+
+
+def market_lambdas(p1, px, p2, rho=None):
+    """I gol attesi (casa, trasferta) che con la matrice dell'app (score_matrix) ridanno le probabilità 1X2 del
+    mercato. Due bisezioni: la quota di gol della squadra di casa (su p1 − p2) dentro il totale (sui pareggi)."""
+    rho = RHO if rho is None else rho
+    key = (round(p1, 4), round(px, 4), round(p2, 4), rho)
+    if key in _MK_MEMO:
+        return _MK_MEMO[key]
+
+    def at(tot, share):
+        m = score_matrix(tot * share, tot * (1 - share), rho)
+        w = sum(v for i, r in enumerate(m) for j, v in enumerate(r) if i > j)
+        d = sum(m[i][i] for i in range(MAXG + 1))
+        return w, d, 1 - w - d
+    lo_t, hi_t, share = .8, 6.0, .5
+    for _ in range(22):
+        tot = (lo_t + hi_t) / 2
+        lo, hi = .02, .98
+        for _ in range(22):
+            share = (lo + hi) / 2
+            pr = at(tot, share)
+            if pr[0] - pr[2] < p1 - p2:
+                lo = share
+            else:
+                hi = share
+        if at(tot, share)[1] > px:   # troppi pareggi: servono più gol
+            lo_t = tot
+        else:
+            hi_t = tot
+    if len(_MK_MEMO) > 5000:
+        _MK_MEMO.clear()
+    _MK_MEMO[key] = (tot * share, tot * (1 - share))
+    return _MK_MEMO[key]
+
+
+def market_strength(played, matches, now, giri=12):
+    """Attacco e difesa «di mercato» di ogni squadra dalle quote delle partite già giocate (vedi MK_HL):
+    log(gol attesi del mercato) = costante di casa o trasferta + attacco di chi segna + difesa di chi subisce, con le
+    partite recenti che pesano di più. Ritorna {"ch", "ca", "att", "de", "W" (partite pesate per squadra), "n"} o None."""
+    obs = []
+    for e in played or []:
+        od = ((matches or {}).get(str(e.get("id"))) or {}).get("odds")
+        if not od or od.get("p1") is None or not e.get("start") or e["start"] >= now:
+            continue
+        try:
+            lh, la = od["lam"] if od.get("lam") else market_lambdas(od["p1"], od["px"], od["p2"])
+        except (KeyError, TypeError, ValueError, ZeroDivisionError):
+            continue
+        obs.append((str(e["home"]["id"]), str(e["away"]["id"]), math.log(lh), math.log(la), .5 ** ((now - e["start"]) / 86400 / MK_HL)))
+    sw = sum(o[4] for o in obs)
+    if not obs or sw <= 0:
+        return None
+    W = {}
+    for h, a, _, _, w in obs:
+        W[h] = W.get(h, 0) + w
+        W[a] = W.get(a, 0) + w
+    att, de, ch, ca = {}, {}, 0.0, 0.0
+    for _ in range(giri):
+        ch = sum(w * (lh - att.get(h, 0) - de.get(a, 0)) for h, a, lh, la, w in obs) / sw
+        ca = sum(w * (la - att.get(a, 0) - de.get(h, 0)) for h, a, lh, la, w in obs) / sw
+        na, nd = {}, {}
+        for h, a, lh, la, w in obs:   # attacco: gol attesi fatti; difesa: gol attesi subiti
+            na[h] = na.get(h, 0) + w * (lh - ch - de.get(a, 0))
+            na[a] = na.get(a, 0) + w * (la - ca - de.get(h, 0))
+        att = {t: na[t] / (W[t] + MK_RIDGE) for t in W}
+        for h, a, lh, la, w in obs:
+            nd[a] = nd.get(a, 0) + w * (lh - ch - att.get(h, 0))
+            nd[h] = nd.get(h, 0) + w * (la - ca - att.get(a, 0))
+        de = {t: nd[t] / (W[t] + MK_RIDGE) for t in W}
+    return {"ch": ch, "ca": ca, "att": att, "de": de, "W": W, "n": len(obs)}
+
+
+def market_blend(A, hid, aid, lh, la, neutral=False):
+    """Gol attesi del modello mescolati, nei logaritmi, con quelli «di mercato» delle partite già giocate: peso
+    W / (W + MK_K), con W della squadra che ha meno partite con quote. Ritorna (lh, la, peso)."""
+    mk = A.get("mk")
+    if not mk or MK_K is None or neutral or A.get("cup"):
+        return lh, la, 0.0
+    hid, aid = str(hid), str(aid)
+    W = min(mk["W"].get(hid, 0), mk["W"].get(aid, 0))
+    w = W / (W + MK_K) if W + MK_K > 0 else 0.0
+    if w <= 0:
+        return lh, la, 0.0
+    mh = mk["ch"] + mk["att"].get(hid, 0) + mk["de"].get(aid, 0)
+    ma = mk["ca"] + mk["att"].get(aid, 0) + mk["de"].get(hid, 0)
+    return math.exp((1 - w) * math.log(lh) + w * mh), math.exp((1 - w) * math.log(la) + w * ma), w
+
+
 def base_lambdas(A, hid, aid, neutral=False):
     """Gol attesi di base (solo la forza delle squadre), per simulare le partite lontane (proiezione della classifica)."""
     H, Aw, L = A["T"][str(hid)], A["T"][str(aid)], A["L"]
     attH, deH, attA, deA = (x ** CALIB for x in (H["att"], H["de"], Aw["att"], Aw["de"]))
-    return (L["AA"] if neutral else L["HA"]) * attH * deA, L["AA"] * attA * deH
+    lh, la = (L["AA"] if neutral else L["HA"]) * attH * deA, L["AA"] * attA * deH
+    return market_blend(A, hid, aid, lh, la, neutral)[:2]
 
 
 def summary(P):

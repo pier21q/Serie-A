@@ -404,6 +404,16 @@ def analysis():
            len(PRIOR.get("results") or []), len(FANTA.get("teams", [])),
            sum(1 for v in (PRIOR.get("refCards") or {}).values() if "roles" in v) // 20, us_file(season_year(d) - 2).exists())
     if ANALYSIS["key"] != key:
+        # forza dalle quote delle partite già giocate (model.MK_HL): i gol attesi «del mercato» di ogni partita si
+        # calcolano una volta (18 ms l'una) e restano accanto alle quote in matches.json. Se cambia model.RHO vanno rifatti
+        if not CUP and model.MK_K is not None:
+            for e in d.get("played") or []:
+                od = (MATCHES.get(str(e["id"])) or {}).get("odds")
+                if od and od.get("p1") is not None and not od.get("lam"):
+                    try:
+                        od["lam"] = [round(v, 4) for v in model.market_lambdas(od["p1"], od["px"], od["p2"])]
+                    except (KeyError, TypeError, ValueError, ZeroDivisionError):
+                        pass
         A = model.build(d, PRIOR, MATCHES, coaches=COACHES, role_rows=role_rows(d), changes=coach_changes(d), us_hist=us_history(d),
                         prior2=us_prior2(d),
                         ext=cup_ext(d))
